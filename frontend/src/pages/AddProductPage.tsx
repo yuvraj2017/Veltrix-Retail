@@ -1,429 +1,380 @@
-import { useState } from "react";
-import type { FormEventHandler, ElementType } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-  ArrowLeft,
-  Building2,
-  CheckCircle2,
-  ClipboardCheck,
-  Info,
-  Loader2,
-  MapPin,
-  Save,
-  Sparkles,
-  UserRound,
-} from "lucide-react";
+import { zodResolver } from '@hookform/resolvers/zod'
+import { ImagePlus, Sparkles, Trash2, UploadCloud, Plus, ArrowUpRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { useNavigate } from 'react-router-dom'
+import { AppShell } from '../components/layout/AppShell'
+import { createProduct } from '../features/products/api'
+import { productSchema, type ProductFormValues } from '../features/products/schemas'
 
-import { vendorsApi } from "../features/vendors/api";
-import { vendorSchema } from "../features/vendors/schemas";
+const categories = ['Apparel', 'Electronics', 'Accessories', 'Footwear', 'Home Decor', 'Other']
+const MAX_IMAGES = 5
 
-export default function AddVendorPage() {
-  const navigate = useNavigate();
+type PreviewImage = {
+  file: File
+  url: string
+}
 
-  const [form, setForm] = useState({
-    vendor_name: "",
-    company_name: "",
-    email: "",
-    phone: "",
-    alternate_phone: "",
-    tax_number: "",
-    address_line_1: "",
-    address_line_2: "",
-    city: "",
-    state: "",
-    postal_code: "",
-    country: "India",
-    payment_terms: "Net 15",
-    default_reminder_days: 7,
-    notes: "",
-    is_active: true,
-  });
+export default function AddProductPage() {
+  const navigate = useNavigate()
+  const [apiError, setApiError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [images, setImages] = useState<PreviewImage[]>([])
 
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: '',
+      sku: '',
+      category: 'Apparel',
+      description: '',
+      buying_price: 0,
+      mrp: 0,
+      selling_price: 0,
+      stock_quantity: 0,
+      low_stock_threshold: 5,
+      unit: 'pcs',
+      barcode: '',
+      is_active: true,
+      main_image_url: '',
+    },
+  })
 
-  const updateField = (
-    field: keyof typeof form,
-    value: string | number | boolean
-  ) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  };
+  useEffect(() => {
+    return () => {
+      images.forEach((image) => URL.revokeObjectURL(image.url))
+    }
+  }, [images])
 
-  const handleSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
-    event.preventDefault();
+  const addFiles = (fileList: FileList | null) => {
+    if (!fileList) return
+
+    const incoming = Array.from(fileList)
+      .filter((file) =>
+        ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)
+      )
+      .slice(0, MAX_IMAGES - images.length)
+      .map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+      }))
+
+    setImages((prev) => [...prev, ...incoming].slice(0, MAX_IMAGES))
+  }
+
+  const removeImage = (index: number) => {
+    setImages((prev) => {
+      const removed = prev[index]
+      if (removed) URL.revokeObjectURL(removed.url)
+      return prev.filter((_, i) => i !== index)
+    })
+  }
+
+  const onSubmit = async (values: ProductFormValues) => {
+    setApiError('')
+    setLoading(true)
 
     try {
-      setErrorMessage("");
+      const formData = new FormData()
+      formData.append('name', values.name)
+      formData.append('sku', values.sku)
+      formData.append('category', values.category)
+      formData.append('description', values.description || '')
+      formData.append('buying_price', String(values.buying_price))
+      formData.append('mrp', String(values.mrp))
+      formData.append('selling_price', String(values.selling_price))
+      formData.append('stock_quantity', String(values.stock_quantity))
+      formData.append('low_stock_threshold', String(values.low_stock_threshold))
+      formData.append('unit', values.unit)
+      formData.append('barcode', values.barcode || '')
+      formData.append('is_active', String(values.is_active))
+      formData.append('main_image_url', '')
 
-      const parsed = vendorSchema.safeParse(form);
+      images.forEach((image) => {
+        formData.append('images', image.file)
+      })
 
-      if (!parsed.success) {
-        setErrorMessage(
-          parsed.error.issues[0]?.message || "Invalid vendor data"
-        );
-        return;
-      }
-
-      setIsSaving(true);
-
-      const created = await vendorsApi.createVendor(parsed.data);
-      navigate(`/vendors/${created.id}`);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Unable to save vendor"
-      );
+      await createProduct(formData)
+      navigate('/products')
+    } catch (error: any) {
+      setApiError(error?.response?.data?.detail || 'Failed to create product')
     } finally {
-      setIsSaving(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const imageCountText = useMemo(() => `${images.length}/${MAX_IMAGES} images selected`, [images.length])
 
   return (
-    <div className="min-h-full text-slate-950">
-      <motion.div
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
-        className="mx-auto max-w-[1280px]"
-      >
-        <button
-          type="button"
-          onClick={() => navigate("/vendors")}
-          className="mb-6 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 bg-white/75 px-4 py-2.5 text-sm font-black text-slate-700 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700"
-        >
-          <ArrowLeft size={17} />
-          Back to Vendors
-        </button>
-
-        <div className="mb-9 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <AppShell>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-start justify-between">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
-              <Sparkles size={14} />
-              Vendors › Add New Vendor
-            </div>
-
-            <h1 className="text-[38px] font-black tracking-[-0.055em] text-slate-950 md:text-[54px]">
-              Vendor Onboarding
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-[17px] leading-8 text-slate-600">
-              Create a new supply partner profile with billing terms, contact
-              details, and reminder preferences.
-            </p>
+            <h1 className="text-5xl font-bold tracking-[-0.02em] text-slate-900">Add Product</h1>
+            <p className="mt-2 text-2xl text-slate-600">Define a new SKU within your inventory.</p>
           </div>
 
-          <div className="hidden rounded-[28px] bg-white/70 p-4 shadow-[0_18px_48px_rgba(99,102,241,0.08)] backdrop-blur-xl lg:block">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">
-                <CheckCircle2 size={22} />
-              </div>
-              <div>
-                <p className="text-sm font-black text-slate-950">
-                  Guided setup
-                </p>
-                <p className="text-xs text-slate-500">
-                  Vendor data syncs with bills
-                </p>
-              </div>
-            </div>
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => navigate('/products')}
+              className="group relative overflow-hidden rounded-[18px] border border-indigo-200/70 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-[0_8px_20px_rgba(15,23,42,0.05)] transition-all duration-300 hover:-translate-y-[1px] hover:border-violet-200 hover:bg-slate-50 hover:shadow-[0_10px_24px_rgba(99,102,241,0.10)] active:translate-y-0"
+            >
+              <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.08),transparent_35%)]" />
+              <span className="relative flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition duration-300 group-hover:scale-105 group-hover:bg-indigo-50 group-hover:text-indigo-600">
+                  ✕
+                </span>
+
+                <span className="flex flex-col items-start leading-none">
+                  <span className="text-[9px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                    Draft
+                  </span>
+                  <span className="text-[15px] font-semibold">Discard Draft</span>
+                </span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSubmit(onSubmit)}
+              disabled={loading}
+              className="group relative overflow-hidden rounded-[22px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-5 py-3.5 text-white shadow-[0_14px_32px_rgba(79,70,229,0.24)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_18px_38px_rgba(79,70,229,0.30)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_35%)]" />
+              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+
+              <span className="relative flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/18 ring-1 ring-white/25 backdrop-blur-sm">
+                  <Plus size={18} className="transition-transform duration-300 group-hover:rotate-90" />
+                </span>
+
+                <span className="flex flex-col items-start leading-none">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/75">
+                    Inventory
+                  </span>
+                  <span className="text-base font-semibold">
+                    {loading ? 'Saving...' : 'Save Product'}
+                  </span>
+                </span>
+
+                <ArrowUpRight
+                  size={18}
+                  className="ml-1 opacity-80 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                />
+              </span>
+            </button>
+
+            {/* <button
+              type="button"
+              onClick={handleSubmit(onSubmit)}
+              disabled={loading}
+              className="group relative overflow-hidden rounded-[18px] border border-indigo-300/60 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-5 py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:border-violet-200/80 hover:shadow-[0_12px_28px_rgba(99,102,241,0.28)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.20),transparent_35%)]" />
+              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+
+              <span className="relative flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm transition duration-300 group-hover:scale-105">
+                  +
+                </span>
+
+                <span className="flex flex-col items-start leading-none">
+                  <span className="text-[9px] font-medium uppercase tracking-[0.22em] text-white/75">
+                    Inventory
+                  </span>
+                  <span className="text-[15px] font-semibold">
+                    {loading ? 'Saving...' : 'Save Product'}
+                  </span>
+                </span>
+
+                <span className="ml-1 text-base opacity-80 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                  ↗
+                </span>
+              </span>
+            </button> */}
           </div>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid gap-8 xl:grid-cols-[1fr_360px]"
-        >
-          <div className="rounded-[34px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl md:p-8">
-            {errorMessage && (
-              <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                {errorMessage}
+        <form className="grid grid-cols-[1.9fr_0.9fr] gap-8">
+          <div className="space-y-8">
+            <div className="rounded-3xl bg-white p-8 shadow-sm">
+              <p className="mb-6 text-sm font-semibold tracking-[0.18em] text-slate-700">BASIC INFO</p>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">PRODUCT NAME</label>
+                  <input
+                    {...register('name')}
+                    placeholder="e.g. Minimalist Ceramic Vessel"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                  />
+                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">DESCRIPTION</label>
+                  <textarea
+                    {...register('description')}
+                    rows={5}
+                    placeholder="Describe the product..."
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">CATEGORY</label>
+                    <select
+                      {...register('category')}
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    >
+                      {categories.map((item) => (
+                        <option key={item} value={item}>{item}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">SKU / BARCODE</label>
+                    <input
+                      {...register('sku')}
+                      placeholder="EM-100452-9"
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8">
+              <div className="rounded-3xl bg-white p-8 shadow-sm">
+                <p className="mb-6 text-sm font-semibold tracking-[0.18em] text-slate-700">PRICING</p>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">BUYING PRICE</label>
+                    <input type="number" step="0.01" {...register('buying_price')} className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100" />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">MRP (RETAIL)</label>
+                    <input type="number" step="0.01" {...register('mrp')} className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100" />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">SELLING PRICE</label>
+                    <input type="number" step="0.01" {...register('selling_price')} className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-3xl bg-white p-8 shadow-sm">
+                <p className="mb-6 text-sm font-semibold tracking-[0.18em] text-slate-700">INVENTORY</p>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">STOCK QUANTITY</label>
+                    <input type="number" {...register('stock_quantity')} className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100" />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">LOW STOCK THRESHOLD</label>
+                    <input type="number" {...register('low_stock_threshold')} className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100" />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">UNIT</label>
+                    <input {...register('unit')} className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {apiError && (
+              <div className="rounded-2xl bg-red-50 px-4 py-4 text-sm text-red-600">
+                {apiError}
               </div>
             )}
-
-            <SectionTitle icon={Building2} title="Organization Details" />
-
-            <div className="grid gap-5">
-              <Input
-                label="Vendor Company Name"
-                value={form.vendor_name}
-                onChange={(value) => updateField("vendor_name", value)}
-                placeholder="e.g. Global Logistics Corp"
-              />
-
-              <Input
-                label="Display / Business Name"
-                value={form.company_name}
-                onChange={(value) => updateField("company_name", value)}
-                placeholder="Optional business name"
-              />
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Input
-                  label="Payment Terms"
-                  value={form.payment_terms}
-                  onChange={(value) => updateField("payment_terms", value)}
-                  placeholder="Net 15"
-                />
-
-                <Input
-                  label="Tax ID / VAT"
-                  value={form.tax_number}
-                  onChange={(value) => updateField("tax_number", value)}
-                  placeholder="GST / VAT number"
-                />
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Input
-                  type="number"
-                  label="Default Reminder Days"
-                  value={form.default_reminder_days}
-                  onChange={(value) =>
-                    updateField("default_reminder_days", Number(value))
-                  }
-                  placeholder="7"
-                />
-
-                <label className="space-y-2">
-                  <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
-                    Vendor Status
-                  </span>
-
-                  <select
-                    value={form.is_active ? "active" : "inactive"}
-                    onChange={(event) =>
-                      updateField("is_active", event.target.value === "active")
-                    }
-                    className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] font-semibold text-slate-800 outline-none transition-all duration-300 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <SoftDivider />
-
-            <SectionTitle icon={UserRound} title="Primary Contact" />
-
-            <div className="grid gap-5">
-              <div className="grid gap-5 md:grid-cols-2">
-                <Input
-                  label="Primary Contact Person"
-                  value={form.company_name}
-                  onChange={(value) => updateField("company_name", value)}
-                  placeholder="Full name of contact"
-                />
-
-                <Input
-                  label="Email Address"
-                  value={form.email}
-                  onChange={(value) => updateField("email", value)}
-                  placeholder="contact@company.com"
-                />
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Input
-                  label="Phone Number"
-                  value={form.phone}
-                  onChange={(value) => updateField("phone", value)}
-                  placeholder="+91 98765 43210"
-                />
-
-                <Input
-                  label="Alternate Phone"
-                  value={form.alternate_phone}
-                  onChange={(value) => updateField("alternate_phone", value)}
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-
-            <SoftDivider />
-
-            <SectionTitle icon={MapPin} title="Logistics & Address" />
-
-            <div className="grid gap-5">
-              <Input
-                label="Address Line 1"
-                value={form.address_line_1}
-                onChange={(value) => updateField("address_line_1", value)}
-                placeholder="Street / building / area"
-              />
-
-              <Input
-                label="Address Line 2"
-                value={form.address_line_2}
-                onChange={(value) => updateField("address_line_2", value)}
-                placeholder="Optional"
-              />
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Input
-                  label="City"
-                  value={form.city}
-                  onChange={(value) => updateField("city", value)}
-                  placeholder="Rajkot"
-                />
-
-                <Input
-                  label="State"
-                  value={form.state}
-                  onChange={(value) => updateField("state", value)}
-                  placeholder="Gujarat"
-                />
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Input
-                  label="Postal Code"
-                  value={form.postal_code}
-                  onChange={(value) => updateField("postal_code", value)}
-                  placeholder="360001"
-                />
-
-                <Input
-                  label="Country"
-                  value={form.country}
-                  onChange={(value) => updateField("country", value)}
-                  placeholder="India"
-                />
-              </div>
-
-              <label className="space-y-2">
-                <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
-                  Notes
-                </span>
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => updateField("notes", event.target.value)}
-                  rows={4}
-                  placeholder="Internal vendor notes"
-                  className="w-full resize-none rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
-                />
-              </label>
-            </div>
           </div>
 
-          <aside className="space-y-6">
-            <div className="rounded-[34px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl">
-              <p className="mb-5 text-[12px] font-black uppercase tracking-[0.2em] text-slate-500">
-                Actions
-              </p>
-
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                whileHover={{ y: -2 }}
-                type="submit"
-                disabled={isSaving}
-                className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] text-sm font-black text-white shadow-[0_20px_48px_rgba(79,70,229,0.30)] transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSaving ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <Save size={18} />
-                )}
-                Save Vendor
-              </motion.button>
-
-              <button
-                type="button"
-                onClick={() => navigate("/vendors")}
-                className="mt-3 h-14 w-full rounded-[22px] bg-slate-100 text-sm font-black text-slate-800 transition hover:bg-slate-200"
-              >
-                Cancel
-              </button>
-
-              <p className="mt-6 text-sm leading-6 text-slate-500">
-                This vendor will be available for purchase bills, payment
-                tracking, and due reminders.
-              </p>
+          <div className="rounded-3xl bg-white p-8 shadow-sm">
+            <div className="mb-6 flex items-center justify-between">
+              <p className="text-sm font-semibold tracking-[0.18em] text-slate-700">MEDIA</p>
+              <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600">
+                {imageCountText}
+              </span>
             </div>
 
-            <div className="rounded-[28px] border border-indigo-100 bg-indigo-50/80 p-6 text-indigo-950 shadow-[0_18px_40px_rgba(99,102,241,0.08)] backdrop-blur-xl">
-              <div className="mb-3 flex items-center gap-2 text-sm font-black text-indigo-700">
-                <Info size={18} />
-                Pro Tip
+            <label className="group flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center transition hover:border-indigo-300 hover:bg-indigo-50/40">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm transition group-hover:scale-105">
+                <UploadCloud size={26} />
               </div>
-              <p className="text-sm leading-6">
-                Accurate payment terms help Veltrix calculate reminders and
-                payable insights more clearly.
-              </p>
+              <p className="text-lg font-semibold text-slate-800">Upload Product Images</p>
+              <p className="mt-2 text-sm text-slate-500">Click or drag images here • PNG, JPG, WEBP • Max 5</p>
+              <input
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden"
+                onChange={(e) => addFiles(e.target.files)}
+              />
+            </label>
+
+            <div className="mt-6">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <ImagePlus size={16} className="text-indigo-600" />
+                Gallery Preview
+              </div>
+
+              {images.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {images.map((image, index) => (
+                    <div
+                      key={image.url}
+                      className={`group relative overflow-hidden rounded-2xl border bg-slate-50 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                        index === 0 ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'
+                      }`}
+                    >
+                      <img src={image.url} alt={`Preview ${index + 1}`} className="h-32 w-full object-cover transition duration-300 group-hover:scale-105" />
+
+                      {index === 0 && (
+                        <span className="absolute left-3 top-3 rounded-full bg-indigo-600 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white shadow-sm">
+                          Main
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-red-500 shadow-sm backdrop-blur-sm transition hover:scale-105 hover:bg-red-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  No images selected yet.
+                </div>
+              )}
             </div>
 
-            <div className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-[#1a087a] via-[#2910a8] to-[#4f46e5] p-7 text-white shadow-[0_28px_70px_rgba(49,46,129,0.28)]">
-              <ClipboardCheck size={38} className="mb-20 opacity-85" />
-
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-white/70">
-                Veltrix Global
-              </p>
-
-              <h3 className="mt-2 text-2xl font-black tracking-[-0.04em]">
-                Empower reliable partnerships.
-              </h3>
-
-              <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/18 blur-2xl" />
-              <div className="absolute bottom-0 right-0 h-32 w-32 rounded-full bg-violet-300/20 blur-3xl" />
+            <div className="mt-6 rounded-2xl bg-indigo-50 p-4 text-sm text-slate-600">
+              <div className="mb-2 flex items-center gap-2 font-semibold text-indigo-700">
+                <Sparkles size={16} />
+                Smart media tips
+              </div>
+              <p>The first image becomes the main product image automatically.</p>
             </div>
-          </aside>
+          </div>
         </form>
-      </motion.div>
-    </div>
-  );
-}
-
-function SectionTitle({
-  icon: Icon,
-  title,
-}: {
-  icon: ElementType;
-  title: string;
-}) {
-  return (
-    <div className="mb-6 flex items-center gap-4">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)]">
-        <Icon size={22} />
       </div>
-
-      <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">
-        {title}
-      </h2>
-    </div>
-  );
-}
-
-function SoftDivider() {
-  return <div className="my-9 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />;
-}
-
-function Input({
-  label,
-  value,
-  placeholder,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string | number;
-  placeholder?: string;
-  type?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="space-y-2">
-      <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
-        {label}
-      </span>
-
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
-      />
-    </label>
-  );
+    </AppShell>
+  )
 }

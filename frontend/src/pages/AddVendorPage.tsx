@@ -66,8 +66,6 @@ export default function AddVendorPage() {
 
       setIsSaving(true)
 
-      // const created = await vendorsApi.createVendor(parsed.data)
-      
       const vendorName = parsed.data.vendor_name?.trim()
 
       if (!vendorName) {
@@ -78,12 +76,11 @@ export default function AddVendorPage() {
       const created = await vendorsApi.createVendor({
         ...parsed.data,
         vendor_name: vendorName,
+        default_reminder_days: parsed.data.default_reminder_days ?? 7,
       })
 
-
-
-
       navigate(`/vendors/${created.id}`)
+      
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save vendor'
