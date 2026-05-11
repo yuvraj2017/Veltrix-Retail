@@ -13,23 +13,23 @@ const features = [
   'Professional setup for multi-feature retail operations',
 ]
 
-const quickStats = [
-  {
-    label: 'Stores',
-    value: '1,200+',
-    note: 'growing businesses',
-  },
-  {
-    label: 'Inventory',
-    value: '24k',
-    note: 'items tracked daily',
-  },
-  {
-    label: 'Billing',
-    value: '99.9%',
-    note: 'uptime confidence',
-  },
-]
+// const quickStats = [
+//   {
+//     label: 'Stores',
+//     value: '1,200+',
+//     note: 'growing businesses',
+//   },
+//   {
+//     label: 'Inventory',
+//     value: '24k',
+//     note: 'items tracked daily',
+//   },
+//   {
+//     label: 'Billing',
+//     value: '99.9%',
+//     note: 'uptime confidence',
+//   },
+// ]
 
 export function RegisterHero() {
   return (

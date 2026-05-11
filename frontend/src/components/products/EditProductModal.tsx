@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   ArrowUpRight,
-  ImagePlus,
+  // ImagePlus,
   PencilLine,
   Sparkles,
   Trash2,

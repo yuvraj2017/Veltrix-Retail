@@ -66,7 +66,23 @@ export default function AddVendorPage() {
 
       setIsSaving(true)
 
-      const created = await vendorsApi.createVendor(parsed.data)
+      // const created = await vendorsApi.createVendor(parsed.data)
+      
+      const vendorName = parsed.data.vendor_name?.trim()
+
+      if (!vendorName) {
+        setErrorMessage('Vendor company name is required')
+        return
+      }
+
+      const created = await vendorsApi.createVendor({
+        ...parsed.data,
+        vendor_name: vendorName,
+      })
+
+
+
+
       navigate(`/vendors/${created.id}`)
     } catch (error) {
       setErrorMessage(
