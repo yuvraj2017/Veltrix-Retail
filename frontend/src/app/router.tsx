@@ -16,6 +16,9 @@ import AddVendorPage from "../pages/AddVendorPage";
 import VendorDetailsPage from "../pages/VendorDetailsPage";
 import AddVendorBillPage from "../pages/AddVendorBillPage";
 
+import CreateInvoicePage from "../pages/CreateInvoicePage";
+import InvoicePreviewPage from "../pages/InvoicePreviewPage";
+
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 import { PublicOnlyRoute } from "../routes/PublicOnlyRoute";
 
@@ -43,6 +46,9 @@ export const router = createBrowserRouter([
       { path: "/vendors/:vendorId/bills/new", element: <AddVendorBillPage /> },
 
       { path: "/billing", element: <BillingPage /> },
+      { path: "/billing/new", element: <CreateInvoicePage /> },
+      { path: "/billing/:invoiceId/preview", element: <InvoicePreviewPage /> },
+
       { path: "/reports", element: <ReportsPage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "/profile", element: <ProfilePage /> },

@@ -47,7 +47,7 @@ export function LoginHero() {
 
             <div>
               <h2 className="text-lg font-bold tracking-tight text-white sm:text-xl">
-                Veltrix Retail
+                StoreMitraa Retail
               </h2>
               <p className="text-sm text-white/75">Next-gen retail management</p>
             </div>
@@ -65,7 +65,7 @@ export function LoginHero() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-7 text-white/80 sm:text-lg sm:leading-8">
-            Veltrix gives your retail team a single, premium workspace to manage
+            StoreMitraa gives your retail team a single, premium workspace to manage
             inventory, generate bills, monitor sales, and keep operations moving
             without friction.
           </p>

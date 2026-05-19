@@ -60,7 +60,7 @@ export default function LoginPage() {
             </div>
 
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Sign in to Veltrix
+              Sign in to StoreMitraa
             </h1>
 
             <p className="mt-3 max-w-md text-sm leading-7 text-slate-500 sm:text-base">

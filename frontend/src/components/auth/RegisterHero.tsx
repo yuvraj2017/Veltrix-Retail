@@ -54,7 +54,7 @@ export function RegisterHero() {
 
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-white">
-              Veltrix Retail
+              StoreMitraa Retail
             </h2>
             <p className="text-sm text-white/70">
               Next-gen retail management

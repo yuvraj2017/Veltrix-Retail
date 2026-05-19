@@ -12,6 +12,7 @@ class Shop(Base, IDMixin, TimestampMixin):
     category = Column(String(100), nullable=False)
     email = Column(String(150), nullable=False)
     phone = Column(String(20), nullable=False)
+    whatsapp_number = Column(String(20), nullable=True)
     address = Column(Text, nullable=True)
     logo_url = Column(String(255), nullable=True)
 

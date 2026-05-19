@@ -23,6 +23,8 @@ def register(
     email: str = Form(...),
     category: str = Form(...),
     phone: str = Form(...),
+    whatsapp_number: str | None = Form(None),
+    shop_address: str | None = Form(None),
     password: str = Form(...),
     logo: UploadFile | None = File(None),
     db: Session = Depends(get_db),
@@ -32,6 +34,7 @@ def register(
     if logo:
         if logo.content_type not in ALLOWED_IMAGE_TYPES:
             from fastapi import HTTPException, status
+
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only png, jpg, jpeg, and webp files are allowed",
@@ -54,6 +57,8 @@ def register(
         email=email,
         category=category,
         phone=phone,
+        whatsapp_number=whatsapp_number,
+        shop_address=shop_address,
         password=password,
         logo_url=logo_url,
         db=db,

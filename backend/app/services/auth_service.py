@@ -24,6 +24,8 @@ def register_shop_owner(
     email: str,
     category: str,
     phone: str,
+    whatsapp_number: str | None,
+    shop_address: str | None,
     password: str,
     logo_url: str | None,
     db: Session,
@@ -46,12 +48,12 @@ def register_shop_owner(
 
     shop = Shop(
         name=shop_name.strip(),
-        owner_name=owner_name.strip(),
         email=normalized_email,
         phone=phone.strip(),
+        whatsapp_number=whatsapp_number.strip() if whatsapp_number else None,
+        address=shop_address.strip() if shop_address else None,
         category=category.strip(),
         logo_url=logo_url,
-        is_active=True,
     )
     db.add(shop)
     db.flush()

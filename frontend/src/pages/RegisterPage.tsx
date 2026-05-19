@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ChevronDown,
   Mail,
+  MapPin,
+  MessageCircle,
   Phone,
   ShieldCheck,
   Store,
@@ -125,7 +127,7 @@ function CategoryDropdown({ value, onChange, error }: CategoryDropdownProps) {
 
         {open && (
           <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 overflow-hidden rounded-[24px] border border-indigo-100/80 bg-white/90 p-2 shadow-[0_24px_60px_rgba(79,70,229,0.14)] backdrop-blur-xl">
-            <div className="max-h-72 overflow-y-auto custom-scrollbar pr-1">
+            <div className="custom-scrollbar max-h-72 overflow-y-auto pr-1">
               {categories.map((category) => {
                 const isSelected = value === category
 
@@ -173,6 +175,8 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState('')
+  const [whatsappNumber, setWhatsappNumber] = useState('')
+  const [shopAddress, setShopAddress] = useState('')
 
   const {
     register,
@@ -206,6 +210,8 @@ export default function RegisterPage() {
       password: '',
       confirm_password: '',
     })
+    setWhatsappNumber('')
+    setShopAddress('')
   }, [reset])
 
   useEffect(() => {
@@ -234,6 +240,8 @@ export default function RegisterPage() {
       formData.append('category', values.category)
       formData.append('phone', values.phone)
       formData.append('password', values.password)
+      formData.append('whatsapp_number', whatsappNumber)
+      formData.append('shop_address', shopAddress)
 
       if (selectedLogo) {
         formData.append('logo', selectedLogo)
@@ -252,6 +260,8 @@ export default function RegisterPage() {
       })
       setSelectedLogo(null)
       setPreviewUrl('')
+      setWhatsappNumber('')
+      setShopAddress('')
 
       navigate('/login')
     } catch (error: any) {
@@ -280,7 +290,7 @@ export default function RegisterPage() {
               </div>
 
               <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-                Launch your Veltrix account
+                Launch your StoreMitraa account
               </h1>
               <p className="mt-3 max-w-md text-sm leading-7 text-slate-500 sm:text-base">
                 Set up your store profile, upload your brand identity, and get
@@ -388,6 +398,45 @@ export default function RegisterPage() {
                   className="w-full rounded-2xl border border-slate-200 bg-white/80 py-4 pl-16 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
                 />
               </InputShell>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-2.5">
+                <label className="text-sm font-semibold text-slate-700">WhatsApp Number</label>
+
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/60 bg-white/80 text-slate-400 shadow-sm backdrop-blur-sm">
+                    <MessageCircle size={18} />
+                  </div>
+
+                  <input
+                    type="text"
+                    value={whatsappNumber}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    placeholder="WhatsApp number"
+                    autoComplete="off"
+                    className="w-full rounded-2xl border border-slate-200 bg-white/80 py-4 pl-16 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <label className="text-sm font-semibold text-slate-700">Shop Address</label>
+
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/80 text-slate-400 shadow-sm backdrop-blur-sm">
+                    <MapPin size={18} />
+                  </div>
+
+                  <textarea
+                    value={shopAddress}
+                    onChange={(e) => setShopAddress(e.target.value)}
+                    placeholder="Enter full shop address"
+                    rows={4}
+                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white/80 py-4 pl-16 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2.5">
