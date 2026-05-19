@@ -163,10 +163,59 @@ class InvoiceCreate(BaseModel):
         return value
 
 
+# class InvoiceUpdate(BaseModel):
+#     payment_status: Optional[str] = None
+#     payment_mode: Optional[str] = None
+#     paid_amount: Optional[Decimal] = Field(default=None, ge=0)
+#     invoice_status: Optional[str] = None
+#     notes: Optional[str] = None
+
+#     @field_validator("payment_status")
+#     @classmethod
+#     def validate_payment_status(cls, value):
+#         if value is None:
+#             return value
+
+#         allowed = {"pending", "paid", "partial"}
+#         if value not in allowed:
+#             raise ValueError("payment_status must be pending, paid, or partial")
+#         return value
+
+#     @field_validator("payment_mode")
+#     @classmethod
+#     def validate_payment_mode(cls, value):
+#         if value is None:
+#             return value
+
+#         allowed = {"cash", "upi", "card", "bank_transfer", "other"}
+#         if value not in allowed:
+#             raise ValueError("payment_mode must be cash, upi, card, bank_transfer, or other")
+#         return value
+
+#     @field_validator("invoice_status")
+#     @classmethod
+#     def validate_invoice_status(cls, value):
+#         if value is None:
+#             return value
+
+#         allowed = {"draft", "saved", "cancelled"}
+#         if value not in allowed:
+#             raise ValueError("invoice_status must be draft, saved, or cancelled")
+#         return value
+
+
 class InvoiceUpdate(BaseModel):
+    customer: Optional[InvoiceCustomerPayload] = None
+    items: Optional[list[InvoiceItemCreate]] = None
+
+    invoice_date: Optional[date] = None
+
     payment_status: Optional[str] = None
     payment_mode: Optional[str] = None
     paid_amount: Optional[Decimal] = Field(default=None, ge=0)
+
+    total_tax_amount: Optional[Decimal] = Field(default=None, ge=0)
+
     invoice_status: Optional[str] = None
     notes: Optional[str] = None
 
@@ -202,6 +251,7 @@ class InvoiceUpdate(BaseModel):
         if value not in allowed:
             raise ValueError("invoice_status must be draft, saved, or cancelled")
         return value
+
 
 
 # =========================================================

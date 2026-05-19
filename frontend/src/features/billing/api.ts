@@ -203,24 +203,39 @@ export const billingApi = {
     return handleResponse<InvoicePreviewResponse>(response)
   },
 
-  updateInvoice: async (
-    invoiceId: number,
-    payload: Partial<{
-      payment_status: string
-      payment_mode: string | null
-      paid_amount: number
-      invoice_status: string
-      notes: string | null
-    }>
-  ): Promise<Invoice> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}`, {
-      method: 'PUT',
-      headers: buildHeaders(),
-      body: JSON.stringify(payload),
-    })
+  // updateInvoice: async (
+  //   invoiceId: number,
+  //   payload: Partial<{
+  //     payment_status: string
+  //     payment_mode: string | null
+  //     paid_amount: number
+  //     invoice_status: string
+  //     notes: string | null
+  //   }>
+  // ): Promise<Invoice> => {
+  //   const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}`, {
+  //     method: 'PUT',
+  //     headers: buildHeaders(),
+  //     body: JSON.stringify(payload),
+  //   })
 
-    return handleResponse<Invoice>(response)
-  },
+  //   return handleResponse<Invoice>(response)
+  // },
+
+
+
+  updateInvoice: async (
+  invoiceId: number,
+  payload: Partial<InvoiceCreatePayload>
+    ): Promise<Invoice> => {
+      const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: buildHeaders(),
+        body: JSON.stringify(payload),
+      })
+
+      return handleResponse<Invoice>(response)
+    },
 
   deleteInvoice: async (invoiceId: number): Promise<{ message: string }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}`, {

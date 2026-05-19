@@ -249,6 +249,7 @@ export default function BillingPage() {
               paymentStatus={paymentStatus}
               onPaymentStatusChange={setPaymentStatus}
               onView={(invoiceId) => navigate(`/billing/${invoiceId}/preview`)}
+              onEdit={(invoiceId) => navigate(`/billing/new?edit=${invoiceId}`)}
               onCreate={() => navigate('/billing/new')}
               onPrint={handlePrint}
               onDownload={handleDownload}

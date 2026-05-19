@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertCircle, ArrowLeft, CheckCircle2, Sparkles } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Sparkles } from 'lucide-react'
 
 import { AppShell } from '../components/layout/AppShell'
 import CustomerSelector from '../components/billing/CustomerSelector'
@@ -11,6 +11,7 @@ import { billingApi } from '../features/billing/api'
 import { invoiceCreateSchema } from '../features/billing/schemas'
 import type {
   CustomerPayload,
+  Invoice,
   InvoiceCreatePayload,
   LocalInvoiceItem,
   PaymentMode,
@@ -30,8 +31,65 @@ const emptyCustomer: CustomerPayload = {
   gst_number: '',
 }
 
+function splitName(fullName?: string | null) {
+  const value = (fullName || '').trim()
+  if (!value) {
+    return { first_name: '', last_name: '' }
+  }
+
+  const parts = value.split(' ')
+  return {
+    first_name: parts[0] || '',
+    last_name: parts.slice(1).join(' '),
+  }
+}
+
+function mapInvoiceToCustomer(invoice: Invoice): CustomerPayload {
+  const nameParts = splitName(invoice.customer_name_snapshot)
+
+  return {
+    id: invoice.customer_id ?? null,
+    first_name: nameParts.first_name,
+    last_name: nameParts.last_name,
+    phone: invoice.customer_phone_snapshot || '',
+    email: invoice.customer_email_snapshot || '',
+    address: invoice.customer_address_snapshot || '',
+    city: invoice.customer_city_snapshot || '',
+    state: invoice.customer_state_snapshot || '',
+    pincode: invoice.customer_pincode_snapshot || '',
+    gst_number: invoice.customer_gst_number_snapshot || '',
+  }
+}
+
+function mapInvoiceItemToLocalItem(item: any): LocalInvoiceItem {
+  return {
+    product_id: item.product_id,
+    product_code: item.product_code,
+    product_name: item.product_name_snapshot,
+    category: item.category_snapshot || '',
+    unit: item.unit_snapshot || '',
+    mrp: Number(item.mrp || 0),
+    buy_price: Number(item.buy_price || 0),
+    available_stock: Number(item.quantity || 0),
+    quantity: Number(item.quantity || 0),
+    discount_percentage: Number(item.discount_percentage || 0),
+    discount_amount_per_unit: Number(item.discount_amount_per_unit || 0),
+    selling_price_per_unit: Number(item.selling_price_per_unit || 0),
+    total_discount_amount: Number(item.total_discount_amount || 0),
+    total_selling_price: Number(item.total_selling_price || 0),
+    total_buy_cost: Number(item.total_buy_cost || 0),
+    profit_per_unit: Number(item.profit_per_unit || 0),
+    total_profit: Number(item.total_profit || 0),
+  }
+}
+
 export default function CreateInvoicePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  const editParam = searchParams.get('edit')
+  const editInvoiceId = editParam ? Number(editParam) : null
+  const isEditMode = !!editInvoiceId && !Number.isNaN(editInvoiceId)
 
   const [customer, setCustomer] = useState<CustomerPayload>(emptyCustomer)
   const [items, setItems] = useState<LocalInvoiceItem[]>([])
@@ -39,17 +97,16 @@ export default function CreateInvoicePage() {
   const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>('')
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending')
   const [notes, setNotes] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
 
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingInvoice, setIsLoadingInvoice] = useState(false)
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + item.mrp * item.quantity, 0)
-    const discount = items.reduce(
-      (sum, item) => sum + item.total_discount_amount,
-      0
-    )
+    const discount = items.reduce((sum, item) => sum + item.total_discount_amount, 0)
     const tax = 0
     const final = subtotal - discount + tax
 
@@ -72,7 +129,7 @@ export default function CreateInvoicePage() {
         discount_amount_per_unit: item.discount_amount_per_unit,
         selling_price_per_unit: item.selling_price_per_unit,
       })),
-      invoice_date: new Date().toISOString().slice(0, 10),
+      invoice_date: invoiceDate,
       payment_status: paymentStatus,
       payment_mode: paymentMode || null,
       paid_amount: paidAmount,
@@ -81,6 +138,35 @@ export default function CreateInvoicePage() {
       notes,
     }
   }
+
+  const loadInvoiceForEdit = async () => {
+    if (!isEditMode || !editInvoiceId) return
+
+    try {
+      setIsLoadingInvoice(true)
+      setErrorMessage('')
+
+      const data = await billingApi.getInvoice(editInvoiceId)
+
+      setCustomer(mapInvoiceToCustomer(data))
+      setItems((data.items || []).map(mapInvoiceItemToLocalItem))
+      setPaidAmount(Number(data.paid_amount || 0))
+      setPaymentMode((data.payment_mode as PaymentMode | null) || '')
+      setPaymentStatus((data.payment_status as PaymentStatus) || 'pending')
+      setNotes(data.notes || '')
+      setInvoiceDate(data.invoice_date || new Date().toISOString().slice(0, 10))
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to load invoice for editing'
+      )
+    } finally {
+      setIsLoadingInvoice(false)
+    }
+  }
+
+  useEffect(() => {
+    loadInvoiceForEdit()
+  }, [editInvoiceId])
 
   const saveAndPreview = async () => {
     try {
@@ -99,12 +185,18 @@ export default function CreateInvoicePage() {
 
       setIsSaving(true)
 
-      const invoice = await billingApi.createInvoice(parsed.data)
+      const invoice = isEditMode && editInvoiceId
+        ? await billingApi.updateInvoice(editInvoiceId, parsed.data)
+        : await billingApi.createInvoice(parsed.data)
 
       navigate(`/billing/${invoice.id}/preview`)
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to create invoice'
+        error instanceof Error
+          ? error.message
+          : isEditMode
+          ? 'Unable to update invoice'
+          : 'Unable to create invoice'
       )
     } finally {
       setIsSaving(false)
@@ -113,9 +205,30 @@ export default function CreateInvoicePage() {
 
   const saveDraftLocally = () => {
     const payload = buildPayload()
+    localStorage.setItem(
+      'billing_invoice_draft',
+      JSON.stringify({
+        ...payload,
+        edit_invoice_id: editInvoiceId,
+      })
+    )
+    setSuccessMessage(
+      isEditMode
+        ? 'Edited invoice draft saved locally in this browser.'
+        : 'Draft saved locally in this browser.'
+    )
+  }
 
-    localStorage.setItem('billing_invoice_draft', JSON.stringify(payload))
-    setSuccessMessage('Draft saved locally in this browser.')
+  if (isLoadingInvoice) {
+    return (
+      <AppShell>
+        <div className="mx-auto max-w-[1200px]">
+          <div className="flex min-h-[520px] items-center justify-center rounded-[34px] bg-white/80">
+            <Loader2 size={34} className="animate-spin text-indigo-600" />
+          </div>
+        </div>
+      </AppShell>
+    )
   }
 
   return (
@@ -139,16 +252,17 @@ export default function CreateInvoicePage() {
             <div>
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
                 <Sparkles size={14} />
-                Billing › New Invoice
+                Billing › {isEditMode ? 'Edit Invoice' : 'New Invoice'}
               </div>
 
               <h1 className="text-[42px] font-black tracking-[-0.04em] text-slate-950 md:text-[56px]">
-                Create New Invoice
+                {isEditMode ? 'Edit Invoice' : 'Create New Invoice'}
               </h1>
 
               <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600">
-                Select a customer, add products by code, apply discounts, and
-                generate a clean invoice.
+                {isEditMode
+                  ? 'Update customer details, products, discount, and payment information for this invoice.'
+                  : 'Select a customer, add products by code, apply discounts, and generate a clean invoice.'}
               </p>
             </div>
 
@@ -165,7 +279,9 @@ export default function CreateInvoicePage() {
             <div className="mb-6 flex items-start gap-3 rounded-[24px] border border-red-100 bg-red-50 p-5 text-red-700">
               <AlertCircle size={20} className="mt-0.5" />
               <div>
-                <p className="font-black">Unable to create invoice</p>
+                <p className="font-black">
+                  {isEditMode ? 'Unable to update invoice' : 'Unable to create invoice'}
+                </p>
                 <p className="mt-1 text-sm">{errorMessage}</p>
               </div>
             </div>
@@ -183,15 +299,8 @@ export default function CreateInvoicePage() {
 
           <div className="grid gap-8 xl:grid-cols-[1fr_410px]">
             <div className="space-y-8">
-              <CustomerSelector
-                customer={customer}
-                onCustomerChange={setCustomer}
-              />
-
-              <InvoiceItemsTable
-                items={items}
-                onItemsChange={setItems}
-              />
+              <CustomerSelector customer={customer} onCustomerChange={setCustomer} />
+              <InvoiceItemsTable items={items} onItemsChange={setItems} />
             </div>
 
             <InvoiceSummaryCard
@@ -207,6 +316,8 @@ export default function CreateInvoicePage() {
               onPreview={saveAndPreview}
               onSaveDraft={saveDraftLocally}
               loading={isSaving}
+              primaryActionLabel={isEditMode ? 'Update & Preview Invoice' : 'Save & Preview Invoice'}
+              secondaryActionLabel={isEditMode ? 'Save Edited Draft' : 'Save Draft Locally'}
             />
           </div>
         </motion.div>

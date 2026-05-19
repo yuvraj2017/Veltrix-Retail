@@ -14,10 +14,8 @@ import {
   Printer,
   ReceiptText,
   Search,
-  Send,
   Share2,
   Sparkles,
-  XCircle,
 } from 'lucide-react'
 
 import type { InvoiceListItem, PaymentStatus } from '../../features/billing/types'
@@ -31,6 +29,7 @@ type InvoiceTableProps = {
   paymentStatus: 'all' | PaymentStatus
   onPaymentStatusChange: (value: 'all' | PaymentStatus) => void
   onView: (invoiceId: number) => void
+  onEdit: (invoiceId: number) => void
   onCreate: () => void
   onPrint: (invoiceId: number) => void
   onDownload: (invoiceId: number) => void
@@ -92,9 +91,7 @@ function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   const Icon = item.icon
 
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black uppercase ${item.className}`}
-    >
+    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black uppercase ${item.className}`}>
       <span className={`h-2 w-2 rounded-full ${item.dot}`} />
       <Icon size={13} />
       {item.label}
@@ -113,30 +110,10 @@ function PaymentFilterDropdown({
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   const options = [
-    {
-      label: 'All Invoices',
-      value: 'all' as const,
-      helper: 'Every payment status',
-      icon: FileText,
-    },
-    {
-      label: 'Paid',
-      value: 'paid' as const,
-      helper: 'Completed payments',
-      icon: CheckCircle2,
-    },
-    {
-      label: 'Pending',
-      value: 'pending' as const,
-      helper: 'Awaiting payment',
-      icon: Clock3,
-    },
-    {
-      label: 'Partial',
-      value: 'partial' as const,
-      helper: 'Partially paid',
-      icon: Sparkles,
-    },
+    { label: 'All Invoices', value: 'all' as const, helper: 'Every payment status', icon: FileText },
+    { label: 'Paid', value: 'paid' as const, helper: 'Completed payments', icon: CheckCircle2 },
+    { label: 'Pending', value: 'pending' as const, helper: 'Awaiting payment', icon: Clock3 },
+    { label: 'Partial', value: 'partial' as const, helper: 'Partially paid', icon: Sparkles },
   ]
 
   const selected = options.find((option) => option.value === value) || options[0]
@@ -149,7 +126,6 @@ function PaymentFilterDropdown({
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
@@ -171,9 +147,7 @@ function PaymentFilterDropdown({
 
         <ChevronDown
           size={18}
-          className={`text-slate-500 transition-transform duration-300 ${
-            open ? 'rotate-180 text-indigo-600' : ''
-          }`}
+          className={`text-slate-500 transition-transform duration-300 ${open ? 'rotate-180 text-indigo-600' : ''}`}
         />
       </button>
 
@@ -228,12 +202,14 @@ function PaymentFilterDropdown({
 function InvoiceActions({
   invoiceId,
   onView,
+  onEdit,
   onPrint,
   onDownload,
   onShare,
 }: {
   invoiceId: number
   onView: (invoiceId: number) => void
+  onEdit: (invoiceId: number) => void
   onPrint: (invoiceId: number) => void
   onDownload: (invoiceId: number) => void
   onShare: (invoiceId: number) => void
@@ -243,7 +219,7 @@ function InvoiceActions({
 
   const actions = [
     { label: 'View', icon: Eye, onClick: () => onView(invoiceId) },
-    { label: 'Edit', icon: Pencil, onClick: () => onView(invoiceId) },
+    { label: 'Edit', icon: Pencil, onClick: () => onEdit(invoiceId) },
     { label: 'Print', icon: Printer, onClick: () => onPrint(invoiceId) },
     { label: 'Download', icon: Download, onClick: () => onDownload(invoiceId) },
     { label: 'Share', icon: Share2, onClick: () => onShare(invoiceId) },
@@ -257,7 +233,6 @@ function InvoiceActions({
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
@@ -315,6 +290,7 @@ export default function InvoiceTable({
   paymentStatus,
   onPaymentStatusChange,
   onView,
+  onEdit,
   onCreate,
   onPrint,
   onDownload,
@@ -419,7 +395,7 @@ export default function InvoiceTable({
               className="group grid cursor-pointer grid-cols-1 items-center gap-4 rounded-[26px] px-4 py-5 text-left transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-[0_18px_42px_rgba(15,23,42,0.05)] lg:grid-cols-[1.05fr_1fr_1.2fr_1fr_1fr_0.85fr_0.55fr] lg:px-5"
             >
               <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] transition duration-300 group-hover:scale-105 group-hover:bg-gradient-to-br group-hover:from-indigo-500 group-hover:to-violet-600 group-hover:text-white">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] transition duration-300 group-hover:scale-105 group-hover:from-indigo-500 group-hover:to-violet-600 group-hover:text-white">
                   <FileText size={24} />
                 </div>
 
@@ -485,6 +461,7 @@ export default function InvoiceTable({
                 <InvoiceActions
                   invoiceId={invoice.id}
                   onView={onView}
+                  onEdit={onEdit}
                   onPrint={onPrint}
                   onDownload={onDownload}
                   onShare={onShare}
@@ -498,15 +475,8 @@ export default function InvoiceTable({
       {!isLoading && invoices.length > 0 && (
         <div className="flex flex-col gap-4 px-8 py-6 text-[14px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            Showing{' '}
-            <span className="font-black text-slate-950">
-              1-{invoices.length}
-            </span>{' '}
-            of{' '}
-            <span className="font-black text-slate-950">
-              {totalInvoices}
-            </span>{' '}
-            invoices
+            Showing <span className="font-black text-slate-950">1-{invoices.length}</span> of{' '}
+            <span className="font-black text-slate-950">{totalInvoices}</span> invoices
           </div>
 
           <div className="flex items-center gap-2">

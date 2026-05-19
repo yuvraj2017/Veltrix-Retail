@@ -23,6 +23,8 @@ type InvoiceSummaryCardProps = {
   onPreview: () => void
   onSaveDraft: () => void
   loading?: boolean
+  primaryActionLabel?: string
+  secondaryActionLabel?: string
 }
 
 const money = (value: number) => {
@@ -46,12 +48,11 @@ export default function InvoiceSummaryCard({
   onPreview,
   onSaveDraft,
   loading = false,
+  primaryActionLabel = 'Save & Preview Invoice',
+  secondaryActionLabel = 'Save Draft Locally',
 }: InvoiceSummaryCardProps) {
   const subtotal = items.reduce((sum, item) => sum + item.mrp * item.quantity, 0)
-  const discountTotal = items.reduce(
-    (sum, item) => sum + item.total_discount_amount,
-    0
-  )
+  const discountTotal = items.reduce((sum, item) => sum + item.total_discount_amount, 0)
   const taxAmount = 0
   const finalAmount = subtotal - discountTotal + taxAmount
   const remainingAmount = Math.max(finalAmount - paidAmount, 0)
@@ -76,11 +77,7 @@ export default function InvoiceSummaryCard({
 
         <div className="space-y-4">
           <SummaryRow label="Subtotal" value={money(subtotal)} />
-          <SummaryRow
-            label="Discount Total"
-            value={`-${money(discountTotal)}`}
-            danger
-          />
+          <SummaryRow label="Discount Total" value={`-${money(discountTotal)}`} danger />
           <SummaryRow label="Tax" value={money(taxAmount)} />
 
           <div className="my-5 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
@@ -115,9 +112,7 @@ export default function InvoiceSummaryCard({
               type="number"
               min={0}
               value={paidAmount}
-              onChange={(event) =>
-                onPaidAmountChange(Number(event.target.value || 0))
-              }
+              onChange={(event) => onPaidAmountChange(Number(event.target.value || 0))}
               className="h-13 w-full rounded-[20px] border border-indigo-100 bg-white px-4 font-bold outline-none focus:border-indigo-300 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
             />
           </label>
@@ -128,9 +123,7 @@ export default function InvoiceSummaryCard({
             </span>
             <select
               value={paymentMode}
-              onChange={(event) =>
-                onPaymentModeChange(event.target.value as PaymentMode | '')
-              }
+              onChange={(event) => onPaymentModeChange(event.target.value as PaymentMode | '')}
               className="h-13 w-full rounded-[20px] border border-indigo-100 bg-white px-4 font-bold outline-none focus:border-indigo-300 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
             >
               <option value="">Select mode</option>
@@ -148,9 +141,7 @@ export default function InvoiceSummaryCard({
             </span>
             <select
               value={paymentStatus}
-              onChange={(event) =>
-                onPaymentStatusChange(event.target.value as PaymentStatus)
-              }
+              onChange={(event) => onPaymentStatusChange(event.target.value as PaymentStatus)}
               className="h-13 w-full rounded-[20px] border border-indigo-100 bg-white px-4 font-bold outline-none focus:border-indigo-300 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
             >
               <option value="pending">Pending</option>
@@ -170,7 +161,7 @@ export default function InvoiceSummaryCard({
             className="inline-flex h-14 items-center justify-center gap-3 rounded-[22px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#2f20d6] text-sm font-black text-white shadow-[0_20px_48px_rgba(79,70,229,0.30)] transition disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Eye size={18} />}
-            Save & Preview Invoice
+            {primaryActionLabel}
           </motion.button>
 
           <button
@@ -179,7 +170,7 @@ export default function InvoiceSummaryCard({
             className="inline-flex h-14 items-center justify-center gap-3 rounded-[22px] bg-slate-100 text-sm font-black text-slate-800 transition hover:bg-slate-200"
           >
             <Save size={18} />
-            Save Draft Locally
+            {secondaryActionLabel}
           </button>
         </div>
 
@@ -189,8 +180,7 @@ export default function InvoiceSummaryCard({
             Billing Note
           </div>
           <p className="text-sm leading-6 text-slate-500">
-            Backend will validate customer, product stock, discount, totals,
-            and profit again before saving.
+            Backend will validate customer, product stock, discount, totals, and profit again before saving.
           </p>
         </div>
       </section>
@@ -225,9 +215,9 @@ function SummaryRow({
   danger?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="font-semibold text-slate-600">{label}</span>
-      <span className={`font-black ${danger ? 'text-rose-600' : 'text-slate-950'}`}>
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm font-black text-slate-700">{label}</span>
+      <span className={`text-sm font-black ${danger ? 'text-rose-600' : 'text-slate-950'}`}>
         {value}
       </span>
     </div>

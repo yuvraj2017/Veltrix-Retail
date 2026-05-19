@@ -743,7 +743,8 @@ export default function InvoicePreviewPage() {
               <ActionButton
                 icon={Pencil}
                 label="Edit"
-                onClick={() => navigate('/billing/new')}
+                // onClick={() => navigate('/billing/new')}
+                onClick={() => navigate(`/billing/new?edit=${invoice.id}`)}
               />
               <ActionButton icon={Save} label="Refresh" onClick={loadInvoice} />
               <ActionButton icon={Printer} label="Print" onClick={handlePrint} />
