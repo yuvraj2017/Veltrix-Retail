@@ -7,9 +7,17 @@ import {
   Download,
   Filter,
   ReceiptText,
+  CheckCircle2,
+  Clock3,
   Rocket,
   Sparkles,
+  TrendingUp,
+  BellRing,
+  IndianRupee,
+  FileText,
+  Lightbulb
 } from 'lucide-react'
+
 
 import { AppShell } from '../components/layout/AppShell'
 import BillingStats from '../components/billing/BillingStats'
@@ -258,7 +266,7 @@ export default function BillingPage() {
           </div>
 
           <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1fr]">
-            <motion.section
+            {/* <motion.section
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, delay: 0.15 }}
@@ -302,8 +310,127 @@ export default function BillingPage() {
                   </div>
                 ))}
               </div>
-            </motion.section>
+            </motion.section> */}
 
+            <motion.section
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.15 }}
+              className="relative overflow-hidden rounded-[34px] bg-white/85 p-7 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl"
+            >
+              <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-indigo-100 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 -left-24 h-60 w-60 rounded-full bg-purple-100 blur-3xl" />
+
+              <div className="relative">
+                <div className="mb-7 flex items-start justify-between gap-5">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-600">
+                      Payment Journey
+                    </p>
+
+                    <h2 className="mt-2 text-2xl font-black tracking-[-0.035em] text-slate-950">
+                      Where Your Invoices Stand
+                    </h2>
+
+                    <p className="mt-1 max-w-sm text-sm font-medium leading-6 text-slate-500">
+                      A simple view of how invoices are moving from pending to fully paid.
+                    </p>
+                  </div>
+
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                    <ReceiptText size={22} />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  {paymentDistribution.map((item, index) => {
+                    const isPaid = item.label.toLowerCase().includes("paid");
+                    const isPartial = item.label.toLowerCase().includes("partial");
+
+                    const iconBg = isPaid
+                      ? "bg-emerald-50 text-emerald-600"
+                      : isPartial
+                        ? "bg-amber-50 text-amber-600"
+                        : "bg-rose-50 text-rose-600";
+
+                    const cardBg = isPaid
+                      ? "from-emerald-50 to-white"
+                      : isPartial
+                        ? "from-amber-50 to-white"
+                        : "from-rose-50 to-white";
+
+                    const titleText = isPaid
+                      ? "Collected"
+                      : isPartial
+                        ? "In Progress"
+                        : "Needs Follow-up";
+
+                    const description = isPaid
+                      ? "Invoices fully settled"
+                      : isPartial
+                        ? "Part payment received"
+                        : "Payment not received yet";
+
+                    return (
+                      <motion.div
+                        key={item.label}
+                        initial={{ opacity: 0, y: 14 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: 0.08 * index }}
+                        className={`relative overflow-hidden rounded-[28px] bg-gradient-to-br ${cardBg} p-5 shadow-[0_16px_42px_rgba(15,23,42,0.055)]`}
+                      >
+                        <div className="mb-5 flex items-start justify-between">
+                          <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${iconBg}`}>
+                            {isPaid ? (
+                              <CheckCircle2 size={23} />
+                            ) : isPartial ? (
+                              <Clock3 size={23} />
+                            ) : (
+                              <AlertCircle size={23} />
+                            )}
+                          </div>
+
+                          <div className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm">
+                            {item.percent}%
+                          </div>
+                        </div>
+
+                        <p className="text-sm font-black text-slate-500">
+                          {item.label}
+                        </p>
+
+                        <h3 className="mt-1 text-xl font-black tracking-[-0.035em] text-slate-950">
+                          {titleText}
+                        </h3>
+
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                          {description}
+                        </p>
+
+                        <div className="mt-6 flex items-end gap-1">
+                          <span className="text-4xl font-black tracking-[-0.06em] text-slate-950">
+                            {item.percent}
+                          </span>
+                          <span className="mb-1.5 text-sm font-black text-slate-400">
+                            %
+                          </span>
+                        </div>
+
+                        <div className="mt-5 h-2 overflow-hidden rounded-full bg-white">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${item.percent}%` }}
+                            transition={{ duration: 0.7, ease: "easeOut" }}
+                            className={`h-full rounded-full bg-gradient-to-r ${item.barClass}`}
+                          />
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.section>
+{/* 
             <motion.section
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
@@ -349,7 +476,125 @@ export default function BillingPage() {
               </div>
 
               <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/45 blur-2xl" />
+            </motion.section> */}
+
+
+            <motion.section
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.22 }}
+              className="relative overflow-hidden rounded-[34px] bg-white/85 p-7 shadow-[0_24px_70px_rgba(99,102,241,0.10)] backdrop-blur-xl"
+            >
+              {/* Soft background shapes */}
+              <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-indigo-100 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-violet-100 blur-3xl" />
+
+              <div className="relative z-10">
+                <div className="mb-6 flex items-center justify-between gap-5">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600">
+                      Automated Billing Report
+                    </p>
+
+                    <h2 className="mt-2 text-2xl font-black tracking-[-0.035em] text-slate-950">
+                      Smart Insights
+                    </h2>
+
+                    <p className="mt-1 max-w-sm text-sm font-medium leading-6 text-slate-500">
+                      Quick business suggestions generated from your invoice data.
+                    </p>
+                  </div>
+
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] bg-gradient-to-br from-[#7c6cff] via-[#5b43f3] to-[#2f20d6] text-white shadow-[0_18px_42px_rgba(79,70,229,0.28)]">
+                    <Rocket size={25} />
+                  </div>
+                </div>
+
+                {/* Ticket card */}
+                <div className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+                  {/* Ticket dotted divider */}
+                  <div className="absolute left-0 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-inner" />
+                  <div className="absolute right-0 top-1/2 h-8 w-8 translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-inner" />
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-[0_12px_30px_rgba(79,70,229,0.12)]">
+                      <Lightbulb size={22} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                          Recommended
+                        </span>
+
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500 shadow-sm">
+                          Billing Insight
+                        </span>
+                      </div>
+
+                      <h3 className="mt-4 text-xl font-black tracking-[-0.035em] text-slate-950">
+                        Follow up on unpaid and partial invoices first
+                      </h3>
+
+                      <p className="mt-2 text-sm font-medium leading-6 text-slate-500">
+                        Use payment status and remaining amount to quickly identify invoices
+                        that still need collection.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="my-5 h-px bg-gradient-to-r from-transparent via-indigo-100 to-transparent" />
+
+                  {/* Simple action summary */}
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl bg-white/80 p-4 shadow-sm">
+                      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                        <AlertCircle size={18} />
+                      </div>
+                      <p className="text-sm font-black text-slate-950">Check Dues</p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                        Find unpaid invoices.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white/80 p-4 shadow-sm">
+                      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                        <Clock3 size={18} />
+                      </div>
+                      <p className="text-sm font-black text-slate-950">Track Partial</p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                        Review pending balance.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-white/80 p-4 shadow-sm">
+                      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                        <TrendingUp size={18} />
+                      </div>
+                      <p className="text-sm font-black text-slate-950">Review Profit</p>
+                      <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+                        Analyze invoice margin.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom small insight */}
+                <div className="mt-4 flex items-start gap-3 rounded-[24px] bg-white/70 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.045)] backdrop-blur-md">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <CheckCircle2 size={18} />
+                  </div>
+
+                  <p className="text-sm font-semibold leading-6 text-slate-500">
+                    Each invoice item stores buy cost, discount, selling amount, and profit,
+                    so future reports can show real business performance.
+                  </p>
+                </div>
+              </div>
             </motion.section>
+
+
+
           </div>
         </motion.div>
       </div>

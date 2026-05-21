@@ -15,49 +15,87 @@ function getStatusClasses(status: RecentBill['status']) {
 
 export function RecentBillsTable({ bills }: { bills: RecentBill[] }) {
   return (
-    <div className="rounded-3xl bg-white shadow-sm">
-      <div className="flex items-center justify-between px-8 py-7">
-        <h3 className="text-2xl font-semibold text-slate-900">Recent Bills</h3>
-        <button className="text-sm font-semibold text-indigo-600">
+    <div className="rounded-3xl bg-white shadow-sm w-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 sm:px-8 py-5 sm:py-7">
+        <h3 className="text-lg sm:text-2xl font-semibold text-slate-900">Recent Bills</h3>
+        <button className="text-xs sm:text-sm font-semibold text-indigo-600 whitespace-nowrap ml-4">
           View All Transactions
         </button>
       </div>
 
-      <div className="px-8 pb-8">
-        <div className="grid grid-cols-4 px-6 py-4 text-xs font-semibold tracking-[0.16em] text-slate-500">
-          <span>BILL ID</span>
-          <span>DATE</span>
-          <span>AMOUNT</span>
-          <span>STATUS</span>
+      <div className="px-4 sm:px-8 pb-6 sm:pb-8">
+
+        {/* ── Desktop / Tablet table (sm and up) ── */}
+        <div className="hidden sm:block">
+          <div className="grid grid-cols-4 px-6 py-4 text-xs font-semibold tracking-[0.16em] text-slate-500">
+            <span>BILL ID</span>
+            <span>DATE</span>
+            <span>AMOUNT</span>
+            <span>STATUS</span>
+          </div>
+
+          <div className="space-y-2">
+            {bills.length === 0 ? (
+              <div className="rounded-2xl bg-[#f8f9fd] px-6 py-12 text-center text-sm font-medium text-slate-500">
+                No recent bills found.
+              </div>
+            ) : (
+              bills.map((bill) => (
+                <div
+                  key={bill.id}
+                  className="grid grid-cols-4 items-center rounded-2xl px-6 py-5 text-sm text-slate-700 hover:bg-[#f8f9fd] transition-colors"
+                >
+                  <span className="font-semibold text-slate-900 truncate pr-2">{bill.id}</span>
+                  <span className="truncate pr-2">{bill.date}</span>
+                  <span className="font-semibold text-slate-900 truncate pr-2">{bill.amount}</span>
+                  <span>
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(bill.status)}`}
+                    >
+                      {bill.status}
+                    </span>
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
-        <div className="space-y-2">
+        {/* ── Mobile card list (below sm) ── */}
+        <div className="sm:hidden">
           {bills.length === 0 ? (
-            <div className="rounded-2xl bg-[#f8f9fd] px-6 py-12 text-center text-sm font-medium text-slate-500">
+            <div className="rounded-2xl bg-[#f8f9fd] px-4 py-10 text-center text-sm font-medium text-slate-500">
               No recent bills found.
             </div>
           ) : (
-            bills.map((bill) => (
-              <div
-                key={bill.id}
-                className="grid grid-cols-4 items-center rounded-2xl px-6 py-5 text-sm text-slate-700 hover:bg-[#f8f9fd]"
-              >
-                <span className="font-semibold text-slate-900">{bill.id}</span>
-                <span>{bill.date}</span>
-                <span className="font-semibold text-slate-900">{bill.amount}</span>
-                <span>
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(
-                      bill.status,
-                    )}`}
-                  >
-                    {bill.status}
-                  </span>
-                </span>
-              </div>
-            ))
+            <div className="space-y-3">
+              {bills.map((bill) => (
+                <div
+                  key={bill.id}
+                  className="rounded-2xl bg-[#f8f9fd] px-4 py-4 text-sm text-slate-700"
+                >
+                  {/* Top row: ID + badge */}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-semibold text-slate-900 truncate mr-2">{bill.id}</span>
+                    <span
+                      className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(bill.status)}`}
+                    >
+                      {bill.status}
+                    </span>
+                  </div>
+
+                  {/* Bottom row: date + amount */}
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>{bill.date}</span>
+                    <span className="font-semibold text-slate-900">{bill.amount}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
+
       </div>
     </div>
   )
