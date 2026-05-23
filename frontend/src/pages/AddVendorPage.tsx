@@ -18,6 +18,7 @@ import {
 import { AppShell } from '../components/layout/AppShell'
 import { vendorsApi } from '../features/vendors/api'
 import { vendorSchema } from '../features/vendors/schemas'
+import type { VendorCreatePayload } from '../features/vendors/types'
 
 export default function AddVendorPage() {
   const navigate = useNavigate()
@@ -73,11 +74,14 @@ export default function AddVendorPage() {
         return
       }
 
-      const created = await vendorsApi.createVendor({
+      const vendorPayload: VendorCreatePayload = {
         ...parsed.data,
         vendor_name: vendorName,
         default_reminder_days: parsed.data.default_reminder_days ?? 7,
-      })
+        is_active: parsed.data.is_active ?? true,
+      }
+
+      const created = await vendorsApi.createVendor(vendorPayload)
 
       navigate(`/vendors/${created.id}`)
       

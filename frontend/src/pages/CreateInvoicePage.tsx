@@ -139,6 +139,40 @@ export default function CreateInvoicePage() {
     }
   }
 
+  const normalizePayload = (payload: InvoiceCreatePayload): InvoiceCreatePayload => {
+    const parsed = invoiceCreateSchema.parse(payload)
+
+    return {
+      customer: {
+        id: parsed.customer.id ?? null,
+        first_name: parsed.customer.first_name,
+        last_name: parsed.customer.last_name ?? null,
+        phone: parsed.customer.phone,
+        email: parsed.customer.email || null,
+        address: parsed.customer.address || null,
+        city: parsed.customer.city || null,
+        state: parsed.customer.state || null,
+        pincode: parsed.customer.pincode || null,
+        gst_number: parsed.customer.gst_number || null,
+      },
+      items: parsed.items.map((item) => ({
+        product_id: item.product_id,
+        product_code: item.product_code,
+        quantity: item.quantity,
+        discount_percentage: item.discount_percentage,
+        discount_amount_per_unit: item.discount_amount_per_unit ?? null,
+        selling_price_per_unit: item.selling_price_per_unit ?? null,
+      })),
+      invoice_date: parsed.invoice_date ?? null,
+      payment_status: parsed.payment_status,
+      payment_mode: parsed.payment_mode ?? null,
+      paid_amount: parsed.paid_amount,
+      total_tax_amount: parsed.total_tax_amount,
+      invoice_status: parsed.invoice_status,
+      notes: parsed.notes || null,
+    }
+  }
+
   const loadInvoiceForEdit = async () => {
     if (!isEditMode || !editInvoiceId) return
 
@@ -185,9 +219,11 @@ export default function CreateInvoicePage() {
 
       setIsSaving(true)
 
+      const normalizedPayload = normalizePayload(payload)
+
       const invoice = isEditMode && editInvoiceId
-        ? await billingApi.updateInvoice(editInvoiceId, parsed.data)
-        : await billingApi.createInvoice(parsed.data)
+        ? await billingApi.updateInvoice(editInvoiceId, normalizedPayload)
+        : await billingApi.createInvoice(normalizedPayload)
 
       navigate(`/billing/${invoice.id}/preview`)
     } catch (error) {

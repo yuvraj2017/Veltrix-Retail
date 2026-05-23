@@ -12,9 +12,6 @@ import {
   Rocket,
   Sparkles,
   TrendingUp,
-  BellRing,
-  IndianRupee,
-  FileText,
   Lightbulb
 } from 'lucide-react'
 
