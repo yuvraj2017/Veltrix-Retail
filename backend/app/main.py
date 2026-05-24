@@ -29,8 +29,7 @@
 
 
 
-
-
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,19 +43,11 @@ app = FastAPI(
     debug=settings.debug,
 )
 
-# Support both old list-based config and new comma-separated env config
-cors_origins = settings.cors_origins
-
-if isinstance(cors_origins, str):
-    cors_origins = [
-        origin.strip()
-        for origin in cors_origins.split(",")
-        if origin.strip()
-    ]
+os.makedirs("uploads", exist_ok=True)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
