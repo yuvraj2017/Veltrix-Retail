@@ -300,7 +300,7 @@ export default function RegisterPage() {
             </div>
 
             <Link
-              to="/login"
+              to="/"
               className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/85 px-5 py-3.5 text-sm font-semibold text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600 hover:shadow-[0_16px_34px_rgba(79,70,229,0.10)]"
             >
               <ArrowLeft size={16} />
