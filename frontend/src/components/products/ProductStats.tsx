@@ -22,8 +22,7 @@ export function ProductStats({ stats }: { stats: ProductStatsType }) {
     {
       title: 'OUT OF STOCK',
       value: stats.out_of_stock,
-      subtitle:
-        stats.out_of_stock > 0 ? 'Immediate action required' : 'Everything looks healthy',
+      subtitle: stats.out_of_stock > 0 ? 'Immediate action required' : 'Everything looks healthy',
       icon: <PackageX size={18} />,
       valueClass: stats.out_of_stock > 0 ? 'text-red-600' : 'text-slate-900',
       iconWrapClass: 'bg-red-50 text-red-500 ring-1 ring-red-100',
@@ -43,51 +42,55 @@ export function ProductStats({ stats }: { stats: ProductStatsType }) {
     {
       title: 'LOW STOCK ALERTS',
       value: stats.low_stock_count,
-      subtitle:
-        stats.low_stock_count > 0 ? 'Reorder threshold met' : 'Stock levels are stable',
+      subtitle: stats.low_stock_count > 0 ? 'Reorder threshold met' : 'Stock levels are stable',
       icon: <AlertTriangle size={18} />,
       valueClass: stats.low_stock_count > 0 ? 'text-orange-600' : 'text-slate-900',
       iconWrapClass: 'bg-orange-50 text-orange-500 ring-1 ring-orange-100',
       glowClass: 'from-orange-500/10 to-transparent',
-      borderClass:
-        stats.low_stock_count > 0 ? 'border-orange-200' : 'border-slate-200',
+      borderClass: stats.low_stock_count > 0 ? 'border-orange-200' : 'border-slate-200',
     },
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 xl:grid-cols-4 sm:gap-4">
       {cards.map((card) => (
         <div
           key={card.title}
-          className={`group relative overflow-hidden rounded-[28px] border bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,23,42,0.1)] ${card.borderClass}`}
+          className={`group relative overflow-hidden rounded-[22px] border bg-white p-5 shadow-[0_6px_24px_rgba(15,23,42,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_40px_rgba(15,23,42,0.10)] ${card.borderClass}`}
         >
+          {/* Glow overlay */}
           <div
             className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.glowClass} opacity-100`}
           />
-          <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-slate-100/40 blur-2xl" />
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-slate-100/40 blur-2xl" />
 
-          <div className="relative flex items-start justify-between">
-            <div className="text-[12px] font-semibold tracking-[0.24em] text-slate-500">
+          {/* Header: title + icon */}
+          <div className="relative flex items-center justify-between gap-2">
+            <div className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase leading-snug flex-1">
               {card.title}
             </div>
-
             <div
-              className={`flex h-10 w-10 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-110 ${card.iconWrapClass}`}
+              className={`flex-shrink-0 flex h-[38px] w-[38px] items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-110 ${card.iconWrapClass}`}
             >
               {card.icon}
             </div>
           </div>
 
-          <div className="relative mt-6">
-            <div className={`text-5xl font-bold tracking-[-0.03em] ${card.valueClass}`}>
+          {/* Value */}
+          <div className="relative mt-4">
+            <div
+              className={`text-[clamp(28px,5vw,40px)] font-bold tracking-[-0.03em] leading-none break-words ${card.valueClass}`}
+            >
               {card.value}
             </div>
           </div>
 
-          <div className="relative mt-5 flex items-center justify-between">
-            <p className="text-base text-slate-500">{card.subtitle}</p>
-
-            <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-100">
+          {/* Footer: subtitle + badge */}
+          <div className="relative mt-4 flex items-center justify-between gap-2">
+            <p className="text-[13px] leading-snug text-slate-500 flex-1 min-w-0">
+              {card.subtitle}
+            </p>
+            <span className="flex-shrink-0 rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-100 whitespace-nowrap">
               Live
             </span>
           </div>
