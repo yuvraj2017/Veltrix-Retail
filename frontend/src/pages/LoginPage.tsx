@@ -68,7 +68,7 @@ export default function LoginPage() {
 
 
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Sign in to 
+              Sign in to {""}
               <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-violet-700 bg-clip-text text-transparent">
                 Store Mitraa
               </span>
