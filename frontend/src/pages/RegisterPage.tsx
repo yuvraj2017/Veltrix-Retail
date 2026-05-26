@@ -263,7 +263,7 @@ export default function RegisterPage() {
       setWhatsappNumber('')
       setShopAddress('')
 
-      navigate('/login')
+      navigate('/')
     } catch (error: any) {
       setApiError(error?.response?.data?.detail || 'Registration failed')
     } finally {

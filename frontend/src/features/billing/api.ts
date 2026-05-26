@@ -55,8 +55,8 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
   if (response.status === 401) {
     clearAuthStorage()
 
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login'
+    if (window.location.pathname !== '/') {
+      window.location.href = '/'
     }
 
     throw new Error('Your session has expired. Please login again.')
