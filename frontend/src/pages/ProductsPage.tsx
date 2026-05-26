@@ -44,22 +44,16 @@ export default function ProductsPage() {
       switch (sortBy) {
         case 'date_asc':
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-
         case 'date_desc':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-
         case 'name_asc':
           return a.name.localeCompare(b.name)
-
         case 'name_desc':
           return b.name.localeCompare(a.name)
-
         case 'stock_asc':
           return a.stock_quantity - b.stock_quantity
-
         case 'stock_desc':
           return b.stock_quantity - a.stock_quantity
-
         default:
           return 0
       }
@@ -108,7 +102,6 @@ export default function ProductsPage() {
     const t = setTimeout(() => {
       loadProducts()
     }, 250)
-
     return () => clearTimeout(t)
   }, [search, category, stockStatus])
 
@@ -165,34 +158,44 @@ export default function ProductsPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1600px]">
-        <div className="mb-8">
-          <h1 className="text-5xl font-bold tracking-[-0.02em] text-slate-900">
+      {/* Responsive container: full width on mobile, capped on large screens */}
+      <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8">
+
+        {/* Page header: stacks on mobile, fits side-by-side on sm+ */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-3xl font-bold tracking-[-0.02em] text-slate-900 sm:text-4xl lg:text-5xl">
             Product Inventory
           </h1>
-          <p className="mt-2 text-2xl text-slate-600">
+          <p className="mt-1 text-base text-slate-600 sm:mt-2 sm:text-lg lg:text-2xl">
             Manage your retail stock levels and catalog details.
           </p>
         </div>
 
-        <ProductStats stats={stats} />
+        {/* Stats cards — the grid inside ProductStats should use responsive columns.
+            Wrap in a div that constrains overflow on very small screens. */}
+        <div className="overflow-x-auto pb-1 sm:overflow-visible">
+          <ProductStats stats={stats} />
+        </div>
 
-        <div className="mt-8">
-          <ProductTable
-            products={sortedProducts}
-            allCategories={allCategories}
-            search={search}
-            onSearchChange={setSearch}
-            category={category}
-            onCategoryChange={setCategory}
-            stockStatus={stockStatus}
-            onStockStatusChange={setStockStatus}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            onEdit={setSelectedProduct}
-            onDelete={handleDelete}
-            onAdd={() => navigate('/products/new')}
-          />
+        {/* Product table — allow horizontal scroll on narrow screens */}
+        <div className="mt-6 sm:mt-8">
+          <div className="overflow-x-auto rounded-xl">
+            <ProductTable
+              products={sortedProducts}
+              allCategories={allCategories}
+              search={search}
+              onSearchChange={setSearch}
+              category={category}
+              onCategoryChange={setCategory}
+              stockStatus={stockStatus}
+              onStockStatusChange={setStockStatus}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              onEdit={setSelectedProduct}
+              onDelete={handleDelete}
+              onAdd={() => navigate('/products/new')}
+            />
+          </div>
         </div>
 
         <EditProductModal
