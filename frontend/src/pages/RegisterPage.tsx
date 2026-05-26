@@ -540,7 +540,7 @@ export default function RegisterPage() {
             <div className="rounded-2xl border border-slate-200 bg-white/75 px-4 py-4 text-center text-sm text-slate-500 shadow-sm">
               Already have an account?{' '}
               <Link
-                to="/login"
+                to="/"
                 className="font-semibold text-indigo-600 transition hover:text-indigo-700"
               >
                 Sign in
