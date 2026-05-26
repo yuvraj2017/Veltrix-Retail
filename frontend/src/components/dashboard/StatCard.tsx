@@ -6,168 +6,240 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
-import type { DashboardStat } from '../../features/dashboard/types'
+import type { LucideIcon } from 'lucide-react'
 
-const icons = [BriefcaseBusiness, CreditCard, Wallet, Banknote, TrendingUp]
+type StatItem = {
+  title: string
+  value: string
+  change: string
+  positive: boolean
+  highlight?: boolean
+  warning_label?: string
+}
 
-const ACCENTS = [
-  'bg-indigo-600',
-  'bg-violet-600',
-  'bg-sky-500',
-  'bg-emerald-500',
-  'bg-amber-500',
+type StatGridProps = {
+  items: StatItem[]
+}
+
+type StatCardProps = {
+  item: StatItem
+  index: number
+}
+
+const icons: LucideIcon[] = [
+  BriefcaseBusiness,
+  CreditCard,
+  Wallet,
+  Banknote,
+  TrendingUp,
 ]
+
+const ACCENTS = ['#534AB7', '#7F77DD', '#185FA5', '#0F6E56', '#BA7517']
 
 const ICON_STYLES = [
-  'bg-indigo-50 text-indigo-600',
-  'bg-violet-50 text-violet-600',
-  'bg-sky-50 text-sky-500',
-  'bg-emerald-50 text-emerald-500',
-  'bg-amber-50 text-amber-500',
+  { bg: '#EEEDFE', color: '#534AB7' },
+  { bg: '#EEEDFE', color: '#7F77DD' },
+  { bg: '#E6F1FB', color: '#185FA5' },
+  { bg: '#E1F5EE', color: '#0F6E56' },
+  { bg: '#FAEEDA', color: '#BA7517' },
 ]
 
-// ─── Grid wrapper ─────────────────────────────────────────────────────────────
-// Mobile  (< 640px)   → 1 column
-// Tablet  (640–1023px) → 2 columns
-// Laptop+ (≥ 1024px)  → 5 columns (all cards in one row, like the screenshot)
-export function StatGrid({ items }: { items: DashboardStat[] }) {
+export function StatGrid({ items }: StatGridProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
-      {items.map((item, index) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+      {items.map((item: StatItem, index: number) => (
         <StatCard key={item.title} item={item} index={index} />
       ))}
     </div>
   )
 }
 
-// ─── Card ─────────────────────────────────────────────────────────────────────
-export function StatCard({
-  item,
-  index,
-}: {
-  item: DashboardStat
-  index: number
-}) {
+export function StatCard({ item, index }: StatCardProps) {
   const Icon = icons[index % icons.length] || TrendingUp
   const TrendIcon = item.positive ? TrendingUp : TrendingDown
+
   const isWarning = Boolean(item.highlight)
 
-  const accent = isWarning ? 'bg-amber-500' : ACCENTS[index % ACCENTS.length]
+  const accent = isWarning
+    ? '#BA7517'
+    : ACCENTS[index % ACCENTS.length]
+
   const iconStyle = isWarning
-    ? 'bg-amber-50 text-amber-500'
+    ? { bg: '#FAEEDA', color: '#BA7517' }
     : ICON_STYLES[index % ICON_STYLES.length]
+
+  const badgeStyle = isWarning
+    ? { background: '#FCEBEB', color: '#A32D2D' }
+    : item.positive
+      ? { background: '#EAF3DE', color: '#3B6D11' }
+      : { background: '#FCEBEB', color: '#A32D2D' }
+
+  const trendColor = isWarning
+    ? '#A32D2D'
+    : item.positive
+      ? '#1D9E75'
+      : '#A32D2D'
 
   return (
     <div
-      className="
-        group relative overflow-hidden
-        rounded-2xl
-        bg-white
-        border border-slate-100
-        shadow-[0_4px_20px_rgba(15,23,42,0.05)]
-        transition-all duration-300
-        hover:-translate-y-1
-        hover:shadow-[0_12px_40px_rgba(15,23,42,0.10)]
-        w-full min-w-0
-      "
+      className="group"
+      style={{
+        flex: '1 1 160px',
+        minWidth: 0,
+        background: '#ffffff',
+        border: '0.5px solid rgba(15,23,42,0.08)',
+        borderRadius: '14px',
+        padding: '16px',
+        position: 'relative',
+        overflow: 'hidden',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        cursor: 'default',
+      }}
+      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+        e.currentTarget.style.transform = 'translateY(-2px)'
+
+        const accentBar =
+          e.currentTarget.querySelector('.accent-bar') as HTMLElement | null
+
+        if (accentBar) {
+          accentBar.style.transform = 'scaleX(1)'
+        }
+      }}
+      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+        e.currentTarget.style.transform = 'translateY(0)'
+
+        const accentBar =
+          e.currentTarget.querySelector('.accent-bar') as HTMLElement | null
+
+        if (accentBar) {
+          accentBar.style.transform = 'scaleX(0)'
+        }
+      }}
     >
-      {/* Hover bottom band */}
+      {/* Hover accent bar */}
       <div
-        className={`
-          absolute bottom-0 left-0 h-[3px] w-full scale-x-0 origin-left
-          ${accent}
-          transition-transform duration-500 ease-out
-          group-hover:scale-x-100
-        `}
+        className="accent-bar"
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '2px',
+          background: accent,
+          transform: 'scaleX(0)',
+          transformOrigin: 'left',
+          transition: 'transform 0.35s ease',
+        }}
       />
 
-      <div className="p-4 lg:p-5">
-        {/* Top row: icon + badge */}
-        <div className="flex items-center justify-between gap-2">
-          <div
-            className={`
-              flex h-9 w-9 lg:h-10 lg:w-10 shrink-0
-              items-center justify-center
-              rounded-xl
-              ${iconStyle}
-            `}
-          >
-            <Icon className="h-[18px] w-[18px] lg:h-5 lg:w-5" strokeWidth={2.2} />
-          </div>
-
-          <span
-            className={`
-              rounded-full
-              px-2.5 py-1
-              text-[9px] lg:text-[10px]
-              font-extrabold uppercase tracking-[0.12em]
-              whitespace-nowrap
-              ${
-                isWarning
-                  ? 'bg-red-50 text-red-500'
-                  : item.positive
-                    ? 'bg-emerald-50 text-emerald-600'
-                    : 'bg-red-50 text-red-500'
-              }
-            `}
-          >
-            {isWarning
-              ? (item.warning_label ?? 'Warning')
-              : item.positive
-                ? 'Growth'
-                : 'Drop'}
-          </span>
-        </div>
-
-        {/* Title + Value */}
-        <div className="mt-4 lg:mt-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 truncate">
-            {item.title}
-          </p>
-
-          <p
-            className={`
-              mt-1.5
-              text-2xl lg:text-3xl
-              font-black tracking-tight leading-none truncate
-              ${isWarning ? 'text-slate-900' : 'text-slate-950'}
-            `}
-          >
-            {item.value}
-          </p>
-        </div>
-
-        {/* Footer row */}
+      {/* Top row */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '14px',
+        }}
+      >
         <div
-          className="
-            mt-4
-            flex items-center justify-between
-            rounded-xl
-            bg-slate-50
-            px-3 py-2
-            gap-2
-          "
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: iconStyle.bg,
+            color: iconStyle.color,
+            flexShrink: 0,
+          }}
         >
-          <div
-            className={`
-              flex items-center gap-1.5
-              text-[11px] lg:text-xs font-bold min-w-0
-              ${
-                isWarning
-                  ? 'text-red-500'
-                  : item.positive
-                    ? 'text-emerald-600'
-                    : 'text-red-500'
-              }
-            `}
-          >
-            <TrendIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-            <span className="truncate">{item.change}</span>
-          </div>
-
-          <span className={`h-2 w-2 shrink-0 rounded-full ${accent}`} />
+          <Icon size={18} strokeWidth={2.2} />
         </div>
+
+        <span
+          style={{
+            fontSize: '9px',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            padding: '3px 9px',
+            borderRadius: '99px',
+            whiteSpace: 'nowrap',
+            ...badgeStyle,
+          }}
+        >
+          {isWarning
+            ? item.warning_label ?? 'Warning'
+            : item.positive
+              ? 'Growth'
+              : 'Drop'}
+        </span>
+      </div>
+
+      {/* Title */}
+      <p
+        style={{
+          fontSize: '10px',
+          fontWeight: 700,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: '#94a3b8',
+          margin: 0,
+        }}
+      >
+        {item.title}
+      </p>
+
+      {/* Value */}
+      <p
+        style={{
+          fontSize: '26px',
+          fontWeight: 800,
+          letterSpacing: '-0.02em',
+          lineHeight: 1.1,
+          margin: '4px 0 12px',
+          color: '#0f172a',
+        }}
+      >
+        {item.value}
+      </p>
+
+      {/* Footer */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#f8fafc',
+          borderRadius: '10px',
+          padding: '7px 10px',
+          gap: '8px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            fontSize: '11px',
+            fontWeight: 700,
+            color: trendColor,
+          }}
+        >
+          <TrendIcon size={14} strokeWidth={2.5} />
+          <span>{item.change}</span>
+        </div>
+
+        <div
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: accent,
+          }}
+        />
       </div>
     </div>
   )
-} 
+}

@@ -107,19 +107,20 @@ export default function DashboardPage() {
 
             {/* ── Stat cards: 2-col on mobile/tablet → 5-col on desktop ── */}
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-5 lg:gap-5">
-              {dashboard.stats.map((item, index) => (
-                <StatCard key={`${item.title}-${index}`} item={item} index={index} />
-              ))}
+              {dashboard.stats.map((item, index) => {
+                const statItem = { ...item, positive: item.positive ?? false }
+                return <StatCard key={`${item.title}-${index}`} item={statItem} index={index} />
+              })}
             </div>
 
             {/* ── Charts: stacked on mobile/tablet → side-by-side on desktop ── */}
-            <div className="mt-5 grid grid-cols-1 gap-5 lg:mt-7 lg:grid-cols-2 lg:gap-7">
+            <div className="mt-5 grid grid-cols-1 gap-5 lg:mt-7 xl:grid-cols-2  lg:gap-7">
               <SalesChartCard points={dashboard.sales_trends} />
               <RevenueProfitCard points={dashboard.revenue_profit} />
             </div>
 
             {/* ── Bills + Low stock: stacked on mobile/tablet → side-by-side on desktop ── */}
-            <div className="mt-5 grid grid-cols-1 gap-5 lg:mt-7 lg:grid-cols-[1.7fr_0.9fr] lg:gap-7">
+            <div className="mt-5 grid grid-cols-1 gap-5 lg:mt-7 lg:grid-cols-2 xl:grid-cols-[1.7fr_0.9fr] lg:gap-7">
               <RecentBillsTable bills={dashboard.recent_bills} />
               <LowStockList products={dashboard.low_stock_products} />
             </div>
