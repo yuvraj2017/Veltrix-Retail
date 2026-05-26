@@ -30,7 +30,6 @@ export const router = createBrowserRouter([
     element: <PublicOnlyRoute />,
     children: [
       { path: "/", element: <LoginPage /> },
-      { path: "/login", element: <LoginPage /> },
       { path: "/register", element: <RegisterPage /> },
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
     ],

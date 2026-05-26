@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null)
     setUser(null)
     setShop(null)
-    window.location.href = '/login'
+    window.location.href = '/'
   }
 
   const refreshMe = async () => {
