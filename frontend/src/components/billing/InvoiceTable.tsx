@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowRight,
@@ -38,7 +39,6 @@ type InvoiceTableProps = {
 
 const money = (value: string | number) => {
   const amount = Number(value || 0)
-
   return amount.toLocaleString('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -48,7 +48,6 @@ const money = (value: string | number) => {
 
 const formatDate = (value: string) => {
   if (!value) return '—'
-
   return new Date(value).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -58,10 +57,8 @@ const formatDate = (value: string) => {
 
 const getInitials = (name: string) => {
   const parts = name.trim().split(' ').filter(Boolean)
-
   if (parts.length === 0) return 'C'
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
-
   return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase()
 }
 
@@ -124,7 +121,6 @@ function PaymentFilterDropdown({
         setOpen(false)
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
@@ -144,7 +140,6 @@ function PaymentFilterDropdown({
           <selected.icon size={18} className="text-indigo-600" />
           {selected.label}
         </span>
-
         <ChevronDown
           size={18}
           className={`text-slate-500 transition-transform duration-300 ${open ? 'rotate-180 text-indigo-600' : ''}`}
@@ -161,7 +156,6 @@ function PaymentFilterDropdown({
           {options.map((option) => {
             const Icon = option.icon
             const active = value === option.value
-
             return (
               <button
                 key={option.value}
@@ -185,7 +179,6 @@ function PaymentFilterDropdown({
                 >
                   <Icon size={18} />
                 </div>
-
                 <div>
                   <p className="text-sm font-black">{option.label}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{option.helper}</p>
@@ -196,6 +189,84 @@ function PaymentFilterDropdown({
         </motion.div>
       )}
     </div>
+  )
+}
+
+// ─── Portal dropdown for InvoiceActions ───────────────────────────────────────
+// Renders the dropdown via a React portal so it escapes any parent
+// overflow:hidden containers and always positions correctly on screen.
+
+type DropdownPosition = {
+  top: number
+  right: number
+  openUpward: boolean
+}
+
+function InvoiceActionsDropdown({
+  position,
+  actions,
+  onClose,
+}: {
+  position: DropdownPosition
+  actions: { label: string; icon: React.ElementType; onClick: () => void }[]
+  onClose: () => void
+}) {
+  const dropdownStyle: React.CSSProperties = position.openUpward
+    ? {
+        position: 'fixed',
+        bottom: window.innerHeight - position.top + 8,
+        right: window.innerWidth - position.right,
+        zIndex: 99999,
+      }
+    : {
+        position: 'fixed',
+        top: position.top + 8,
+        right: window.innerWidth - position.right,
+        zIndex: 99999,
+      }
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: position.openUpward ? 8 : -8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.18 }}
+      style={dropdownStyle}
+      className="w-[250px] overflow-hidden rounded-[28px] border border-slate-200/70 bg-white/95 shadow-[0_30px_80px_rgba(15,23,42,0.18)] backdrop-blur-2xl"
+    >
+      <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">
+          Actions
+        </p>
+      </div>
+
+      <div className="space-y-1 p-2">
+        {actions.map((action) => {
+          const Icon = action.icon
+          return (
+            <button
+              key={action.label}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onClose()
+                action.onClick()
+              }}
+              className="group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-200 hover:bg-indigo-50"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition-all duration-200 group-hover:bg-indigo-100 group-hover:text-indigo-600">
+                <Icon size={18} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[15px] font-bold text-slate-700">
+                  {action.label}
+                </span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </motion.div>,
+    document.body,
   )
 }
 
@@ -215,67 +286,82 @@ function InvoiceActions({
   onShare: (invoiceId: number) => void
 }) {
   const [open, setOpen] = useState(false)
-  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const [position, setPosition] = useState<DropdownPosition | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
 
   const actions = [
-    { label: 'View', icon: Eye, onClick: () => onView(invoiceId) },
-    { label: 'Edit', icon: Pencil, onClick: () => onEdit(invoiceId) },
-    { label: 'Print', icon: Printer, onClick: () => onPrint(invoiceId) },
-    { label: 'Download', icon: Download, onClick: () => onDownload(invoiceId) },
-    { label: 'Share', icon: Share2, onClick: () => onShare(invoiceId) },
+    { label: 'View Invoice', icon: Eye, onClick: () => onView(invoiceId) },
+    { label: 'Edit Invoice', icon: Pencil, onClick: () => onEdit(invoiceId) },
+    { label: 'Print Invoice', icon: Printer, onClick: () => onPrint(invoiceId) },
+    { label: 'Download PDF', icon: Download, onClick: () => onDownload(invoiceId) },
+    { label: 'Share Invoice', icon: Share2, onClick: () => onShare(invoiceId) },
   ]
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!wrapperRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
+  const handleOpen = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    if (open) {
+      setOpen(false)
+      return
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      // Estimated dropdown height: header (~60px) + 5 items × ~62px = ~370px
+      const estimatedHeight = 370
+
+      setPosition({
+        top: rect.bottom,
+        right: rect.right,
+        openUpward: spaceBelow < estimatedHeight,
+      })
+    }
+
+    setOpen(true)
+  }, [open])
+
+  // Close on outside click or scroll
+  useEffect(() => {
+    if (!open) return
+
+    const handleClose = () => setOpen(false)
+    document.addEventListener('mousedown', handleClose)
+    document.addEventListener('scroll', handleClose, true)
+    return () => {
+      document.removeEventListener('mousedown', handleClose)
+      document.removeEventListener('scroll', handleClose, true)
+    }
+  }, [open])
 
   return (
-    <div ref={wrapperRef} className="relative flex justify-end">
+    // Stop propagation on the wrapper so row's onClick doesn't fire
+    <div
+      className="relative flex items-center justify-end"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <button
+        ref={buttonRef}
         type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-          setOpen((prev) => !prev)
-        }}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition duration-300 hover:bg-indigo-600 hover:text-white"
+        onClick={handleOpen}
+        className={`group flex h-11 w-11 items-center justify-center rounded-2xl border transition-all duration-300 ${
+          open
+            ? 'border-indigo-200 bg-indigo-50 text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.20)]'
+            : 'border-slate-200 bg-white text-slate-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600'
+        }`}
       >
-        <MoreVertical size={18} />
+        <MoreVertical
+          size={18}
+          className={`transition-transform duration-300 ${open ? 'rotate-90' : ''}`}
+        />
       </button>
 
-      {open && (
-        <motion.div
-          initial={{ opacity: 0, y: 8, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.16, ease: 'easeOut' }}
-          className="absolute right-0 top-12 z-30 w-[190px] overflow-hidden rounded-[22px] border border-white/70 bg-white/95 p-2 shadow-[0_24px_70px_rgba(15,23,42,0.16)] backdrop-blur-xl"
-        >
-          {actions.map((action) => {
-            const Icon = action.icon
-
-            return (
-              <button
-                key={action.label}
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setOpen(false)
-                  action.onClick()
-                }}
-                className="flex w-full items-center gap-3 rounded-[16px] px-3 py-2.5 text-left text-sm font-bold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700"
-              >
-                <Icon size={16} />
-                {action.label}
-              </button>
-            )
-          })}
-        </motion.div>
+      {open && position && (
+        <InvoiceActionsDropdown
+          position={position}
+          actions={actions}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   )
@@ -298,6 +384,7 @@ export default function InvoiceTable({
 }: InvoiceTableProps) {
   return (
     <section className="overflow-hidden rounded-[34px] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.06)]">
+      {/* Header */}
       <div className="flex flex-col gap-5 px-6 pb-7 pt-7 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <h2 className="text-2xl font-black tracking-[-0.035em] text-slate-950">
@@ -314,7 +401,6 @@ export default function InvoiceTable({
               size={19}
               className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"
             />
-
             <input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
@@ -342,6 +428,7 @@ export default function InvoiceTable({
         </div>
       </div>
 
+      {/* Table header */}
       <div className="hidden grid-cols-[1.05fr_1fr_1.2fr_1fr_1fr_0.85fr_0.55fr] px-8 py-5 text-[12px] font-black uppercase tracking-[0.2em] text-slate-500 lg:grid">
         <div>Invoice #</div>
         <div>Date</div>
@@ -352,6 +439,7 @@ export default function InvoiceTable({
         <div className="text-right">Actions</div>
       </div>
 
+      {/* Body */}
       {isLoading ? (
         <div className="space-y-4 px-6 pb-8">
           {[1, 2, 3, 4, 5].map((item) => (
@@ -384,7 +472,10 @@ export default function InvoiceTable({
           </button>
         </div>
       ) : (
-        <div className="px-4 pb-4">
+        // ⚠️  overflow-x-auto here so wide rows scroll horizontally on small
+        //     screens, but we do NOT use overflow-hidden so portal dropdowns
+        //     are never clipped.
+        <div className="overflow-x-auto px-4 pb-4">
           {invoices.map((invoice, index) => (
             <motion.div
               key={invoice.id}
@@ -392,13 +483,13 @@ export default function InvoiceTable({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.035, duration: 0.32 }}
               onClick={() => onView(invoice.id)}
-              className="group grid cursor-pointer grid-cols-1 items-center gap-4 rounded-[26px] px-4 py-5 text-left transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-[0_18px_42px_rgba(15,23,42,0.05)] lg:grid-cols-[1.05fr_1fr_1.2fr_1fr_1fr_0.85fr_0.55fr] lg:px-5"
+              className="group grid min-w-[1100px] cursor-pointer grid-cols-[1.05fr_1fr_1.2fr_1fr_1fr_0.85fr_0.55fr] items-center gap-4 rounded-[26px] px-4 py-5 text-left transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-[0_18px_42px_rgba(15,23,42,0.05)] lg:px-5"
             >
+              {/* Invoice # */}
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] transition duration-300 group-hover:scale-105 group-hover:from-indigo-500 group-hover:to-violet-600 group-hover:text-white">
                   <FileText size={24} />
                 </div>
-
                 <div>
                   <h4 className="text-base font-black tracking-[-0.01em] text-indigo-700">
                     #{invoice.invoice_number}
@@ -409,15 +500,16 @@ export default function InvoiceTable({
                 </div>
               </div>
 
+              {/* Date */}
               <div className="text-[15px] font-semibold text-slate-700">
                 {formatDate(invoice.invoice_date)}
               </div>
 
+              {/* Customer */}
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black text-slate-600">
                   {getInitials(invoice.customer_name_snapshot)}
                 </div>
-
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-black text-slate-950">
                     {invoice.customer_name_snapshot}
@@ -428,11 +520,13 @@ export default function InvoiceTable({
                 </div>
               </div>
 
+              {/* Contact */}
               <div className="inline-flex items-center gap-2 text-[15px] font-medium text-slate-600">
                 <Phone size={15} className="text-slate-400" />
                 {invoice.customer_phone_snapshot || '—'}
               </div>
 
+              {/* Amount */}
               <div>
                 <p className="text-lg font-black tracking-[-0.02em] text-slate-950">
                   {money(invoice.final_amount)}
@@ -442,10 +536,12 @@ export default function InvoiceTable({
                 </p>
               </div>
 
+              {/* Status */}
               <div>
                 <PaymentStatusBadge status={invoice.payment_status} />
               </div>
 
+              {/* Actions */}
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -472,10 +568,12 @@ export default function InvoiceTable({
         </div>
       )}
 
+      {/* Pagination */}
       {!isLoading && invoices.length > 0 && (
         <div className="flex flex-col gap-4 px-8 py-6 text-[14px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            Showing <span className="font-black text-slate-950">1-{invoices.length}</span> of{' '}
+            Showing{' '}
+            <span className="font-black text-slate-950">1–{invoices.length}</span> of{' '}
             <span className="font-black text-slate-950">{totalInvoices}</span> invoices
           </div>
 

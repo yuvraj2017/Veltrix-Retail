@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import {
-  ArrowUpRight,
   Handshake,
   ReceiptText,
   TimerReset,
@@ -152,10 +151,6 @@ export default function VendorStats({
               </div>
             </div>
 
-            <ArrowUpRight
-              size={120}
-              className="absolute -bottom-8 -right-6 text-slate-950/[0.035] transition duration-300 group-hover:-translate-y-2 group-hover:translate-x-2"
-            />
 
             <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-white/80 blur-3xl" />
           </motion.div>

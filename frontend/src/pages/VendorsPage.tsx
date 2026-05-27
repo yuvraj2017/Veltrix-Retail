@@ -5,7 +5,6 @@ import {
   AlertCircle,
   ArrowUpRight,
   Building2,
-  Sparkles,
 } from 'lucide-react'
 
 import { AppShell } from '../components/layout/AppShell'
@@ -131,8 +130,9 @@ export default function VendorsPage() {
         >
           <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
-                <Sparkles size={14} />
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4   py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
+                <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-pulse time-duration-4000" />
+
                 Supply Chain Partners
               </div>
 
@@ -210,7 +210,7 @@ export default function VendorsPage() {
           >
             <div className="relative z-10 grid gap-8 lg:grid-cols-[1fr_330px] lg:items-center">
               <div>
-                <div className="mb-4 inline-flex rounded-full bg-white/12 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-white/80">
+                <div className="mb-4 inline-flex rounded-full bg-white/8 px-4 py-2 text-[11px] font-black  uppercase tracking-[0.22em] text-white/80">
                   Payables Automation
                 </div>
 

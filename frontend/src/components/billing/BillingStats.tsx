@@ -6,7 +6,6 @@ import {
   CalendarDays,
   FileText,
   ReceiptText,
-  Sparkles,
   TrendingUp,
   WalletCards,
 } from 'lucide-react'
@@ -104,7 +103,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {[1, 2, 3, 4, 5, 6].map((item) => (
           <div
             key={item}
@@ -127,7 +126,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
           },
         },
       }}
-      className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
+      className="grid grid-cols-1 gap-5 sm:grid-cols-1 sm:auto-rows-fr xl:grid-cols-3"
     >
       {cards.map((card) => {
         const Icon = card.icon
@@ -141,7 +140,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
             }}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.35, ease: 'easeOut' }}
-            className={`group relative min-h-[190px] overflow-hidden rounded-[32px] bg-gradient-to-br ${card.tone} p-7 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl`}
+            className={`group relative h-full min-h-[190px] overflow-hidden rounded-[32px] bg-gradient-to-br ${card.tone} p-7 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl`}
           >
             <div className="relative z-10 flex h-full flex-col justify-between">
               <div className="flex items-start justify-between gap-5">
@@ -190,7 +189,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
 
                 {card.visual === 'pending' && (
                   <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1.5 text-sm font-black text-rose-600">
-                    <Sparkles size={15} />
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse time-duration-5000" />
                     {card.helper}
                   </div>
                 )}
@@ -205,10 +204,10 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
               </div>
             </div>
 
-            <Icon
-              size={128}
-              className="absolute -bottom-8 -right-5 text-slate-950/[0.035] transition duration-300 group-hover:-translate-y-2 group-hover:translate-x-2"
-            />
+            {/* <Icon
+              size={78}
+              className="absolute bottom-0 right-0 text-slate-950/[0.035] transition duration-300 group-hover:-translate-y-2 group-hover:translate-x-2"
+            /> */}
 
             <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/80 blur-3xl" />
           </motion.div>
