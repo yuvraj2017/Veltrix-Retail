@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ImagePlus, Sparkles, Trash2, UploadCloud, Plus, ArrowUpRight } from 'lucide-react'
+import { ImagePlus,  Trash2, UploadCloud, Plus, ArrowUpRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -138,19 +138,19 @@ export default function AddProductPage() {
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-500 transition-colors group-hover:bg-slate-200">
                 ✕
               </span>
-          <span className="flex flex-col items-start leading-none">
-  <span className="mb-1 inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em] text-rose-500 ring-1 ring-rose-100">
-    Draft
-  </span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="mb-1 inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.22em] text-rose-500 ring-1 ring-rose-100">
+                  Draft
+                </span>
 
-  <span className="text-sm font-black tracking-[-0.02em] text-slate-800">
-    Discard Draft
-  </span>
+                <span className="text-sm font-black tracking-[-0.02em] text-slate-800">
+                  Discard Draft
+                </span>
 
-  <span className="mt-1 text-[11px] font-medium text-slate-400">
-    Remove unsaved changes
-  </span>
-</span>
+                <span className="mt-1 text-[11px] font-medium text-slate-400">
+                  Remove unsaved changes
+                </span>
+              </span>
             </button>
 
             {/* Save */}
@@ -390,8 +390,8 @@ export default function AddProductPage() {
                       <div
                         key={image.url}
                         className={`group relative overflow-hidden rounded-xl border bg-slate-50 transition hover:-translate-y-0.5 hover:shadow-md ${index === 0
-                            ? 'border-indigo-300 ring-2 ring-indigo-100'
-                            : 'border-slate-200'
+                          ? 'border-indigo-300 ring-2 ring-indigo-100'
+                          : 'border-slate-200'
                           }`}
                       >
                         <img
