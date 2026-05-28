@@ -266,7 +266,7 @@ export default function BillingPage() {
           </div>
 
           {/* ── Bottom two-column sections ── */}
-          <div className="mt-6 grid gap-5 sm:mt-8 sm:gap-6 lg:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-5 sm:mt-8 sm:gap-6 xl:grid-cols-2">
 
             {/* Payment Journey */}
             <motion.section
@@ -300,7 +300,7 @@ export default function BillingPage() {
                 </div>
 
                 {/* Cards: 1-col on mobile → 3-col on md+ */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4">
                   {paymentDistribution.map((item, index) => {
                     const isPaid = item.label.toLowerCase().includes('paid')
                     const isPartial = item.label.toLowerCase().includes('partial')
@@ -460,7 +460,7 @@ export default function BillingPage() {
                   <div className="my-4 h-px bg-gradient-to-r from-transparent via-indigo-100 to-transparent sm:my-5" />
 
                   {/* Action summary: 1-col → 3-col */}
-                  <div className="grid grid-cols-1 gap-2 xs:grid-cols-3 sm:gap-3">
+                  <div className="grid grid-cols-1 gap-2 xs:grid-cols- sm:gap-3">
                     <div className="rounded-2xl bg-white/80 p-3 shadow-sm sm:p-4">
                       <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-600 sm:mb-3 sm:h-9 sm:w-9">
                         <AlertCircle size={16} className="sm:hidden" />

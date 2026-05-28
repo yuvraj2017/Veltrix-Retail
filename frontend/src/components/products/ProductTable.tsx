@@ -362,7 +362,8 @@ export function ProductTable({
       </div>
 
       {/* ══ TABLE — desktop (≥ lg) ════════════════════════════════════════════ */}
-      <div className="hidden lg:block">
+    <div className="hidden lg:block overflow-x-auto">
+  <div className="min-w-[900px]">
         {/* Header row */}
         <div className="grid grid-cols-[2.1fr_1fr_1.1fr_1fr_1.1fr_1fr_60px] border-t border-slate-100 px-8 py-5 text-xs font-semibold tracking-[0.18em] text-slate-500">
           <span>PRODUCT DETAILS</span>
@@ -490,5 +491,7 @@ export function ProductTable({
         </div>
       </div>
     </div>
+</div>
   )
+  
 }

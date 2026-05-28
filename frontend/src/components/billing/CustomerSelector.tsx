@@ -217,7 +217,7 @@ export default function CustomerSelector({
         )}
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-6 lg:space-y-0">
         <Input
           label="First Name"
           value={customer.first_name}
@@ -284,7 +284,7 @@ export default function CustomerSelector({
         />
       </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-6 flex flex-col gap-3 lg:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-2 text-sm font-semibold text-slate-500">
           <MapPin size={16} className="text-indigo-500" />
           Duplicate customer detection will happen using phone number.
