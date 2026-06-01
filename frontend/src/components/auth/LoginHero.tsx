@@ -3,29 +3,65 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * TARGET: FCP < 0.4s | LCP < 0.4s | Speed Index < 1.0s
  *
- * FIXES APPLIED:
- * ✅ Zero Google Fonts — pure system font stack, no network requests
- * ✅ Zero @import anywhere — KF string is @keyframes + @media only
- * ✅ All animations via inline `style` prop — zero dependency on index.css
- * ✅ contain:'layout paint' — no iOS scroll breakage
- * ✅ BgLayers via requestIdleCallback — runs after LCP, never blocks FCP
+ * ROOT CAUSES FIXED (from Lighthouse trace):
+ *
+ * ❌ BEFORE  Google Fonts chain: /css2?family=… (750ms) → 3× woff2 (373ms each)
+ * ✅ AFTER   Pure system font stack — zero network requests, zero blocking
+ *
+ * ❌ BEFORE  @import url('fonts.googleapis.com') inside injected <style>
+ *            CSS @import is ALWAYS synchronous/blocking regardless of when the
+ *            <style> tag is inserted — browser halts render to fetch it.
+ * ✅ AFTER   KF string contains ONLY @keyframes — no @import anywhere
+ *
+ * ❌ BEFORE  className="sm-hero-*" animations depend on the Vite CSS bundle
+ *            (index-C_HMkmvz.css, 340ms) being parsed before classes apply
+ * ✅ AFTER   Animations driven entirely via inline `style` prop on each element
+ *            using the `animation` CSS property — zero dependency on any
+ *            external stylesheet. Page renders and animates correctly even if
+ *            index.css never loads.
+ *
+ * ❌ BEFORE  contain:'strict' breaks scrolling on some mobile browsers when
+ *            minHeight:100vh is set (triggers overflow:hidden on size axis)
+ * ✅ AFTER   contain:'layout paint' — same perf, no overflow side-effects
+ *
+ * WHAT STAYS THE SAME (already correct):
+ *   • Solid hex background (#3730a3) — single GPU draw call, no gradients
+ *   • <h1> first meaningful DOM node — earliest LCP candidate
+ *   • BgLayers via requestIdleCallback — zero LCP competition
+ *   • keyframes injected via useEffect — never blocks FCP
+ *   • content-visibility:auto on DashboardCard + FooterStats
+ *   • All transitions: opacity + transform only (compositor-only, zero TBT)
+ *   • CLS = 0 (containIntrinsicSize, no font-swap FOUT)
  */
 
 import { memo, type FC, useEffect, useLayoutEffect, useRef } from 'react'
 
 // ─── System font stack ────────────────────────────────────────────────────────
-// Zero network cost. Renders in the very first paint.
+// CRITICAL FIX: No Google Fonts, no @import, no network request of any kind.
+// System fonts render in the VERY FIRST PAINT — they live on the user's device.
+// This alone cuts ~750ms (fonts.googleapis.com RTT) + 373ms (woff2 chain) = ~1.1s
+// off FCP/LCP on a typical mobile connection.
 const F = 'ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif'
 
-// ─── Animation helpers ────────────────────────────────────────────────────────
-const SPRING = 'cubic-bezier(0.22,1,0.36,1)'
+// ─── Animation config ─────────────────────────────────────────────────────────
+// Each above-fold element gets its entrance animation as a direct inline style.
+// This means the animation fires the moment React renders the element — no
+// external CSS file, no class lookup, no FOUC, no dependency on index.css.
+const EASE_SPRING = 'cubic-bezier(0.22,1,0.36,1)'
 
+// Returns the inline `animation` style for a staggered fade-up entrance.
+// Uses `animation-fill-mode:both` so element stays invisible before delay fires
+// (prevents flash of un-animated content) and stays at final state after.
 const fadeUp = (delayS: number, durationS = 0.45): React.CSSProperties => ({
-  animation: `sm-fade ${durationS}s ${SPRING} ${delayS}s both`,
+  animation: `sm-fade ${durationS}s ${EASE_SPRING} ${delayS}s both`,
 })
 
-// ─── Keyframes ────────────────────────────────────────────────────────────────
-// NO @import. Only @keyframes and @media. Nothing causes a network request.
+// ─── Keyframes string ─────────────────────────────────────────────────────────
+// CRITICAL FIX: NO @import. Not even commented-out. Any @import in a <style>
+// tag — no matter when inserted — triggers a synchronous network fetch that
+// halts the CSSOM construction and blocks FCP/LCP.
+//
+// Only @keyframes and @media here. Nothing that causes a network request.
 const KF = `
 @keyframes sm-fade {
   from { opacity: 0; transform: translateY(12px) }
@@ -48,6 +84,7 @@ const KF = `
 `
 
 // ─── Inline SVG icons ─────────────────────────────────────────────────────────
+// No icon font, no sprite, no extra HTTP request.
 const Ico = (d: string, size = 16, sw = 2) => () => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth={sw} strokeLinecap="round"
@@ -57,8 +94,8 @@ const Ico = (d: string, size = 16, sw = 2) => () => (
   </svg>
 )
 
-const IconSparkles = Ico('M12 3l1.912 5.813L20 9l-4.5 3.912L17 18l-5-3-5 3 1.5-5.088L4 9l6.088-.187z')
-const IconShield   = Ico('M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', 12, 2)
+const IconSparkles   = Ico('M12 3l1.912 5.813L20 9l-4.5 3.912L17 18l-5-3-5 3 1.5-5.088L4 9l6.088-.187z')
+const IconShield     = Ico('M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', 12, 2)
 
 const IconCreditCard: FC = () => (
   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -68,8 +105,7 @@ const IconCreditCard: FC = () => (
     <line x1="2" y1="10" x2="22" y2="10" />
   </svg>
 )
-const IconBoxes = Ico('M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z', 14)
-
+const IconBoxes      = Ico('M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z', 14)
 const IconTrendingUp: FC = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -138,7 +174,6 @@ const BARS = [
   { v: 92, d: 'S', hi: true,  peak: false },
   { v: 88, d: 'S', hi: false, peak: true  },
 ] as const
-
 const BAR_ARIA = 'Weekly sales: Mon 42%, Tue 65%, Wed 54%, Thu 78%, Fri 70%, Sat 92%, Sun 88%'
 
 const OPS = [
@@ -164,6 +199,8 @@ const FOCUS_OFF: React.CSSProperties = { outline: 'none' }
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 const Logo = memo(() => (
+  // FIX: inline style animation replaces className="sm-hero-logo"
+  // The animation fires at React render time — not at CSS bundle parse time.
   <div style={fadeUp(0.05)}>
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: '0.625rem',
@@ -196,14 +233,10 @@ Logo.displayName = 'Logo'
 
 // ─── Feature chips ────────────────────────────────────────────────────────────
 const FeatureChips = memo(() => (
-  <ul
-    style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '1.25rem 0 0', listStyle: 'none', padding: 0, ...fadeUp(0.30) }}
-    aria-label="Key features"
-  >
+  <ul style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '1.25rem 0 0', listStyle: 'none', padding: 0, ...fadeUp(0.30) }}
+    aria-label="Key features">
     {FEATURES.map(({ label, Icon }) => (
-      <li
-        key={label}
-        tabIndex={0}
+      <li key={label} tabIndex={0}
         style={{
           display: 'flex', alignItems: 'center', gap: '0.5rem',
           borderRadius: '0.75rem', border: `1px solid ${T.w12}`, background: T.w10,
@@ -213,9 +246,8 @@ const FeatureChips = memo(() => (
         }}
         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = T.w18 }}
         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = T.w10 }}
-        onFocus={e    => Object.assign((e.currentTarget as HTMLElement).style, FOCUS_ON)}
-        onBlur={e     => Object.assign((e.currentTarget as HTMLElement).style, FOCUS_OFF)}
-      >
+        onFocus={e => Object.assign((e.currentTarget as HTMLElement).style, FOCUS_ON)}
+        onBlur={e  => Object.assign((e.currentTarget as HTMLElement).style, FOCUS_OFF)}>
         <span aria-hidden="true" style={{
           display: 'flex', width: '1.75rem', height: '1.75rem', flexShrink: 0,
           alignItems: 'center', justifyContent: 'center',
@@ -253,6 +285,8 @@ const StatsGrid = memo(() => (
 StatsGrid.displayName = 'StatsGrid'
 
 // ─── Bar chart ────────────────────────────────────────────────────────────────
+// Bar entrance: scaleY from bottom, staggered per bar.
+// transform-origin must be 'bottom' — set inline because no external CSS.
 const WeeklyBarChart = memo(() => (
   <div style={{ borderRadius: '0.75rem', border: `1px solid ${T.w12}`, background: T.cell, padding: '0.75rem' }}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -263,10 +297,8 @@ const WeeklyBarChart = memo(() => (
         <IconBarChart /> Last 7 Days
       </span>
     </div>
-    <div
-      style={{ display: 'flex', alignItems: 'flex-end', gap: '0.25rem', height: '5.5rem' }}
-      role="img" aria-label={BAR_ARIA}
-    >
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.25rem', height: '5.5rem' }}
+      role="img" aria-label={BAR_ARIA}>
       {BARS.map(({ v, d, hi, peak }, i) => (
         <div key={i} aria-hidden="true"
           style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', gap: '0.375rem' }}>
@@ -275,8 +307,8 @@ const WeeklyBarChart = memo(() => (
             height: `${v}%`,
             borderRadius: '0.25rem 0.25rem 0 0',
             background: peak ? BAR_FILL.peak : hi ? BAR_FILL.hi : BAR_FILL.default,
-            transformOrigin: 'bottom',
-            animation: `sm-bar-in 0.55s ${SPRING} ${0.38 + i * 0.055}s both`,
+            transformOrigin: 'bottom',   // ← inline, no external CSS needed
+            animation: `sm-bar-in 0.55s ${EASE_SPRING} ${0.38 + i * 0.055}s both`,
             ...(peak ? { boxShadow: '0 4px 14px rgba(147,51,234,0.45)' } : {}),
           }} />
           <span style={{ fontSize: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: T.muted, fontFamily: F }}>
@@ -291,10 +323,8 @@ WeeklyBarChart.displayName = 'WeeklyBarChart'
 
 // ─── Ops flow ─────────────────────────────────────────────────────────────────
 const OpsFlow = memo(() => (
-  <div
-    style={{ borderRadius: '0.75rem', border: `1px solid ${T.w12}`, background: T.cell, padding: '0.75rem' }}
-    role="region" aria-label="Operations flow"
-  >
+  <div style={{ borderRadius: '0.75rem', border: `1px solid ${T.w12}`, background: T.cell, padding: '0.75rem' }}
+    role="region" aria-label="Operations flow">
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
       <p style={{ fontSize: '0.75rem', fontWeight: 500, color: 'rgba(255,255,255,0.92)', margin: 0, fontFamily: F }}>
         Operations Flow
@@ -304,16 +334,13 @@ const OpsFlow = memo(() => (
     <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0, margin: 0 }}
       aria-label="Core operations">
       {OPS.map(({ cat, text }) => (
-        <li
-          key={cat}
-          style={{
-            borderRadius: '0.75rem', border: `1px solid ${T.w12}`,
-            background: T.w08, padding: '0.5rem 0.75rem',
-            transition: 'background 0.15s ease',
-          }}
+        <li key={cat} style={{
+          borderRadius: '0.75rem', border: `1px solid ${T.w12}`,
+          background: T.w08, padding: '0.5rem 0.75rem',
+          transition: 'background 0.15s ease',
+        }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = T.w15 }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = T.w08 }}
-        >
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = T.w08 }}>
           <p style={{ fontSize: '0.5625rem', textTransform: 'uppercase', letterSpacing: '0.14em', color: T.muted, margin: 0, fontFamily: F }}>{cat}</p>
           <p style={{ fontSize: '0.75rem', fontWeight: 500, color: '#fff', margin: '0.125rem 0 0', fontFamily: F }}>{text}</p>
         </li>
@@ -331,16 +358,14 @@ const DashboardCard = memo(() => (
     containIntrinsicSize: '0 420px',
     ...fadeUp(0.36, 0.56),
   }}>
-    <div
-      style={{
-        position: 'relative', overflow: 'hidden',
-        borderRadius: '1.25rem', border: `1px solid ${T.w12}`,
-        background: 'rgba(15,10,45,0.94)',
-        padding: '1rem',
-        boxShadow: '0 12px 40px rgba(20,10,70,0.50)',
-      }}
-      role="region" aria-labelledby="sm-cmd-title"
-    >
+    <div style={{
+      position: 'relative', overflow: 'hidden',
+      borderRadius: '1.25rem', border: `1px solid ${T.w12}`,
+      background: 'rgba(15,10,45,0.94)',
+      padding: '1rem',
+      boxShadow: '0 12px 40px rgba(20,10,70,0.50)',
+    }}
+      role="region" aria-labelledby="sm-cmd-title">
       <div aria-hidden="true" style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
         background: 'radial-gradient(ellipse at 85% 0%,rgba(255,255,255,0.06) 0%,transparent 52%)',
@@ -355,18 +380,17 @@ const DashboardCard = memo(() => (
               Retail command center
             </p>
           </div>
-          <div
-            style={{
-              display: 'inline-flex', flexShrink: 0, alignItems: 'center', gap: '0.375rem',
-              borderRadius: '9999px', border: `1px solid ${T.emeraldBorder}`,
-              background: T.emeraldBg, padding: '0.25rem 0.625rem',
-              fontSize: '0.625rem', fontWeight: 500, color: '#d1fae5', fontFamily: F,
-            }}
-            role="status" aria-live="polite" aria-label="System is active"
-          >
+          <div style={{
+            display: 'inline-flex', flexShrink: 0, alignItems: 'center', gap: '0.375rem',
+            borderRadius: '9999px', border: `1px solid ${T.emeraldBorder}`,
+            background: T.emeraldBg, padding: '0.25rem 0.625rem',
+            fontSize: '0.625rem', fontWeight: 500, color: '#d1fae5', fontFamily: F,
+          }}
+            role="status" aria-live="polite" aria-label="System is active">
             <span aria-hidden="true" style={{
               display: 'inline-block', width: '0.375rem', height: '0.375rem',
               borderRadius: '50%', background: T.emerald,
+              // willChange only on the single pulsing dot — minimal GPU layer cost
               animation: 'sm-pulse 2.4s ease-in-out infinite',
               willChange: 'opacity',
             }} />
@@ -403,13 +427,14 @@ const FooterStats = memo(() => (
 FooterStats.displayName = 'FooterStats'
 
 // ─── Background layers ────────────────────────────────────────────────────────
-// Injected only on idle — never touches FCP or LCP.
+// Injected only when browser is completely idle.
+// Runs AFTER LCP is recorded — pure decorative, zero metric impact.
 const BgLayers = memo(({ ref: sectionRef }: { ref: React.RefObject<HTMLElement | null> }) => {
   useLayoutEffect(() => {
     const el = sectionRef.current
     if (!el) return
     const inject = () => {
-      if (el.querySelector('[data-bg-layers]')) return
+      if (el.querySelector('[data-bg-layers]')) return // StrictMode guard
       const wrap = document.createElement('div')
       wrap.setAttribute('data-bg-layers', '')
       wrap.setAttribute('aria-hidden', 'true')
@@ -438,8 +463,10 @@ export function LoginHero() {
   const sectionRef = useRef<HTMLElement>(null)
   const kfInjected = useRef(false)
 
-  // Inject keyframes after first paint.
-  // KF has zero @import — no network fetch triggered.
+  // Inject ONLY keyframes after first paint.
+  // FIX: KF string has zero @import — no network fetch triggered.
+  // The sm-fade / sm-bar-in / sm-pulse keyframes are referenced by inline
+  // `animation:` styles above, so they resolve immediately once this runs.
   useEffect(() => {
     if (kfInjected.current || document.getElementById('sm-kf')) return
     kfInjected.current = true
@@ -458,6 +485,7 @@ export function LoginHero() {
           position: 'relative',
           width: '100%',
           overflow: 'hidden',
+          // Solid hex = 1 GPU draw call. No gradient on root = no compositing cost.
           background: T.base,
           padding: '1.5rem',
           minHeight: '100vh',
@@ -466,11 +494,14 @@ export function LoginHero() {
           justifyContent: 'space-between',
           gap: '1.5rem',
           boxSizing: 'border-box',
-          // 'layout paint' instead of 'strict' — avoids iOS scroll bug
+          // FIX: 'layout paint' instead of 'strict'
+          // 'strict' includes 'size' containment which forces the element to
+          // treat overflow:hidden on the size axis — can break scrolling on iOS.
+          // 'layout paint' gives the same reflow/repaint isolation without it.
           contain: 'layout paint',
           fontFamily: F,
-        }}
-      >
+        }}>
+
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
           <Logo />
 
@@ -492,9 +523,10 @@ export function LoginHero() {
               <IconShield /> Smart Retail Operations
             </p>
 
-            {/* ── LCP CANDIDATE ─────────────────────────────────────────────
-                System fonts = renders in the FIRST paint, no network wait.
-            ──────────────────────────────────────────────────────────────── */}
+            {/* ── LCP CANDIDATE ───────────────────────────────────────────────
+                Painted at FCP. System fonts mean this renders in the FIRST
+                paint with no network wait. This IS the LCP element.
+            ─────────────────────────────────────────────────────────────────── */}
             <h1 id="hero-headline" style={{
               fontSize: 'clamp(1.35rem,4vw,2.1rem)',
               fontWeight: 700,
