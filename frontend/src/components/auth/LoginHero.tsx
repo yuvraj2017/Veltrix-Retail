@@ -1,252 +1,407 @@
+import { memo, type FC } from 'react'
 
+// ─── Inline SVG icons ─────────────────────────────────────────────────────────
+const IconSparkles: FC = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <path d="M12 3l1.912 5.813L20 9l-4.5 3.912L17 18l-5-3-5 3 1.5-5.088L4 9l6.088-.187z" />
+  </svg>
+)
+const IconShield: FC = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+  </svg>
+)
+const IconCreditCard: FC = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+  </svg>
+)
+const IconBoxes: FC = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+  </svg>
+)
+const IconTrendingUp: FC = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
+  </svg>
+)
+const IconBarChart: FC = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <rect x="2" y="2" width="20" height="20" rx="2" />
+    <line x1="7" y1="22" x2="7" y2="13" /><line x1="12" y1="22" x2="12" y2="8" /><line x1="17" y1="22" x2="17" y2="18" />
+  </svg>
+)
+const IconWallet: FC = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true" focusable="false">
+    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+  </svg>
+)
 
-import {
-  BarChart3,
-  Boxes,
-  CreditCard,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  WalletCards,
-} from 'lucide-react'
+// ─── Design tokens (inline rgba/hex — immune to Tailwind JIT purge) ───────────
+const T = {
+  white10:        'rgba(255,255,255,0.10)',
+  white12:        'rgba(255,255,255,0.12)',
+  white15:        'rgba(255,255,255,0.15)',
+  white18:        'rgba(255,255,255,0.18)',
+  white30:        'rgba(255,255,255,0.30)',
+  emerald:        '#6ee7b7',
+  emeraldBg:      'rgba(52,211,153,0.15)',
+  emeraldBorder:  'rgba(110,231,183,0.25)',
+  amber:          '#fcd34d',
+  indigo100:      '#e0e7ff',
+  darkCell:       'rgba(2,4,18,0.35)',
+  sectionBg: [
+    'radial-gradient(circle at top left,  rgba(167,139,250,0.35), transparent 28%)',
+    'radial-gradient(circle at top right, rgba(99,102,241,0.30),  transparent 28%)',
+    'radial-gradient(circle at bottom left, rgba(139,92,246,0.28), transparent 32%)',
+    'linear-gradient(135deg, #4f46e5 0%, #5b4ff1 20%, #6d3df5 45%, #5b21b6 72%, #312e81 100%)',
+  ].join(', '),
+} as const
 
+// Keyframes injected once — avoids Tailwind purge risk
+const KEYFRAMES = `
+  @keyframes sm-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:0.01ms!important; transition-duration:0.01ms!important; }
+  }
+`
 
-const stats = [
-  { label: 'Today Sales', value: '₹24,580', sub: '+12.4%', tone: 'text-emerald-300' },
-  { label: 'Orders', value: '148', sub: 'Live counter', tone: 'text-indigo-100' },
-  { label: 'Low Stock', value: '06', sub: 'Needs attention', tone: 'text-amber-300' },
+// ─── Data ─────────────────────────────────────────────────────────────────────
+interface Stat { label: string; value: string; sub: string; subColor: string; ariaLabel?: string }
+const stats: Stat[] = [
+  { label: 'Today Sales', value: '₹24,580', sub: '+12.4%',         subColor: T.emerald,   ariaLabel: 'Up 12.4 percent' },
+  { label: 'Orders',      value: '148',     sub: 'Live counter',    subColor: T.indigo100 },
+  { label: 'Low Stock',   value: '06',      sub: 'Needs attention', subColor: T.amber,     ariaLabel: '6 items'         },
 ]
 
-
-const features = [
-  { label: 'Fast Billing', icon: CreditCard },
-  { label: 'Inventory Control', icon: Boxes },
-  { label: 'Sales Insights', icon: TrendingUp },
+interface Feature { label: string; Icon: FC }
+const features: Feature[] = [
+  { label: 'Fast Billing',      Icon: IconCreditCard },
+  { label: 'Inventory Control', Icon: IconBoxes      },
+  { label: 'Sales Insights',    Icon: IconTrendingUp },
 ]
 
+interface Bar { value: number; day: string; variant: 'default' | 'hi' | 'peak' }
+const weeklyBars: Bar[] = [
+  { value: 42, day: 'M', variant: 'default' },
+  { value: 65, day: 'T', variant: 'default' },
+  { value: 54, day: 'W', variant: 'default' },
+  { value: 78, day: 'T', variant: 'default' },
+  { value: 70, day: 'F', variant: 'hi'      },
+  { value: 92, day: 'S', variant: 'hi'      },
+  { value: 88, day: 'S', variant: 'peak'    },
+]
+const BAR_ARIA = 'Weekly sales chart: Mon 42%, Tue 65%, Wed 54%, Thu 78%, Fri 70%, Sat 92% (peak), Sun 88%'
 
-const weeklyBars = [42, 65, 54, 78, 70, 92, 88]
-const weekLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-
-
-const ops = [
-  { cat: 'Billing', text: 'Generate invoice in seconds' },
-  { cat: 'Inventory', text: 'Auto stock deduction after sale' },
-  { cat: 'Reports', text: 'Daily insights with low-stock alerts' },
+interface Op { cat: string; text: string }
+const ops: Op[] = [
+  { cat: 'Billing',   text: 'Generate invoice in seconds'         },
+  { cat: 'Inventory', text: 'Auto stock deduction after sale'     },
+  { cat: 'Reports',   text: 'Daily insights with low-stock alerts'},
 ]
 
-
-const footerStats = [
-  { num: '10k+', label: 'Retail actions processed' },
-  { num: '99.9%', label: 'Operational reliability' },
-  { num: '24/7', label: 'Access to store data' },
+interface FooterStat { num: string; label: string }
+const footerStats: FooterStat[] = [
+  { num: '10k+',  label: 'Retail actions processed' },
+  { num: '99.9%', label: 'Operational reliability'  },
+  { num: '24/7',  label: 'Access to store data'     },
 ]
 
-
-export function LoginHero() {
-  return (
-    <div className="relative w-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(167,139,250,0.30),transparent_24%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.28),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.24),transparent_28%),linear-gradient(135deg,#4f46e5_0%,#5b4ff1_20%,#6d3df5_45%,#5b21b6_72%,#312e81_100%)] p-5 sm:p-6 lg:min-h-screen lg:p-8 flex flex-col justify-between gap-6">
-
-
-      {/* Soft glows */}
-      <div className="absolute -left-16 top-10 h-56 w-56 rounded-full bg-violet-300/25 blur-3xl pointer-events-none" />
-      <div className="absolute right-0 top-12 h-64 w-64 rounded-full bg-indigo-300/20 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-fuchsia-400/15 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-8 right-10 h-56 w-56 rounded-full bg-blue-300/10 blur-3xl pointer-events-none" />
-
-
-      {/* Mesh grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:36px_36px] opacity-20 pointer-events-none" />
-
-
-      {/* Depth overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.12))] pointer-events-none" />
-
-
-      <div className="relative z-10 flex w-full flex-col gap-5">
-
-
-        {/* Logo */}
-        <div>
-          <div className="inline-flex items-center gap-2.5 rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5 backdrop-blur-md shadow-[0_12px_32px_rgba(0,0,0,0.14)]">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-white/20 via-white/10 to-transparent text-white shadow-[0_8px_20px_rgba(99,102,241,0.30)] ring-1 ring-white/15">
-              <Sparkles size={16} />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold tracking-tight text-white sm:text-base">
-                StoreMitraa Retail
-              </h2>
-              <p className="text-[11px] text-white/70">Next-gen retail management</p>
-            </div>
-          </div>
-        </div>
-
-
-        {/* Hero content */}
-        <div className="flex flex-col items-start gap-0">
-
-
-          {/* Badge */}
-          <p className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.26em] text-white/90 backdrop-blur-sm">
-            <ShieldCheck size={12} />
-            Smart Retail Operations
-          </p>
-
-
-          {/* Headline */}
-          <h1 className="text-xl font-bold leading-[1.15] tracking-[-0.03em] text-white sm:text-2xl md:text-3xl lg:text-[2rem] xl:text-4xl">
-            Run billing, stock, and store performance from one command center.
-          </h1>
-
-
-          {/* Description */}
-          <p className="mt-3 text-xs leading-6 text-white/80 sm:text-sm">
-            StoreMitraa gives your retail team a single, premium workspace to manage
-            inventory, generate bills, monitor sales, and keep operations moving
-            without friction.
-          </p>
-
-
-          {/* Feature chips */}
-          <div className="mt-5 flex flex-wrap gap-2">
-            {features.map((item) => {
-              const Icon = item.icon
-              return (
-                <div
-                  key={item.label}
-                  className="group flex items-center gap-2 rounded-xl border border-white/12 bg-white/10 px-3 py-2 text-white/90 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/14"
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/12 text-white transition group-hover:bg-white/18">
-                    <Icon size={14} />
-                  </div>
-                  <span className="text-xs font-medium">{item.label}</span>
-                </div>
-              )
-            })}
-          </div>
-
-
-          {/* Dashboard card */}
-          <div className="relative mt-6 w-full">
-            <div className="relative overflow-hidden rounded-2xl border border-white/12 bg-white/10 p-3 sm:p-4 backdrop-blur-xl shadow-[0_20px_60px_rgba(29,16,84,0.28)]">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_25%)] pointer-events-none" />
-
-
-              <div className="relative">
-                {/* Card header */}
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/50">
-                      Live overview
-                    </p>
-                    <h3 className="mt-0.5 text-sm font-semibold text-white">
-                      Retail command center
-                    </h3>
-                  </div>
-                  <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-400/12 px-2.5 py-1 text-[10px] font-medium text-emerald-100">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                    System Active
-                  </div>
-                </div>
-
-
-                {/* Stats — 2 cols on xs, 3 cols on sm+ */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 mb-3">
-                  {stats.map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-xl border border-white/10 bg-slate-950/12 p-2.5 sm:p-3"
-                    >
-                      <p className="text-[9px] uppercase tracking-[0.16em] text-white/50">
-                        {item.label}
-                      </p>
-                      <p className="mt-1.5 text-lg font-bold text-white sm:text-xl">{item.value}</p>
-                      <p className={`mt-0.5 text-[11px] ${item.tone}`}>{item.sub}</p>
-                    </div>
-                  ))}
-                </div>
-
-
-                {/* Charts — stacked on xs/sm, side-by-side on md+ */}
-                <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-[1.2fr_0.8fr]">
-                  {/* Bar chart */}
-                  <div className="rounded-xl border border-white/10 bg-slate-950/12 p-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-xs font-medium text-white/85">
-                        Weekly Performance
-                      </p>
-                      <div className="flex items-center gap-1.5 text-[10px] text-white/50">
-                        <BarChart3 size={12} />
-                        Last 7 Days
-                      </div>
-                    </div>
-                    <div className="flex h-20 items-end gap-1 sm:h-24 sm:gap-1.5">
-                      {weeklyBars.map((value, index) => (
-                        <div key={index} className="flex flex-1 flex-col items-center gap-1.5">
-                          <div
-                            className={`w-full rounded-t-lg transition-all duration-500 ${
-                              index === 6
-                                ? 'bg-gradient-to-t from-fuchsia-500 via-violet-500 to-indigo-300 shadow-[0_6px_18px_rgba(147,51,234,0.32)]'
-                                : index >= 4
-                                  ? 'bg-white/30'
-                                  : 'bg-white/18'
-                            }`}
-                            style={{ height: `${value}%` }}
-                          />
-                          <span className="text-[8px] uppercase tracking-[0.14em] text-white/40">
-                            {weekLabels[index]}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-
-                  {/* Operations flow */}
-                  <div className="rounded-xl border border-white/10 bg-slate-950/12 p-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-xs font-medium text-white/85">Operations Flow</p>
-                      <WalletCards size={13} className="text-white/50" />
-                    </div>
-                    <div className="space-y-2">
-                      {ops.map((row) => (
-                        <div
-                          key={row.cat}
-                          className="rounded-xl border border-white/10 bg-white/8 px-3 py-2"
-                        >
-                          <p className="text-[9px] uppercase tracking-[0.14em] text-white/40">
-                            {row.cat}
-                          </p>
-                          <p className="mt-0.5 text-xs font-medium text-white">{row.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
-        {/* Footer stats */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="flex flex-wrap items-center gap-5 sm:gap-7">
-            {footerStats.map((s) => (
-              <div key={s.label}>
-                <p className="text-lg font-bold text-white sm:text-xl">{s.num}</p>
-                <p className="text-xs text-white/50">{s.label}</p>
-              </div>
-            ))}
-          </div>
-          <p className="text-[9px] uppercase tracking-[0.22em] text-white/35">
-            Built for modern retail teams
-          </p>
-        </div>
-
-
-      </div>
-    </div>
-  )
+// ─── Bar styles ───────────────────────────────────────────────────────────────
+const barStyle: Record<Bar['variant'], React.CSSProperties> = {
+  default: { background: 'rgba(255,255,255,0.22)' },
+  hi:      { background: 'rgba(255,255,255,0.40)' },
+  peak:    { background: 'linear-gradient(to top,#a855f7,#818cf8,#a5b4fc)', boxShadow: '0 6px 18px rgba(147,51,234,0.50)' },
 }
 
+// ─── Logo ─────────────────────────────────────────────────────────────────────
+const Logo = memo(() => (
+  <div>
+    <div style={{ display:'inline-flex', alignItems:'center', gap:'0.625rem',
+      borderRadius:'1rem', border:`1px solid ${T.white15}`, background:T.white10,
+      padding:'0.5rem 0.75rem', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)',
+      boxShadow:'0 12px 32px rgba(0,0,0,0.20)' }}
+      aria-label="StoreMitraa Retail – Next-gen retail management">
+      <div style={{ width:'2.25rem', height:'2.25rem', flexShrink:0,
+        borderRadius:'0.625rem', display:'flex', alignItems:'center', justifyContent:'center',
+        background:'linear-gradient(135deg,rgba(255,255,255,0.22),rgba(255,255,255,0.06))',
+        color:'#fff', boxShadow:'0 8px 20px rgba(99,102,241,0.38)',
+        outline:`1px solid ${T.white15}` }}>
+        <IconSparkles />
+      </div>
+      <div>
+        <p style={{ fontSize:'0.9rem', fontWeight:700, letterSpacing:'-0.02em', color:'#fff', margin:0 }}>
+          StoreMitraa Retail
+        </p>
+        <p style={{ fontSize:'0.6875rem', color:'rgba(255,255,255,0.70)', margin:0 }}>
+          Next-gen retail management
+        </p>
+      </div>
+    </div>
+  </div>
+))
+Logo.displayName = 'Logo'
+
+// ─── Feature chips ────────────────────────────────────────────────────────────
+const FeatureChips = memo(() => (
+  <ul style={{ display:'flex', flexWrap:'wrap', gap:'0.5rem', marginTop:'1.25rem', listStyle:'none', padding:0 }}
+    aria-label="Key features">
+    {features.map(({ label, Icon }) => (
+      <li key={label}
+        style={{ display:'flex', alignItems:'center', gap:'0.5rem',
+          borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:T.white10,
+          padding:'0.5rem 0.75rem', color:'rgba(255,255,255,0.90)',
+          backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)',
+          fontSize:'0.75rem', fontWeight:500, cursor:'default',
+          transition:'transform 0.25s ease, background 0.25s ease' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform='translateY(-2px)'; (e.currentTarget as HTMLElement).style.background=T.white18 }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform='translateY(0)'; (e.currentTarget as HTMLElement).style.background=T.white10 }}>
+        <span style={{ display:'flex', width:'1.75rem', height:'1.75rem', flexShrink:0,
+          alignItems:'center', justifyContent:'center',
+          borderRadius:'0.5rem', background:T.white12, color:'#fff' }}>
+          <Icon />
+        </span>
+        {label}
+      </li>
+    ))}
+  </ul>
+))
+FeatureChips.displayName = 'FeatureChips'
+
+// ─── Stats grid ───────────────────────────────────────────────────────────────
+const StatsGrid = memo(() => (
+  <dl style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.625rem', marginBottom:'0.75rem' }}>
+    {stats.map(({ label, value, sub, subColor, ariaLabel }) => (
+      <div key={label} style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`,
+        background:T.darkCell, padding:'0.625rem 0.75rem' }}>
+        <dt style={{ fontSize:'0.5625rem', textTransform:'uppercase', letterSpacing:'0.16em',
+          color:'rgba(255,255,255,0.50)', margin:0 }}>{label}</dt>
+        <dd style={{ fontSize:'1.25rem', fontWeight:700, color:'#fff', margin:'0.375rem 0 0' }}
+          aria-label={ariaLabel}>{value}</dd>
+        <dd style={{ fontSize:'0.6875rem', color:subColor, margin:'0.125rem 0 0' }}>{sub}</dd>
+      </div>
+    ))}
+  </dl>
+))
+StatsGrid.displayName = 'StatsGrid'
+
+// ─── Bar chart (pure CSS, zero chart lib) ────────────────────────────────────
+const WeeklyBarChart = memo(() => (
+  <div style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:T.darkCell, padding:'0.75rem' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.75rem' }}>
+      <p style={{ fontSize:'0.75rem', fontWeight:500, color:'rgba(255,255,255,0.85)', margin:0 }}>Weekly Performance</p>
+      <span style={{ display:'flex', alignItems:'center', gap:'0.375rem', fontSize:'0.625rem', color:'rgba(255,255,255,0.50)' }}>
+        <IconBarChart /> Last 7 Days
+      </span>
+    </div>
+    <div style={{ display:'flex', alignItems:'flex-end', gap:'0.25rem', height:'5.5rem' }}
+      role="img" aria-label={BAR_ARIA}>
+      {weeklyBars.map(({ value, day, variant }, idx) => (
+        <div key={idx} style={{ display:'flex', flex:1, flexDirection:'column', alignItems:'center', gap:'0.375rem' }}>
+          <div style={{ width:'100%', height:`${value}%`, borderRadius:'0.25rem 0.25rem 0 0',
+            transition:'height 0.5s ease', ...barStyle[variant] }} />
+          <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.12em',
+            color:'rgba(255,255,255,0.50)' }} aria-hidden="true">{day}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+))
+WeeklyBarChart.displayName = 'WeeklyBarChart'
+
+// ─── Ops flow ─────────────────────────────────────────────────────────────────
+const OpsFlow = memo(() => (
+  <div style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:T.darkCell, padding:'0.75rem' }}
+    role="region" aria-label="Operations flow">
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.75rem' }}>
+      <p style={{ fontSize:'0.75rem', fontWeight:500, color:'rgba(255,255,255,0.85)', margin:0 }}>Operations Flow</p>
+      <span style={{ color:'rgba(255,255,255,0.50)' }}><IconWallet /></span>
+    </div>
+    <ul style={{ display:'flex', flexDirection:'column', gap:'0.5rem', listStyle:'none', padding:0, margin:0 }}
+      aria-label="Core operations">
+      {ops.map(({ cat, text }) => (
+        <li key={cat} style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`,
+          background:'rgba(255,255,255,0.09)', padding:'0.5rem 0.75rem' }}>
+          <p style={{ fontSize:'0.5625rem', textTransform:'uppercase', letterSpacing:'0.14em',
+            color:'rgba(255,255,255,0.42)', margin:0 }}>{cat}</p>
+          <p style={{ fontSize:'0.75rem', fontWeight:500, color:'#fff', margin:'0.125rem 0 0' }}>{text}</p>
+        </li>
+      ))}
+    </ul>
+  </div>
+))
+OpsFlow.displayName = 'OpsFlow'
+
+// ─── Dashboard card ───────────────────────────────────────────────────────────
+const DashboardCard = memo(() => (
+  <div style={{ position:'relative', marginTop:'1.5rem', width:'100%' }}>
+    <div style={{ position:'relative', overflow:'hidden',
+      borderRadius:'1.25rem', border:`1px solid ${T.white12}`,
+      background:'rgba(255,255,255,0.11)', padding:'1rem',
+      backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)',
+      boxShadow:'0 20px 60px rgba(29,16,84,0.40)' }}
+      role="region" aria-label="Retail command center – Live overview">
+      {/* Inner highlight */}
+      <div aria-hidden="true" style={{ position:'absolute', inset:0, pointerEvents:'none',
+        background:'radial-gradient(circle at top right,rgba(255,255,255,0.14),transparent 28%)' }} />
+
+      <div style={{ position:'relative' }}>
+        {/* Header */}
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', justifyContent:'space-between',
+          gap:'0.5rem', marginBottom:'1rem' }}>
+          <div>
+            <p style={{ fontSize:'0.625rem', fontWeight:600, textTransform:'uppercase',
+              letterSpacing:'0.22em', color:'rgba(255,255,255,0.50)', margin:0 }}>Live overview</p>
+            <p style={{ fontSize:'0.875rem', fontWeight:600, color:'#fff', margin:'0.125rem 0 0' }}>
+              Retail command center</p>
+          </div>
+          <div style={{ display:'inline-flex', flexShrink:0, alignItems:'center', gap:'0.375rem',
+            borderRadius:'9999px', border:`1px solid ${T.emeraldBorder}`,
+            background:T.emeraldBg, padding:'0.25rem 0.625rem',
+            fontSize:'0.625rem', fontWeight:500, color:'#d1fae5' }}
+            role="status" aria-live="polite" aria-label="System is active">
+            <span aria-hidden="true" style={{ display:'inline-block', width:'0.375rem', height:'0.375rem',
+              borderRadius:'50%', background:T.emerald,
+              animation:'sm-pulse 2s ease-in-out infinite' }} />
+            System Active
+          </div>
+        </div>
+
+        <StatsGrid />
+
+        <div style={{ display:'grid', gridTemplateColumns:'1.2fr 0.8fr', gap:'0.625rem' }}>
+          <WeeklyBarChart />
+          <OpsFlow />
+        </div>
+      </div>
+    </div>
+  </div>
+))
+DashboardCard.displayName = 'DashboardCard'
+
+// ─── Footer stats ─────────────────────────────────────────────────────────────
+const FooterStats = memo(() => (
+  <footer style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end',
+    justifyContent:'space-between', gap:'1rem' }}>
+    <dl style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'1.75rem', margin:0 }}>
+      {footerStats.map(({ num, label }) => (
+        <div key={label}>
+          <dd style={{ fontSize:'1.25rem', fontWeight:700, color:'#fff', margin:0 }}>{num}</dd>
+          <dt style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.50)', margin:0 }}>{label}</dt>
+        </div>
+      ))}
+    </dl>
+    <p style={{ fontSize:'0.5625rem', textTransform:'uppercase', letterSpacing:'0.22em',
+      color:'rgba(255,255,255,0.35)', margin:0 }}>Built for modern retail teams</p>
+  </footer>
+))
+FooterStats.displayName = 'FooterStats'
+
+// ─── Root export ──────────────────────────────────────────────────────────────
+/**
+ * PERFORMANCE
+ * • lucide-react removed → inline SVGs, zero bundle cost on critical path
+ * • All colors use inline rgba/hex → immune to Tailwind JIT purge
+ * • Keyframes injected via <style> once per mount
+ * • Animations target only opacity (compositor layer)
+ *
+ * FONT (add to <head>, non-blocking):
+ *   <link rel="preconnect" href="https://fonts.googleapis.com" />
+ *   <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+ *   <link rel="stylesheet"
+ *     href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&display=swap"
+ *     media="print" onLoad="this.media='all'" />
+ *
+ * ACCESSIBILITY
+ * • <main> + aria-labelledby="hero-headline"
+ * • <ul>/<li> for chips and ops
+ * • <dl>/<dt>/<dd> for stats and footer
+ * • role="img" + aria-label on bar chart
+ * • role="status" + aria-live="polite" on status pill
+ * • aria-hidden on all decorative elements
+ * • prefers-reduced-motion via injected @media rule
+ */
+export function LoginHero() {
+  return (
+    <main aria-labelledby="hero-headline">
+      <style dangerouslySetInnerHTML={{ __html: KEYFRAMES }} />
+
+      <section
+        aria-label="StoreMitraa Retail hero"
+        style={{ position:'relative', width:'100%', overflow:'hidden',
+          background: T.sectionBg,
+          padding:'1.5rem', minHeight:'100vh',
+          display:'flex', flexDirection:'column', justifyContent:'space-between',
+          gap:'1.5rem', boxSizing:'border-box' }}
+      >
+        {/* Decorative glows */}
+        {([
+          { top:'-3rem',   left:'-4rem',  width:'18rem', height:'18rem', background:'rgba(167,139,250,0.32)' },
+          { top:'2rem',    right:'-2rem', width:'20rem', height:'20rem', background:'rgba(99,102,241,0.26)'  },
+          { bottom:'-3rem',left:'30%',    width:'18rem', height:'18rem', background:'rgba(139,92,246,0.28)'  },
+          { bottom:'2rem', right:'2rem',  width:'16rem', height:'16rem', background:'rgba(167,139,250,0.20)' },
+        ] as React.CSSProperties[]).map((g, i) => (
+          <div key={i} aria-hidden="true" style={{ position:'absolute', pointerEvents:'none',
+            borderRadius:'50%', filter:'blur(60px)', ...g }} />
+        ))}
+
+        {/* Mesh grid */}
+        <div aria-hidden="true" style={{ position:'absolute', inset:0, pointerEvents:'none', opacity:0.18,
+          backgroundImage:'linear-gradient(to right,rgba(255,255,255,0.06) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.06) 1px,transparent 1px)',
+          backgroundSize:'36px 36px' }} />
+
+        {/* Depth overlay */}
+        <div aria-hidden="true" style={{ position:'absolute', inset:0, pointerEvents:'none',
+          background:'linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.14))' }} />
+
+        {/* Content */}
+        <div style={{ position:'relative', zIndex:1, display:'flex', flexDirection:'column', gap:'1.25rem', width:'100%' }}>
+          <Logo />
+
+          <div style={{ display:'flex', flexDirection:'column' }}>
+            {/* Badge */}
+            <p aria-hidden="true" style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem',
+              borderRadius:'9999px', border:`1px solid ${T.white15}`, background:T.white10,
+              padding:'0.375rem 0.75rem', fontSize:'0.625rem', fontWeight:600,
+              letterSpacing:'0.18em', textTransform:'uppercase', color:'rgba(255,255,255,0.90)',
+              backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
+              marginBottom:'0.75rem', width:'fit-content' }}>
+              <IconShield /> Smart Retail Operations
+            </p>
+
+            <h1 id="hero-headline" style={{ fontSize:'clamp(1.35rem,4vw,2.1rem)',
+              fontWeight:700, lineHeight:1.15, letterSpacing:'-0.03em', color:'#fff', margin:0 }}>
+              Run billing, stock, and store performance from one command center.
+            </h1>
+
+            <p style={{ marginTop:'0.75rem', fontSize:'clamp(0.8rem,2vw,0.9rem)',
+              lineHeight:1.65, color:'rgba(255,255,255,0.80)' }}>
+              StoreMitraa gives your retail team a single, premium workspace to manage
+              inventory, generate bills, monitor sales, and keep operations moving without friction.
+            </p>
+
+            <FeatureChips />
+            <DashboardCard />
+          </div>
+
+          <FooterStats />
+        </div>
+      </section>
+    </main>
+  )
+}
