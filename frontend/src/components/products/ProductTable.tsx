@@ -9,6 +9,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Product } from '../../features/products/types'
 
 type FilterOption = { label: string; value: string }
@@ -28,15 +29,123 @@ function getStockStatus(product: Product) {
 
 function getCategoryTileStyles(category: string) {
   const key = category.toLowerCase()
-  if (key.includes('apparel'))     return 'from-violet-100 to-fuchsia-100 text-violet-700 ring-violet-200'
+  if (key.includes('apparel')) return 'from-violet-100 to-fuchsia-100 text-violet-700 ring-violet-200'
   if (key.includes('electronics')) return 'from-sky-100 to-blue-100 text-blue-700 ring-blue-200'
-  if (key.includes('footwear'))    return 'from-emerald-100 to-green-100 text-emerald-700 ring-emerald-200'
+  if (key.includes('footwear')) return 'from-emerald-100 to-green-100 text-emerald-700 ring-emerald-200'
   if (key.includes('accessories')) return 'from-amber-100 to-orange-100 text-orange-700 ring-orange-200'
-  if (key.includes('home'))        return 'from-rose-100 to-pink-100 text-rose-700 ring-rose-200'
+  if (key.includes('home')) return 'from-rose-100 to-pink-100 text-rose-700 ring-rose-200'
   return 'from-slate-100 to-slate-200 text-slate-700 ring-slate-200'
 }
 
-// ── Dropdown ──────────────────────────────────────────────────────────────────
+// ── Portal-based action menu ──────────────────────────────────────────────────
+function ActionMenu({
+  product,
+  onEdit,
+  onDelete,
+}: {
+  product: Product
+  onEdit: (p: Product) => void
+  onDelete: (p: Product) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0, openUp: false })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  const MENU_W = 192
+  const MENU_H = 150
+
+  function openMenu() {
+    if (!buttonRef.current) return
+    const r = buttonRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - r.bottom
+    const openUp = spaceBelow < MENU_H + 8
+    // Use viewport-relative coords (fixed positioning — no scroll offset needed)
+    const top = openUp ? r.top - MENU_H - 6 : r.bottom + 6
+    let left = r.right - MENU_W
+    left = Math.max(8, Math.min(left, window.innerWidth - MENU_W - 8))
+    setPos({ top, left, openUp })
+    setOpen(true)
+  }
+
+  // Close on ANY scroll anywhere in the page
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [open])
+
+  return (
+    <div className="flex items-center justify-end">
+      <button
+        ref={buttonRef}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className={`rounded-2xl border p-2.5 transition-all duration-200 ${
+          open
+            ? 'border-indigo-200 bg-indigo-50 text-indigo-600 shadow-sm'
+            : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50'
+        }`}
+      >
+        <MoreVertical size={18} />
+      </button>
+
+      {open &&
+        createPortal(
+          <>
+            {/* Full-screen transparent backdrop — captures every click outside */}
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+              onMouseDown={() => setOpen(false)}
+            />
+
+            {/* Menu panel — fixed so it's always in viewport coords */}
+            <div
+              style={{
+                position: 'fixed',
+                top: pos.top,
+                left: pos.left,
+                width: MENU_W,
+                zIndex: 9999,
+              }}
+              className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-2 shadow-[0_16px_40px_rgba(15,23,42,0.15)]"
+              // Stop backdrop's mousedown from bubbling up through menu
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="mb-1 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Actions
+              </div>
+              <button
+                onClick={() => { setOpen(false); onEdit(product) }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                  <PencilLine size={15} />
+                </span>
+                Edit Product
+              </button>
+              <div className="my-1.5 border-t border-slate-100" />
+              <button
+                onClick={() => { setOpen(false); onDelete(product) }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-red-50 hover:text-red-600"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-500">
+                  <Trash2 size={15} />
+                </span>
+                Delete Product
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
+    </div>
+  )
+}
+
+// ── Filter Dropdown ───────────────────────────────────────────────────────────
 function FilterDropdown({
   value,
   onChange,
@@ -115,18 +224,8 @@ function MobileProductCard({
   onEdit: (p: Product) => void
   onDelete: (p: Product) => void
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const stock = getStockStatus(product)
   const tile = getCategoryTileStyles(product.category)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
 
   return (
     <div className="mb-3 rounded-[24px] border border-slate-100 bg-white px-5 py-5 shadow-sm hover:bg-[#f8f9fd] transition-colors">
@@ -144,45 +243,9 @@ function MobileProductCard({
           </div>
         </div>
 
-        {/* 3-dot menu */}
-        <div ref={menuRef} className="relative shrink-0">
-          <button
-            onClick={() => setMenuOpen((p) => !p)}
-            className={`rounded-2xl border p-2.5 transition-all duration-200 ${
-              menuOpen
-                ? 'border-indigo-200 bg-indigo-50 text-indigo-600 shadow-sm'
-                : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <MoreVertical size={18} />
-          </button>
-
-          {menuOpen && (
-            <div className="absolute right-0 top-full mt-2 z-40 w-48 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-sm">
-              <div className="mb-1 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Actions
-              </div>
-              <button
-                onClick={() => { setMenuOpen(false); onEdit(product) }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-                  <PencilLine size={15} />
-                </span>
-                Edit Product
-              </button>
-              <div className="my-1.5 border-t border-slate-100" />
-              <button
-                onClick={() => { setMenuOpen(false); onDelete(product) }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-red-50 hover:text-red-600"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-500">
-                  <Trash2 size={15} />
-                </span>
-                Delete Product
-              </button>
-            </div>
-          )}
+        {/* Portal-based action menu — same component, works everywhere */}
+        <div className="shrink-0">
+          <ActionMenu product={product} onEdit={onEdit} onDelete={onDelete} />
         </div>
       </div>
 
@@ -200,8 +263,8 @@ function MobileProductCard({
       {/* Row 3 — pricing + stock bar */}
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className="space-y-0.5">
-          <p className="text-xl font-semibold text-slate-900">MRP ${product.mrp}</p>
-          <p className="text-sm font-medium text-slate-500">Buying ${product.buying_price}</p>
+          <p className="text-xl font-semibold text-slate-900">MRP ₹{Number(product.mrp).toLocaleString('en-IN')}</p>
+          <p className="text-sm font-medium text-slate-500">Buying ₹{Number(product.buying_price).toLocaleString('en-IN')}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-2">
@@ -247,19 +310,6 @@ export function ProductTable({
   onDelete: (p: Product) => void
   onAdd: () => void
 }) {
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpenMenuId(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
   const categoryOptions: FilterOption[] = [
     { label: 'All Categories', value: '' },
     ...allCategories.map((c) => ({ label: c, value: c })),
@@ -281,22 +331,18 @@ export function ProductTable({
 
   const sortedProducts = [...products].sort((a, b) => {
     switch (sortBy) {
-      case 'date_asc':   return a.id - b.id
-      case 'date_desc':  return b.id - a.id
-      case 'name_asc':   return a.name.localeCompare(b.name)
-      case 'name_desc':  return b.name.localeCompare(a.name)
-      case 'stock_asc':  return a.stock_quantity - b.stock_quantity
+      case 'date_asc': return a.id - b.id
+      case 'date_desc': return b.id - a.id
+      case 'name_asc': return a.name.localeCompare(b.name)
+      case 'name_desc': return b.name.localeCompare(a.name)
+      case 'stock_asc': return a.stock_quantity - b.stock_quantity
       case 'stock_desc': return b.stock_quantity - a.stock_quantity
-      default:           return b.id - a.id
+      default: return b.id - a.id
     }
   })
 
   return (
-    // ✅ FIX 1: Removed overflow-hidden so the dropdown is never clipped
-    <div
-      ref={wrapperRef}
-      className="relative rounded-[32px] border border-slate-200/80 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-white/70"
-    >
+    <div className="relative rounded-[32px] border border-slate-200/80 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-white/70">
       {/* Decorative top line */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px rounded-t-[32px] bg-gradient-to-r from-transparent via-indigo-200/70 to-transparent" />
       {/* Decorative glow */}
@@ -362,136 +408,93 @@ export function ProductTable({
       </div>
 
       {/* ══ TABLE — desktop (≥ lg) ════════════════════════════════════════════ */}
-    <div className="hidden lg:block overflow-x-auto">
-  <div className="min-w-[900px]">
-        {/* Header row */}
-        <div className="grid grid-cols-[2.1fr_1fr_1.1fr_1fr_1.1fr_1fr_60px] border-t border-slate-100 px-8 py-5 text-xs font-semibold tracking-[0.18em] text-slate-500">
-          <span>PRODUCT DETAILS</span>
-          <span>SKU</span>
-          <span>CATEGORY</span>
-          <span>PRICING</span>
-          <span>STOCK LEVEL</span>
-          <span>STATUS</span>
-          <span />
-        </div>
+      <div className="hidden lg:block overflow-x-auto">
+        <div className="min-w-[900px]">
+          {/* Header row */}
+          <div className="grid grid-cols-[2.1fr_1fr_1.1fr_1fr_1.1fr_1fr_60px] border-t border-slate-100 px-8 py-5 text-xs font-semibold tracking-[0.18em] text-slate-500">
+            <span>PRODUCT DETAILS</span>
+            <span>SKU</span>
+            <span>CATEGORY</span>
+            <span>PRICING</span>
+            <span>STOCK LEVEL</span>
+            <span>STATUS</span>
+            <span />
+          </div>
 
-        {/* Rows */}
-        <div className="pb-6">
-          {sortedProducts.length === 0 ? (
-            <div className="px-8 py-16 text-center text-slate-500">No products found.</div>
-          ) : (
-            sortedProducts.map((product, index) => {
-              const stock = getStockStatus(product)
-              const tile = getCategoryTileStyles(product.category)
-              const isOpen = openMenuId === product.id
-              // ✅ FIX 2: flip menu upward for last 2 rows so it never overflows bottom
-              const isNearBottom = index >= sortedProducts.length - 2
+          {/* Rows */}
+          <div className="pb-6">
+            {sortedProducts.length === 0 ? (
+              <div className="px-8 py-16 text-center text-slate-500">No products found.</div>
+            ) : (
+              sortedProducts.map((product) => {
+                const stock = getStockStatus(product)
+                const tile = getCategoryTileStyles(product.category)
 
-              return (
-                <div
-                  key={product.id}
-                  className="grid grid-cols-[2.1fr_1fr_1.1fr_1fr_1.1fr_1fr_60px] items-center border-t border-slate-50 px-8 py-6 hover:bg-[#f8f9fd] transition-colors"
-                >
-                  {/* Product details */}
-                  <div className="flex min-w-0 items-center gap-4 pr-3">
-                    <div
-                      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-base font-bold ring-1 ${tile}`}
-                    >
-                      {product.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-xl font-semibold text-slate-900">{product.name}</p>
-                      <p className="truncate text-sm text-slate-500">{product.description || product.unit}</p>
-                    </div>
-                  </div>
-
-                  {/* SKU */}
-                  <div className="text-sm text-slate-600">{product.sku}</div>
-
-                  {/* Category */}
-                  <div>
-                    <span className="rounded-xl bg-indigo-100 px-3 py-2 text-xs font-semibold text-indigo-700">
-                      {product.category}
-                    </span>
-                  </div>
-
-                  {/* Pricing */}
-                  <div className="space-y-1">
-                    <p className="text-xl font-semibold text-slate-900">MRP ${product.mrp}</p>
-                    <p className="text-sm font-medium text-slate-500">Buying ${product.buying_price}</p>
-                  </div>
-
-                  {/* Stock level */}
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-700">{product.stock_quantity} Units</span>
-                      <span className="text-sm font-semibold text-slate-600">{stock.percent}%</span>
-                    </div>
-                    <div className="mt-2 h-2 w-20 rounded-full bg-slate-200">
-                      <div className={`h-2 rounded-full ${stock.bar}`} style={{ width: `${stock.percent}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Status badge */}
-                  <div>
-                    <span className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${stock.badge}`}>
-                      {stock.label}
-                    </span>
-                  </div>
-
-                  {/* Action menu */}
-                  <div className="relative flex items-center justify-end">
-                    <button
-                      onClick={() => setOpenMenuId(isOpen ? null : product.id)}
-                      className={`rounded-2xl border p-2.5 transition-all duration-200 ${
-                        isOpen
-                          ? 'border-indigo-200 bg-indigo-50 text-indigo-600 shadow-sm'
-                          : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      <MoreVertical size={18} />
-                    </button>
-
-                    {isOpen && (
-                      // ✅ FIX 3: top-full mt-2 normally, bottom-full mb-2 when near bottom
+                return (
+                  <div
+                    key={product.id}
+                    className="grid grid-cols-[2.1fr_1fr_1.1fr_1fr_1.1fr_1fr_60px] items-center border-t border-slate-50 px-8 py-6 hover:bg-[#f8f9fd] transition-colors"
+                  >
+                    {/* Product details */}
+                    <div className="flex min-w-0 items-center gap-4 pr-3">
                       <div
-                        className={`absolute right-0 z-50 w-48 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-sm ${
-                          isNearBottom ? 'bottom-full mb-2' : 'top-full mt-2'
-                        }`}
+                        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-base font-bold ring-1 ${tile}`}
                       >
-                        <div className="mb-1 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          Actions
-                        </div>
-                        <button
-                          onClick={() => { setOpenMenuId(null); onEdit(product) }}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700"
-                        >
-                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-                            <PencilLine size={15} />
-                          </span>
-                          Edit Product
-                        </button>
-                        <div className="my-1.5 border-t border-slate-100" />
-                        <button
-                          onClick={() => { setOpenMenuId(null); onDelete(product) }}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-red-50 hover:text-red-600"
-                        >
-                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-500">
-                            <Trash2 size={15} />
-                          </span>
-                          Delete Product
-                        </button>
+                        {product.name.charAt(0).toUpperCase()}
                       </div>
-                    )}
+                      <div className="min-w-0">
+                        <p className="truncate text-xl font-semibold text-slate-900">{product.name}</p>
+                        <p className="truncate text-sm text-slate-500">{product.description || product.unit}</p>
+                      </div>
+                    </div>
+
+                    {/* SKU */}
+                    <div className="text-sm text-slate-600">{product.sku}</div>
+
+                    {/* Category */}
+                    <div>
+                      <span className="rounded-xl bg-indigo-100 px-3 py-2 text-xs font-semibold text-indigo-700">
+                        {product.category}
+                      </span>
+                    </div>
+
+                    {/* Pricing */}
+                    <div className="space-y-1">
+                      <p className="text-xl font-semibold text-slate-900">
+                        MRP ₹{Number(product.mrp).toLocaleString('en-IN')}
+                      </p>
+                      <p className="text-sm font-medium text-slate-500">
+                        Buying ₹{Number(product.buying_price).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+
+                    {/* Stock level */}
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-slate-700">{product.stock_quantity} Units</span>
+                        <span className="text-sm font-semibold text-slate-600">{stock.percent}%</span>
+                      </div>
+                      <div className="mt-2 h-2 w-20 rounded-full bg-slate-200">
+                        <div className={`h-2 rounded-full ${stock.bar}`} style={{ width: `${stock.percent}%` }} />
+                      </div>
+                    </div>
+
+                    {/* Status badge */}
+                    <div>
+                      <span className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${stock.badge}`}>
+                        {stock.label}
+                      </span>
+                    </div>
+
+                    {/* Action menu — portal-based, never clipped */}
+                    <ActionMenu product={product} onEdit={onEdit} onDelete={onDelete} />
                   </div>
-                </div>
-              )
-            })
-          )}
+                )
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
-</div>
   )
-  
 }

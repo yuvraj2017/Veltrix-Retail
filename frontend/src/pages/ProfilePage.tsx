@@ -62,7 +62,6 @@ const mockLoginActivity = [
 function splitFullName(fullName: string | null | undefined) {
   const safe = (fullName || '').trim()
   if (!safe) return { firstName: '', lastName: '' }
-
   const parts = safe.split(' ')
   return {
     firstName: parts[0] || '',
@@ -70,19 +69,14 @@ function splitFullName(fullName: string | null | undefined) {
   }
 }
 
-function ReadOnlyField({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+      {/* Desktop: sm text label; Mobile: xs */}
+      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
         {label}
       </label>
-      <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-slate-700">
+      <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-700">
         {value || '-'}
       </div>
     </div>
@@ -99,28 +93,25 @@ function LogoutConfirmModal({
   onConfirm: () => void
 }) {
   if (!open) return null
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
-        <h3 className="text-2xl font-bold text-slate-900">Logout?</h3>
-        <p className="mt-2 text-slate-600">
+        <h3 className="text-xl sm:text-2xl font-bold text-slate-900">Logout?</h3>
+        <p className="mt-2 text-sm sm:text-base text-slate-600">
           Are you sure you want to logout from your account?
         </p>
-
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             Cancel
           </button>
-
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-2xl bg-red-600 px-5 py-3 font-semibold text-white transition hover:bg-red-700"
+            className="rounded-2xl bg-red-600 px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-white transition hover:bg-red-700"
           >
             Yes, Logout
           </button>
@@ -170,9 +161,7 @@ export default function ProfilePage() {
       setProfileError('')
       const data = await getMyProfile()
       setProfile(data)
-
       const derived = splitFullName(data.full_name)
-
       profileForm.reset({
         first_name: data.first_name || derived.firstName,
         last_name: data.last_name || derived.lastName,
@@ -183,7 +172,6 @@ export default function ProfilePage() {
         two_factor_enabled: Boolean(data.two_factor_enabled),
       })
     } catch (error: any) {
-      console.error('PROFILE LOAD ERROR:', error)
       setProfileError(error?.response?.data?.detail || 'Failed to load profile')
     } finally {
       setLoading(false)
@@ -227,9 +215,7 @@ export default function ProfilePage() {
 
   const handleCancelEdit = () => {
     if (!profile) return
-
     const derived = splitFullName(profile.full_name)
-
     profileForm.reset({
       first_name: profile.first_name || derived.firstName,
       last_name: profile.last_name || derived.lastName,
@@ -239,7 +225,6 @@ export default function ProfilePage() {
       language: profile.language || 'English (US)',
       two_factor_enabled: Boolean(profile.two_factor_enabled),
     })
-
     setProfileError('')
     setProfileSuccess('')
     setIsEditing(false)
@@ -249,10 +234,8 @@ export default function ProfilePage() {
     setProfileError('')
     setProfileSuccess('')
     setSavingProfile(true)
-
     try {
       const composedFullName = `${values.first_name || ''} ${values.last_name || ''}`.trim()
-
       const updated = await updateMyProfile({
         full_name: composedFullName || profile?.full_name || 'User',
         first_name: values.first_name || null,
@@ -263,14 +246,12 @@ export default function ProfilePage() {
         language: values.language,
         two_factor_enabled: values.two_factor_enabled,
       })
-
       setProfile(updated)
       setProfileSuccess('Profile updated successfully')
       setIsEditing(false)
       await refreshMe()
       await loadProfile()
     } catch (error: any) {
-      console.error('PROFILE UPDATE ERROR:', error)
       setProfileError(error?.response?.data?.detail || 'Failed to update profile')
     } finally {
       setSavingProfile(false)
@@ -281,7 +262,6 @@ export default function ProfilePage() {
     setPasswordError('')
     setPasswordSuccess('')
     setSavingPassword(true)
-
     try {
       await changeMyPassword({
         current_password: values.current_password,
@@ -290,7 +270,6 @@ export default function ProfilePage() {
       setPasswordSuccess('Password changed successfully')
       passwordForm.reset()
     } catch (error: any) {
-      console.error('PASSWORD UPDATE ERROR:', error)
       setPasswordError(error?.response?.data?.detail || 'Failed to change password')
     } finally {
       setSavingPassword(false)
@@ -313,36 +292,44 @@ export default function ProfilePage() {
         onConfirm={logout}
       />
 
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6">
+      {/* Desktop: no horizontal padding (doc 2 style); Mobile/tablet: add padding */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-0">
+
+        {/* Breadcrumb */}
+        <div className="mb-4 sm:mb-6">
           <p className="text-sm font-medium text-slate-500">Settings / User Profile</p>
         </div>
 
-        <div className="mb-8 flex items-start justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="relative">
+        {/* Header: Avatar + Name + Edit button */}
+        {/* Mobile: column stack; Desktop: row (doc 2 style) */}
+        <div className="mb-6 sm:mb-8 flex flex-col  gap-4 lg:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="flex items-center gap-4 sm:gap-5">
+            {/* Avatar */}
+            <div className="relative flex-shrink-0">
               {profileImage ? (
                 <img
                   src={profileImage}
                   alt={displayFullName}
-                  className="h-28 w-28 rounded-[28px] object-cover shadow-sm"
+                  className="h-20 w-20 sm:h-28 sm:w-28 rounded-[24px] sm:rounded-[28px] object-cover shadow-sm"
                 />
               ) : (
-                <div className="flex h-28 w-28 items-center justify-center rounded-[28px] bg-indigo-50 text-indigo-600 shadow-sm">
-                  <UserCircle2 size={58} />
+                <div className="flex h-20 w-20 sm:h-28 sm:w-28 items-center justify-center rounded-[24px] sm:rounded-[28px] bg-indigo-50 text-indigo-600 shadow-sm">
+                  <UserCircle2 size={44} className="sm:hidden" />
+                  <UserCircle2 size={58} className="hidden sm:block" />
                 </div>
               )}
-
-              <div className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg transition-all duration-300 hover:-translate-y-[1px] hover:bg-indigo-700 hover:shadow-xl">
-                <Camera size={18} />
+              <div className="absolute -bottom-2 -right-2 flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-600 text-white shadow-lg transition-all duration-300 hover:-translate-y-[1px] hover:bg-indigo-700">
+                <Camera size={15} className="sm:hidden" />
+                <Camera size={18} className="hidden sm:block" />
               </div>
             </div>
 
-            <div>
-              <h1 className="text-5xl font-bold tracking-[-0.03em] text-slate-900">
+            {/* Name + role — Desktop uses large doc-2 sizes */}
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-[-0.03em] text-slate-900 truncate">
                 {displayFullName}
               </h1>
-              <div className="mt-2 flex items-center gap-2 text-2xl text-slate-500">
+              <div className="mt-1 sm:mt-2 flex flex-wrap items-center gap-1 sm:gap-2 text-base sm:text-xl lg:text-2xl text-slate-500">
                 <span>{profile?.role || 'Store Manager'}</span>
                 <span>•</span>
                 <span className="font-medium text-indigo-600">Admin Access</span>
@@ -350,20 +337,21 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="flex gap-3">
+          {/* Edit / Save / Cancel buttons */}
+          <div className="flex gap-3 flex-shrink-0 self-start sm:self-auto">
             {isEditing ? (
               <>
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="group relative overflow-hidden rounded-[18px] border border-indigo-200/70 bg-white px-5 py-3 text-slate-700 shadow-[0_10px_24px_rgba(99,102,241,0.08)] transition-all duration-300 hover:-translate-y-[1px] hover:border-violet-300/70 hover:shadow-[0_12px_28px_rgba(99,102,241,0.14)] active:translate-y-0"
+                  className="group relative overflow-hidden rounded-[18px] border border-indigo-200/70 bg-white px-3 py-2.5 sm:px-5 sm:py-3 text-slate-700 shadow-[0_10px_24px_rgba(99,102,241,0.08)] transition-all duration-300 hover:-translate-y-[1px] hover:border-violet-300/70 hover:shadow-[0_12px_28px_rgba(99,102,241,0.14)] active:translate-y-0"
                 >
                   <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.08),transparent_35%)]" />
-                  <span className="relative flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 ring-1 ring-indigo-100 transition-all duration-300 group-hover:scale-105 group-hover:bg-indigo-100 group-hover:text-indigo-600">
-                      <X size={16} className="transition-transform duration-300 group-hover:rotate-90" />
+                  <span className="relative flex items-center gap-2 sm:gap-3">
+                    <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 ring-1 ring-indigo-100 transition-all duration-300 group-hover:scale-105 group-hover:bg-indigo-100 group-hover:text-indigo-600">
+                      <X size={14} className="transition-transform duration-300 group-hover:rotate-90" />
                     </span>
-                    <span className="text-[15px] font-semibold text-slate-700">Cancel</span>
+                    <span className="text-sm sm:text-[15px] font-semibold text-slate-700">Cancel</span>
                   </span>
                 </button>
 
@@ -371,15 +359,15 @@ export default function ProfilePage() {
                   type="button"
                   onClick={profileForm.handleSubmit(onSubmitProfile)}
                   disabled={savingProfile}
-                  className="group relative overflow-hidden rounded-[18px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-5 py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_12px_28px_rgba(79,70,229,0.28)] active:translate-y-0 disabled:opacity-70"
+                  className="group relative overflow-hidden rounded-[18px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-3 py-2.5 sm:px-5 sm:py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_12px_28px_rgba(79,70,229,0.28)] active:translate-y-0 disabled:opacity-70"
                 >
                   <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.20),transparent_35%)]" />
                   <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-                  <span className="relative flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
-                      <Save size={16} className="transition-transform duration-300 group-hover:rotate-6" />
+                  <span className="relative flex items-center gap-2 sm:gap-3">
+                    <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                      <Save size={14} className="transition-transform duration-300 group-hover:rotate-6" />
                     </span>
-                    <span className="text-[15px] font-semibold">
+                    <span className="text-sm sm:text-[15px] font-semibold">
                       {savingProfile ? 'Saving...' : 'Save Changes'}
                     </span>
                   </span>
@@ -389,50 +377,56 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={handleEditClick}
-                className="group relative overflow-hidden rounded-[18px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-5 py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_12px_28px_rgba(79,70,229,0.28)] active:translate-y-0"
+                className="group relative overflow-hidden rounded-[18px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-3 py-2.5 sm:px-5 sm:py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_12px_28px_rgba(79,70,229,0.28)] active:translate-y-0"
               >
                 <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.20),transparent_35%)]" />
                 <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-                <span className="relative flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
-                    <Edit3 size={16} className="transition-transform duration-300 group-hover:rotate-6" />
+                <span className="relative flex items-center gap-2 sm:gap-3">
+                  <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                    <Edit3 size={14} className="transition-transform duration-300 group-hover:rotate-6" />
                   </span>
-                  <span className="text-[15px] font-semibold">Edit Profile</span>
+                  <span className="text-sm sm:text-[15px] font-semibold">Edit Profile</span>
                 </span>
               </button>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-[1.8fr_0.9fr] gap-6">
-          <div className="rounded-[30px] bg-white p-8 shadow-sm">
-            <div className="mb-8 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <UserCircle2 size={20} />
+        {/* Personal Info + Preferences */}
+        {/* Mobile: 1 col stack; Desktop: doc-2 ratio [1.8fr 0.9fr] */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_0.9fr] gap-6">
+
+          {/* Personal Information */}
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+            <div className="mb-6 sm:mb-8 flex items-center gap-3">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+                <UserCircle2 size={18} className="sm:hidden" />
+                <UserCircle2 size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-3xl font-bold text-slate-900">Personal Information</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Personal Information</h2>
             </div>
 
-            <form className="space-y-6">
-              <div className="grid grid-cols-2 gap-5">
+            <form className="space-y-4 sm:space-y-6">
+              {/* First/Last name: 1 col on mobile, 2 col on sm+ */}
+              <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
                 {isEditing ? (
                   <>
                     <div>
-                      <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                         First Name
                       </label>
                       <input
                         {...profileForm.register('first_name')}
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                       />
                     </div>
                     <div>
-                      <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                         Last Name
                       </label>
                       <input
                         {...profileForm.register('last_name')}
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                       />
                     </div>
                   </>
@@ -448,12 +442,12 @@ export default function ProfilePage() {
 
               {isEditing ? (
                 <div>
-                  <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                     Phone Number
                   </label>
                   <input
                     {...profileForm.register('phone')}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                   />
                 </div>
               ) : (
@@ -462,13 +456,13 @@ export default function ProfilePage() {
 
               {isEditing ? (
                 <div>
-                  <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                     Profile Image URL
                   </label>
                   <input
                     {...profileForm.register('profile_image_url')}
                     placeholder="https://..."
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                   />
                 </div>
               ) : (
@@ -476,78 +470,70 @@ export default function ProfilePage() {
               )}
 
               {profileError && (
-                <div className="rounded-2xl bg-red-50 px-4 py-4 text-sm text-red-600">
-                  {profileError}
-                </div>
+                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{profileError}</div>
               )}
-
               {profileSuccess && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-4 text-sm text-emerald-600">
-                  {profileSuccess}
-                </div>
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{profileSuccess}</div>
               )}
             </form>
           </div>
 
-          <div className="rounded-[30px] bg-white p-8 shadow-sm">
-            <div className="mb-8 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Globe size={20} />
+          {/* Preferences */}
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+            <div className="mb-6 sm:mb-8 flex items-center gap-3">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+                <Globe size={18} className="sm:hidden" />
+                <Globe size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-3xl font-bold text-slate-900">Preferences</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Preferences</h2>
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-6 sm:space-y-8">
               {isEditing ? (
                 <>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                       Language
                     </label>
                     <select
                       {...profileForm.register('language')}
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                     >
                       {languageOptions.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
+                        <option key={item} value={item}>{item}</option>
                       ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                       Timezone
                     </label>
                     <select
                       {...profileForm.register('timezone')}
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                     >
                       {timezoneOptions.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
+                        <option key={item} value={item}>{item}</option>
                       ))}
                     </select>
                   </div>
 
                   <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
-                    <div>
-                      <p className="text-xl font-semibold text-slate-900">Two-factor Authentication</p>
-                      <p className="mt-1 text-sm text-slate-500">Add an extra layer of security</p>
+                    <div className="pr-4">
+                      <p className="text-base sm:text-xl font-semibold text-slate-900">Two-factor Authentication</p>
+                      <p className="mt-1 text-xs sm:text-sm text-slate-500">Add an extra layer of security</p>
                     </div>
-
                     <button
                       type="button"
                       onClick={() => profileForm.setValue('two_factor_enabled', !watchedTwoFactor)}
-                      className={`relative h-8 w-14 rounded-full transition ${
+                      className={`relative h-7 w-12 sm:h-8 sm:w-14 flex-shrink-0 rounded-full transition ${
                         watchedTwoFactor ? 'bg-indigo-600' : 'bg-slate-300'
                       }`}
                     >
                       <span
-                        className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-sm transition ${
-                          watchedTwoFactor ? 'left-7' : 'left-1'
+                        className={`absolute top-0.5 sm:top-1 h-6 w-6 rounded-full bg-white shadow-sm transition-all ${
+                          watchedTwoFactor ? 'left-5 sm:left-7' : 'left-0.5 sm:left-1'
                         }`}
                       />
                     </button>
@@ -567,24 +553,29 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-[1fr_1fr] gap-6">
-          <div className="rounded-[30px] bg-white p-8 shadow-sm">
-            <div className="mb-8 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Lock size={20} />
+        {/* Account Security + Login Activity */}
+        {/* Mobile: 1 col; Desktop: equal 2 col (doc-2 style) */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* Account Security */}
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+            <div className="mb-6 sm:mb-8 flex items-center gap-3">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+                <Lock size={18} className="sm:hidden" />
+                <Lock size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-3xl font-bold text-slate-900">Account Security</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Account Security</h2>
             </div>
 
-            <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)} className="space-y-5">
+            <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)} className="space-y-4 sm:space-y-5">
               <div>
-                <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                   Current Password
                 </label>
                 <input
                   type="password"
                   {...passwordForm.register('current_password')}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                 />
                 {passwordForm.formState.errors.current_password && (
                   <p className="mt-1 text-xs text-red-500">
@@ -593,15 +584,16 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* New + Confirm: 1 col on mobile, 2 col on sm+ */}
+              <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                     New Password
                   </label>
                   <input
                     type="password"
                     {...passwordForm.register('new_password')}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                   />
                   {passwordForm.formState.errors.new_password && (
                     <p className="mt-1 text-xs text-red-500">
@@ -609,15 +601,14 @@ export default function ProfilePage() {
                     </p>
                   )}
                 </div>
-
                 <div>
-                  <label className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
                     Confirm New Password
                   </label>
                   <input
                     type="password"
                     {...passwordForm.register('confirm_password')}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-4 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
                   />
                   {passwordForm.formState.errors.confirm_password && (
                     <p className="mt-1 text-xs text-red-500">
@@ -628,29 +619,24 @@ export default function ProfilePage() {
               </div>
 
               {passwordError && (
-                <div className="rounded-2xl bg-red-50 px-4 py-4 text-sm text-red-600">
-                  {passwordError}
-                </div>
+                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{passwordError}</div>
               )}
-
               {passwordSuccess && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-4 text-sm text-emerald-600">
-                  {passwordSuccess}
-                </div>
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{passwordSuccess}</div>
               )}
 
               <button
                 type="submit"
                 disabled={savingPassword}
-                className="group relative overflow-hidden rounded-[18px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-5 py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_12px_28px_rgba(79,70,229,0.28)] active:translate-y-0 disabled:opacity-70"
+                className="group relative overflow-hidden rounded-[18px] border border-indigo-300/50 bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-4 py-2.5 sm:px-5 sm:py-3 text-white shadow-[0_10px_24px_rgba(79,70,229,0.22)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_12px_28px_rgba(79,70,229,0.28)] active:translate-y-0 disabled:opacity-70"
               >
                 <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.20),transparent_35%)]" />
                 <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-                <span className="relative flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
-                    <Lock size={16} className="transition-transform duration-300 group-hover:rotate-6" />
+                <span className="relative flex items-center gap-2 sm:gap-3">
+                  <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                    <Lock size={14} className="transition-transform duration-300 group-hover:rotate-6" />
                   </span>
-                  <span className="text-[15px] font-semibold">
+                  <span className="text-sm sm:text-[15px] font-semibold">
                     {savingPassword ? 'Updating...' : 'Update Password'}
                   </span>
                 </span>
@@ -658,35 +644,36 @@ export default function ProfilePage() {
             </form>
           </div>
 
-          <div className="rounded-[30px] bg-white p-8 shadow-sm">
-            <div className="mb-8 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Bell size={20} />
+          {/* Recent Login Activity */}
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+            <div className="mb-6 sm:mb-8 flex items-center gap-3">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+                <Bell size={18} className="sm:hidden" />
+                <Bell size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-3xl font-bold text-slate-900">Recent Login Activity</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Recent Login Activity</h2>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {mockLoginActivity.map((item) => {
                 const Icon = item.icon
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-4 transition hover:bg-slate-100"
+                    className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3 sm:px-4 sm:py-4 transition hover:bg-slate-100"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-600 shadow-sm">
-                        <Icon size={20} />
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                      <div className="flex h-10 w-10 sm:h-11 sm:w-11 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-white text-slate-600 shadow-sm">
+                        <Icon size={18} className="sm:hidden" />
+                        <Icon size={20} className="hidden sm:block" />
                       </div>
-
-                      <div>
-                        <p className="font-semibold text-slate-900">{item.title}</p>
-                        <p className="text-sm text-slate-500">{item.subtitle}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm sm:text-base font-semibold text-slate-900 truncate">{item.title}</p>
+                        <p className="text-xs sm:text-sm text-slate-500 truncate">{item.subtitle}</p>
                       </div>
                     </div>
-
                     {item.current && (
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      <span className="ml-2 flex-shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                         CURRENT
                       </span>
                     )}
@@ -697,36 +684,38 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-[30px] border border-red-200 bg-red-50 px-8 py-8">
-          <div className="flex items-center justify-between gap-4">
+        {/* Delete Account */}
+        <div className="mt-6 rounded-[24px] sm:rounded-[30px] border border-red-200 bg-red-50 px-5 py-5 sm:px-8 sm:py-8">
+          <div className="flex flex-col gap-4 md:flex-row-1 lg:flex-row md:items-center md:justify-between md:gap-4">
             <div>
-              <h3 className="text-3xl font-bold text-red-600">Delete Account</h3>
-              <p className="mt-2 text-base text-slate-600">
+              <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">Delete Account</h3>
+              <p className="mt-2 text-sm sm:text-base text-slate-600">
                 Permanently remove your personal data and account access. This action cannot be undone.
               </p>
             </div>
-
-            <button className="rounded-2xl bg-red-600 px-6 py-4 text-base font-semibold text-white shadow-md transition hover:-translate-y-[1px] hover:bg-red-700 hover:shadow-lg">
+            <button className="self-start sm:self-auto flex-shrink-0 rounded-2xl bg-red-600 px-5 py-3 sm:px-6 sm:py-4 text-sm sm:text-base font-semibold text-white shadow-md transition hover:-translate-y-[1px] hover:bg-red-700 hover:shadow-lg">
               Deactivate Account
             </button>
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-between pb-4 text-sm text-slate-400">
+        {/* Footer */}
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 text-xs sm:text-sm text-slate-400">
           <p>© 2024 RetailFlow Enterprise. All rights reserved.</p>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-4 sm:gap-6">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
             <span>Security Overview</span>
           </div>
         </div>
 
-        <div className="mt-4">
+        {/* Logout */}
+        <div className="mt-4 pb-8">
           <button
             onClick={() => setShowLogoutModal(true)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
             Logout
           </button>
         </div>
