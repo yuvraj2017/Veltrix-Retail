@@ -389,7 +389,7 @@ export function ProductTable({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <FilterDropdown value={category} onChange={onCategoryChange} options={categoryOptions} placeholder="All Categories" />
           <FilterDropdown value={stockStatus} onChange={onStockStatusChange} options={stockOptions} placeholder="Stock Status" />
           <FilterDropdown value={sortBy} onChange={onSortChange} options={sortOptions} placeholder="Sort By" />
@@ -397,7 +397,7 @@ export function ProductTable({
       </div>
 
       {/* ══ CARDS — mobile & tablet (< lg) ════════════════════════════════════ */}
-      <div className="block lg:hidden px-4 sm:px-8 pb-6">
+      <div className="block sm:hidden px-4 sm:px-8 pb-6">
         {sortedProducts.length === 0 ? (
           <p className="py-16 text-center text-slate-500">No products found.</p>
         ) : (
@@ -408,7 +408,7 @@ export function ProductTable({
       </div>
 
       {/* ══ TABLE — desktop (≥ lg) ════════════════════════════════════════════ */}
-      <div className="hidden lg:block overflow-x-auto">
+      <div className="hidden sm:block overflow-x-auto">
         <div className="min-w-[900px]">
           {/* Header row */}
           <div className="grid grid-cols-[2.1fr_1fr_1.1fr_1fr_1.1fr_1fr_60px] border-t border-slate-100 px-8 py-5 text-xs font-semibold tracking-[0.18em] text-slate-500">

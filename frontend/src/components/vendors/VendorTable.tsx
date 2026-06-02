@@ -181,6 +181,7 @@ export default function VendorTable({
 }: VendorTableProps) {
   return (
     <section className="overflow-hidden rounded-[34px] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.06)]">
+      {/* Header Controls - stays responsive, wraps on mobile */}
       <div className="flex flex-col gap-4 px-6 pb-7 pt-7 xl:flex-row xl:items-center xl:justify-between">
         <div className="relative w-full xl:max-w-[460px]">
           <Search
@@ -216,146 +217,152 @@ export default function VendorTable({
         </div>
       </div>
 
-      <div className="hidden grid-cols-[1.35fr_0.95fr_0.8fr_1.25fr_1fr_0.7fr_0.3fr] px-8 py-5 text-[12px] font-black uppercase tracking-[0.2em] text-slate-500 lg:grid">
-        <div>Vendor Details</div>
-        <div>Contact Person</div>
-        <div>Phone</div>
-        <div>Email</div>
-        <div>Location</div>
-        <div>Status</div>
-        <div className="text-right">Action</div>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-4 px-6 pb-8">
-          {[1, 2, 3, 4, 5].map((item) => (
-            <div
-              key={item}
-              className="h-[96px] animate-pulse rounded-[26px] bg-slate-50"
-            />
-          ))}
-        </div>
-      ) : vendors.length === 0 ? (
-        <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
-          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)]">
-            <Store size={34} />
+      {/* Horizontal Scroll Container - preserves desktop layout on all screen sizes */}
+      <div className="overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 hover:scrollbar-thumb-slate-300">
+        <div className="min-w-[1100px]">
+          {/* Table Header - Desktop style preserved */}
+          <div className="grid grid-cols-[1.35fr_0.95fr_0.8fr_1.25fr_1fr_0.7fr_0.3fr] px-8 py-5 text-[12px] font-black uppercase tracking-[0.2em] text-slate-500">
+            <div>Vendor Details</div>
+            <div>Contact Person</div>
+            <div>Phone</div>
+            <div>Email</div>
+            <div>Location</div>
+            <div>Status</div>
+            <div className="text-right">Action</div>
           </div>
 
-          <h3 className="text-2xl font-black tracking-[-0.03em] text-slate-950">
-            No vendors found
-          </h3>
+          {isLoading ? (
+            <div className="space-y-4 px-6 pb-8">
+              {[1, 2, 3, 4, 5].map((item) => (
+                <div
+                  key={item}
+                  className="h-[96px] animate-pulse rounded-[26px] bg-slate-50"
+                />
+              ))}
+            </div>
+          ) : vendors.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
+              <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)]">
+                <Store size={34} />
+              </div>
 
-          <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">
-            Create your first vendor partner or adjust your search/filter to see
-            matching supply partners.
-          </p>
+              <h3 className="text-2xl font-black tracking-[-0.03em] text-slate-950">
+                No vendors found
+              </h3>
 
-          <button
-            onClick={onAddVendor}
-            className="mt-7 rounded-[20px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(79,70,229,0.26)] transition hover:-translate-y-[1px]"
-          >
-            Add Vendor
-          </button>
-        </div>
-      ) : (
-        <div className="px-4 pb-4">
-          {vendors.map((vendor, index) => {
-            const Icon = getVendorIcon(index)
+              <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">
+                Create your first vendor partner or adjust your search/filter to see
+                matching supply partners.
+              </p>
 
-            return (
-              <motion.button
-                key={vendor.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.035, duration: 0.32 }}
-                onClick={() => onVendorClick(vendor.id)}
-                className="group grid w-full grid-cols-1 items-center gap-4 rounded-[26px] px-4 py-5 text-left transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-[0_18px_42px_rgba(15,23,42,0.05)] lg:grid-cols-[1.35fr_0.95fr_0.8fr_1.25fr_1fr_0.7fr_0.3fr] lg:px-5"
+              <button
+                onClick={onAddVendor}
+                className="mt-7 rounded-[20px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(79,70,229,0.26)] transition hover:-translate-y-[1px]"
               >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] transition duration-300 group-hover:scale-105 group-hover:bg-gradient-to-br group-hover:from-indigo-500 group-hover:to-violet-600 group-hover:text-white">
-                    <Icon size={26} />
-                  </div>
+                Add Vendor
+              </button>
+            </div>
+          ) : (
+            <div className="px-4 pb-4">
+              {vendors.map((vendor, index) => {
+                const Icon = getVendorIcon(index)
 
-                  <div className="min-w-0">
-                    <h4 className="truncate text-lg font-black tracking-[-0.02em] text-slate-950">
-                      {getPrimaryName(vendor)}
-                    </h4>
-                    <p className="mt-1 truncate text-sm font-medium text-slate-500">
-                      {getSecondaryName(vendor)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-[15px] font-medium text-slate-700">
-                  {vendor.vendor_name || 'Not added'}
-                </div>
-
-                <div className="inline-flex items-center gap-2 text-[15px] font-medium text-slate-600">
-                  <Phone size={15} className="text-slate-400" />
-                  {vendor.phone || '—'}
-                </div>
-
-                <div className="flex min-w-0 items-center gap-2 text-[15px] font-medium text-slate-600">
-                  <Mail size={16} className="shrink-0 text-slate-400" />
-                  <span className="truncate">{vendor.email || 'No email'}</span>
-                </div>
-
-                <div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
-                    <MapPin size={13} />
-                    {formatLocation(vendor)}
-                  </span>
-                </div>
-
-                <div>
-                  <span
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${
-                      vendor.is_active
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-rose-50 text-rose-700'
-                    }`}
+                return (
+                  <motion.button
+                    key={vendor.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.035, duration: 0.32 }}
+                    onClick={() => onVendorClick(vendor.id)}
+                    className="group grid w-full grid-cols-[1.35fr_0.95fr_0.8fr_1.25fr_1fr_0.7fr_0.3fr] items-center gap-4 rounded-[26px] px-4 py-5 text-left transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-[0_18px_42px_rgba(15,23,42,0.05)] lg:px-5"
                   >
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        vendor.is_active ? 'bg-emerald-500' : 'bg-rose-500'
-                      }`}
-                    />
-                    {vendor.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] bg-gradient-to-br from-indigo-50 to-violet-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] transition duration-300 group-hover:scale-105 group-hover:bg-gradient-to-br group-hover:from-indigo-500 group-hover:to-violet-600 group-hover:text-white">
+                        <Icon size={26} />
+                      </div>
 
-                <div className="flex justify-end">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition duration-300 group-hover:bg-indigo-600 group-hover:text-white">
-                    <ArrowRight size={19} />
-                  </div>
-                </div>
-              </motion.button>
-            )
-          })}
+                      <div className="min-w-0">
+                        <h4 className="truncate text-lg font-black tracking-[-0.02em] text-slate-950">
+                          {getPrimaryName(vendor)}
+                        </h4>
+                        <p className="mt-1 truncate text-sm font-medium text-slate-500">
+                          {getSecondaryName(vendor)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-[15px] font-medium text-slate-700">
+                      {vendor.vendor_name || 'Not added'}
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 text-[15px] font-medium text-slate-600">
+                      <Phone size={15} className="text-slate-400" />
+                      {vendor.phone || '—'}
+                    </div>
+
+                    <div className="flex min-w-0 items-center gap-2 text-[15px] font-medium text-slate-600">
+                      <Mail size={16} className="shrink-0 text-slate-400" />
+                      <span className="truncate">{vendor.email || 'No email'}</span>
+                    </div>
+
+                    <div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+                        <MapPin size={13} />
+                        {formatLocation(vendor)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${
+                          vendor.is_active
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-rose-50 text-rose-700'
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            vendor.is_active ? 'bg-emerald-500' : 'bg-rose-500'
+                          }`}
+                        />
+                        {vendor.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition duration-300 group-hover:bg-indigo-600 group-hover:text-white">
+                        <ArrowRight size={19} />
+                      </div>
+                    </div>
+                  </motion.button>
+                )
+              })}
+            </div>
+          )}
+
+          {!isLoading && vendors.length > 0 && (
+            <div className="flex flex-col gap-4 px-8 py-6 text-[14px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                Showing{' '}
+                <span className="font-black text-slate-950">
+                  1-{vendors.length}
+                </span>{' '}
+                of <span className="font-black text-slate-950">{totalVendors}</span>{' '}
+                vendors
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button className="rounded-xl px-4 py-2 font-semibold transition hover:bg-slate-100">
+                  Previous
+                </button>
+                <button className="rounded-xl px-4 py-2 font-semibold transition hover:bg-slate-100">
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {!isLoading && vendors.length > 0 && (
-        <div className="flex flex-col gap-4 px-8 py-6 text-[14px] text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            Showing{' '}
-            <span className="font-black text-slate-950">
-              1-{vendors.length}
-            </span>{' '}
-            of <span className="font-black text-slate-950">{totalVendors}</span>{' '}
-            vendors
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button className="rounded-xl px-4 py-2 font-semibold transition hover:bg-slate-100">
-              Previous
-            </button>
-            <button className="rounded-xl px-4 py-2 font-semibold transition hover:bg-slate-100">
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      </div>
     </section>
   )
 }

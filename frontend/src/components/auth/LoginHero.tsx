@@ -367,7 +367,7 @@ const DashboardCard = memo(() => (
 
         <StatsGrid />
 
-        <div style={{ display:'grid', gridTemplateColumns:'1.2fr 0.8fr', gap:'0.625rem' }}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_0.8fr]">
           <WeeklyBarChart />
           <OpsFlow />
         </div>
