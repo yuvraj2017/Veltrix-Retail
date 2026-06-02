@@ -1,6 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ImagePlus,  Trash2, UploadCloud, Plus, ArrowUpRight } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  ImagePlus,
+  Trash2,
+  UploadCloud,
+  Plus,
+  ArrowUpRight,
+  ChevronDown,
+  Check,
+} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
@@ -20,10 +28,14 @@ export default function AddProductPage() {
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
   const [images, setImages] = useState<PreviewImage[]>([])
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false)
+  const categoryDropdownRef = useRef<HTMLDivElement | null>(null)
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -44,11 +56,27 @@ export default function AddProductPage() {
     },
   })
 
+  const selectedCategory = watch('category')
+
   useEffect(() => {
     return () => {
       images.forEach((image) => URL.revokeObjectURL(image.url))
     }
   }, [images])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsCategoryOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const addFiles = (fileList: FileList | null) => {
     if (!fileList) return
@@ -105,15 +133,7 @@ export default function AddProductPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
-
-        {/* ── Header ──
-            sm/md   : stacked (title full-width, buttons in 2-col grid)
-            lg      : still stacked — tablet-like layout (no flex row at lg)
-            xl+     : single row, title left — buttons right (desktop layout restored)
-        */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-x-4 gap-y-3 sm:mb-8 xl:flex-nowrap xl:items-center">
-
-          {/* Title — full width until xl */}
           <div className="w-full xl:w-auto">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
               Add Product
@@ -123,13 +143,7 @@ export default function AddProductPage() {
             </p>
           </div>
 
-          {/* Buttons
-              xs–lg : full-width 2-column grid (tablet-like, including laptop)
-              xl+   : shrink-to-fit flex row (desktop)
-          */}
           <div className="grid w-full grid-cols-2 gap-2 xl:flex xl:w-auto xl:shrink-0 xl:flex-nowrap xl:gap-3">
-
-            {/* Discard */}
             <button
               type="button"
               onClick={() => navigate('/products')}
@@ -153,7 +167,6 @@ export default function AddProductPage() {
               </span>
             </button>
 
-            {/* Save */}
             <button
               type="button"
               onClick={handleSubmit(onSubmit)}
@@ -179,23 +192,14 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        {/* ── Main Grid ──
-            Mobile/tablet/laptop (up to lg): single column, stacked
-            xl+: [1.9fr] left | [0.9fr] right, side by side (desktop restored)
-        */}
         <form className="grid grid-cols-1 gap-5 xl:grid-cols-[1.9fr_0.9fr] xl:gap-6">
-
-          {/* ──────────────── LEFT COLUMN ──────────────── */}
           <div className="flex flex-col gap-5">
-
-            {/* Basic Info */}
             <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 sm:p-7">
               <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Basic Info
               </p>
 
               <div className="space-y-4 sm:space-y-5">
-                {/* Product Name */}
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Product Name
@@ -210,7 +214,6 @@ export default function AddProductPage() {
                   )}
                 </div>
 
-                {/* Description */}
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Description
@@ -223,20 +226,64 @@ export default function AddProductPage() {
                   />
                 </div>
 
-                {/* Category + SKU — 1 col on mobile, 2 col on sm+ */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                       Category
                     </label>
-                    <select
-                      {...register('category')}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50"
-                    >
-                      {categories.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+
+                    <div ref={categoryDropdownRef} className="relative">
+                      <input type="hidden" {...register('category')} />
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCategoryOpen((prev) => !prev)}
+                        className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-800 shadow-sm outline-none transition-all duration-200 hover:border-slate-300 hover:bg-white focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.4)]" />
+                          <span className="truncate font-medium">{selectedCategory}</span>
+                        </div>
+                        <ChevronDown
+                          size={18}
+                          className={`shrink-0 text-slate-400 transition-transform duration-200 ${
+                            isCategoryOpen ? 'rotate-180 text-indigo-500' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {isCategoryOpen && (
+                        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)] ring-1 ring-slate-100">
+                          <div className="max-h-64 overflow-y-auto">
+                            {categories.map((category) => {
+                              const isSelected = selectedCategory === category
+
+                              return (
+                                <button
+                                  key={category}
+                                  type="button"
+                                  onClick={() => {
+                                    setValue('category', category, {
+                                      shouldDirty: true,
+                                      shouldValidate: true,
+                                    })
+                                    setIsCategoryOpen(false)
+                                  }}
+                                  className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-sm transition-colors ${
+                                    isSelected
+                                      ? 'bg-indigo-50 font-semibold text-indigo-700'
+                                      : 'text-slate-700 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <span>{category}</span>
+                                  {isSelected && <Check size={16} className="text-indigo-600" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -256,7 +303,6 @@ export default function AddProductPage() {
               </div>
             </section>
 
-            {/* Pricing + Inventory — 1 col on mobile, 2 col on md+ */}
             <input
               type="hidden"
               {...register('selling_price', {
@@ -264,9 +310,7 @@ export default function AddProductPage() {
               })}
             />
 
-            <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-5 lg:space-y-0">
-
-              {/* Pricing */}
+            <div className="space-y-5 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
               <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 sm:p-7">
                 <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Pricing
@@ -303,7 +347,6 @@ export default function AddProductPage() {
                 </div>
               </section>
 
-              {/* Inventory */}
               <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 sm:p-7">
                 <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Inventory
@@ -356,7 +399,6 @@ export default function AddProductPage() {
               </section>
             </div>
 
-            {/* API Error */}
             {apiError && (
               <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 ring-1 ring-red-100">
                 {apiError}
@@ -364,12 +406,8 @@ export default function AddProductPage() {
             )}
           </div>
 
-          {/* ──────────────── RIGHT COLUMN — Media ──────────────── */}
-          {/* xl+: sticky sidebar. lg and below: normal flow (stacked) */}
           <div className="xl:sticky xl:top-6 xl:self-start">
             <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100 sm:p-7">
-
-              {/* Header */}
               <div className="mb-5 flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Media
@@ -379,7 +417,6 @@ export default function AddProductPage() {
                 </span>
               </div>
 
-              {/* Upload Zone */}
               <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 px-5 py-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50/30 sm:py-10">
                 <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-indigo-500 shadow-sm ring-1 ring-slate-100 transition group-hover:scale-105 group-hover:ring-indigo-200">
                   <UploadCloud size={22} />
@@ -397,7 +434,6 @@ export default function AddProductPage() {
                 />
               </label>
 
-              {/* Gallery */}
               <div className="mt-5">
                 <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                   <ImagePlus size={14} className="text-indigo-500" />
@@ -409,10 +445,9 @@ export default function AddProductPage() {
                     {images.map((image, index) => (
                       <div
                         key={image.url}
-                        className={`group relative overflow-hidden rounded-xl border bg-slate-50 transition hover:-translate-y-0.5 hover:shadow-md ${index === 0
-                          ? 'border-indigo-300 ring-2 ring-indigo-100'
-                          : 'border-slate-200'
-                          }`}
+                        className={`group relative overflow-hidden rounded-xl border bg-slate-50 transition hover:-translate-y-0.5 hover:shadow-md ${
+                          index === 0 ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'
+                        }`}
                       >
                         <img
                           src={image.url}
@@ -441,7 +476,6 @@ export default function AddProductPage() {
                 )}
               </div>
 
-              {/* Tip */}
               <div className="mt-5 rounded-xl bg-indigo-50 p-4 text-xs text-indigo-700 ring-1 ring-indigo-100">
                 <div className="mb-2 flex items-center gap-2 font-semibold text-indigo-700">
                   <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-[0_0_10px_rgba(99,102,241,0.45)]" />
@@ -453,7 +487,6 @@ export default function AddProductPage() {
               </div>
             </section>
           </div>
-
         </form>
       </div>
     </AppShell>
