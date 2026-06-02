@@ -257,6 +257,13 @@ export default function AddProductPage() {
             </section>
 
             {/* Pricing + Inventory — 1 col on mobile, 2 col on md+ */}
+            <input
+              type="hidden"
+              {...register('selling_price', {
+                setValueAs: (value) => (value === '' ? 0 : Number(value)),
+              })}
+            />
+
             <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-5 lg:space-y-0">
 
               {/* Pricing */}
@@ -268,7 +275,6 @@ export default function AddProductPage() {
                   {[
                     { label: 'Buying Price', field: 'buying_price' as const },
                     { label: 'MRP (Retail)', field: 'mrp' as const },
-                    { label: 'Selling Price', field: 'selling_price' as const },
                   ].map(({ label, field }) => (
                     <div key={field}>
                       <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -279,9 +285,13 @@ export default function AddProductPage() {
                           ₹
                         </span>
                         <input
-                          type="number"
-                          step="0.01"
-                          {...register(field)}
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*[.]?[0-9]*"
+                          placeholder="0"
+                          {...register(field, {
+                            setValueAs: (value) => (value === '' ? 0 : Number(value)),
+                          })}
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-8 pr-4 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50"
                         />
                       </div>
@@ -304,8 +314,13 @@ export default function AddProductPage() {
                       Stock Quantity
                     </label>
                     <input
-                      type="number"
-                      {...register('stock_quantity')}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="0"
+                      {...register('stock_quantity', {
+                        setValueAs: (value) => (value === '' ? 0 : Number(value)),
+                      })}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50"
                     />
                     {errors.stock_quantity && (
@@ -317,8 +332,13 @@ export default function AddProductPage() {
                       Low Stock Threshold
                     </label>
                     <input
-                      type="number"
-                      {...register('low_stock_threshold')}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="5"
+                      {...register('low_stock_threshold', {
+                        setValueAs: (value) => (value === '' ? 0 : Number(value)),
+                      })}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50"
                     />
                   </div>
