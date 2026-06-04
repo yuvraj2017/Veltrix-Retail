@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Sparkles } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2,  } from 'lucide-react'
 
 import { AppShell } from '../components/layout/AppShell'
 import CustomerSelector from '../components/billing/CustomerSelector'

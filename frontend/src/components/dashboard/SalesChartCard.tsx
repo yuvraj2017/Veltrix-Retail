@@ -58,8 +58,8 @@ export function SalesChartCard({ points }: { points: SalesTrendPoint[] }) {
             {points.map((point, index) => {
               const isLast = index === points.length - 1
               const hBase = Math.max((point.value / maxValue) * CHART_H.base, 12)
-              const hSm   = Math.max((point.value / maxValue) * CHART_H.sm,   14)
-              const hLg   = Math.max((point.value / maxValue) * CHART_H.lg,   16)
+              // const hSm   = Math.max((point.value / maxValue) * CHART_H.sm,   14)
+              // const hLg   = Math.max((point.value / maxValue) * CHART_H.lg,   16)
 
               return (
                 <div
