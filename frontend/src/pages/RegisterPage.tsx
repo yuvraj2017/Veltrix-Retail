@@ -240,7 +240,7 @@ export default function RegisterPage() {
       setPreviewUrl('')
       setWhatsappNumber('')
       setShopAddress('')
-      navigate('/login')
+      navigate('/')
     } catch (error: any) {
       setApiError(error?.response?.data?.detail || 'Registration failed')
     } finally {
