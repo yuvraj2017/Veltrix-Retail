@@ -1,14 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   ArrowUpRight,
+  Check,
+  ChevronDown,
   PencilLine,
   Sparkles,
   Trash2,
   UploadCloud,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useEffect, useRef, useState } from 'react'
+import { Controller, useForm } from 'react-hook-form'
 import { deleteProductImage } from '../../features/products/api'
 import { productSchema, type ProductFormValues } from '../../features/products/schemas'
 import type { Product } from '../../features/products/types'
@@ -21,6 +23,84 @@ type PreviewImage = {
   file: File
   url: string
 }
+
+// ─── Category Dropdown ───────────────────────────────────────────────────────
+
+function CategoryDropdown({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleSelect = (cat: string) => {
+    onChange(cat)
+    setIsOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`flex w-full items-center gap-3 rounded-[18px] border px-4 py-4 text-left transition-all duration-200
+          bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100
+          ${
+            isOpen
+              ? 'border-indigo-400 dark:border-indigo-500 ring-4 ring-indigo-100 dark:ring-indigo-900/40'
+              : 'border-slate-300 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500 hover:ring-4 hover:ring-indigo-100 dark:hover:ring-indigo-900/40'
+          }`}
+      >
+        <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-indigo-500" />
+        <span className="flex-1 text-[15px] font-medium">{value}</span>
+        <ChevronDown
+          size={18}
+          className={`text-indigo-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown panel */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[18px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <div className="flex flex-col gap-0.5 p-1.5">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => handleSelect(cat)}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-[15px] text-left transition-colors duration-100
+                  ${
+                    cat === value
+                      ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-medium'
+                      : 'text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400'
+                  }`}
+              >
+                <span>{cat}</span>
+                {cat === value && <Check size={16} className="text-indigo-500" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Edit Product Modal ───────────────────────────────────────────────────────
 
 export function EditProductModal({
   product,
@@ -41,6 +121,7 @@ export function EditProductModal({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -112,13 +193,13 @@ export function EditProductModal({
       : product.main_image_url
     : null
 
-  // Shared input class
   const inputClass =
     'w-full rounded-2xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 py-4 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900/40'
 
   const labelClass = 'mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300'
 
-  const sectionHeadingClass = 'text-sm font-semibold tracking-[0.14em] text-slate-700 dark:text-slate-300'
+  const sectionHeadingClass =
+    'text-sm font-semibold tracking-[0.14em] text-slate-700 dark:text-slate-300'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 px-4 py-6 backdrop-blur-sm">
@@ -143,7 +224,9 @@ export function EditProductModal({
         </div>
 
         <form
-          onSubmit={handleSubmit((values) => onSubmit(values, newImages.map((item) => item.file)))}
+          onSubmit={handleSubmit((values) =>
+            onSubmit(values, newImages.map((item) => item.file))
+          )}
           className="grid grid-cols-[1.5fr_1fr] gap-8 px-8 py-8"
         >
           {/* ── Left column ── */}
@@ -152,20 +235,29 @@ export function EditProductModal({
               <p className={`mb-5 ${sectionHeadingClass}`}>PRODUCT DETAILS</p>
 
               <div className="space-y-5">
+                {/* Product title */}
                 <div>
                   <label className={labelClass}>PRODUCT TITLE</label>
                   <input {...register('name')} className={inputClass} />
-                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+                  {errors.name && (
+                    <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>
+                  )}
                 </div>
 
+                {/* Category + SKU */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>CATEGORY</label>
-                    <select {...register('category')} className={inputClass}>
-                      {categories.map((item) => (
-                        <option key={item} value={item}>{item}</option>
-                      ))}
-                    </select>
+                    <Controller
+                      name="category"
+                      control={control}
+                      render={({ field }) => (
+                        <CategoryDropdown value={field.value} onChange={field.onChange} />
+                      )}
+                    />
+                    {errors.category && (
+                      <p className="mt-1 text-xs text-red-500">{errors.category.message}</p>
+                    )}
                   </div>
                   <div>
                     <label className={labelClass}>SKU ID</label>
@@ -173,6 +265,7 @@ export function EditProductModal({
                   </div>
                 </div>
 
+                {/* Description */}
                 <div>
                   <label className={labelClass}>DESCRIPTION</label>
                   <textarea {...register('description')} rows={4} className={inputClass} />
@@ -186,15 +279,11 @@ export function EditProductModal({
                 <p className={sectionHeadingClass}>PRICING</p>
                 <div>
                   <label className={labelClass}>BUYING PRICE</label>
-                  <input type="number" step="0.01" {...register('buying_price')} className={inputClass} />
+                  <input type="text" step="0.01" {...register('buying_price')} className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>MRP (RETAIL)</label>
-                  <input type="number" step="0.01" {...register('mrp')} className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>SELLING PRICE</label>
-                  <input type="number" step="0.01" {...register('selling_price')} className={inputClass} />
+                  <input type="text" step="0.01" {...register('mrp')} className={inputClass} />
                 </div>
               </div>
 
@@ -203,11 +292,11 @@ export function EditProductModal({
                 <p className={sectionHeadingClass}>INVENTORY</p>
                 <div>
                   <label className={labelClass}>STOCK QUANTITY</label>
-                  <input type="number" {...register('stock_quantity')} className={inputClass} />
+                  <input type="text" {...register('stock_quantity')} className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>LOW STOCK ALERT</label>
-                  <input type="number" {...register('low_stock_threshold')} className={inputClass} />
+                  <input type="text" {...register('low_stock_threshold')} className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>UNIT</label>
@@ -252,7 +341,11 @@ export function EditProductModal({
                     key={image.id}
                     className="group relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 transition hover:shadow-md"
                   >
-                    <img src={src} alt="Product" className="h-20 w-full object-cover transition duration-300 group-hover:scale-105" />
+                    <img
+                      src={src}
+                      alt="Product"
+                      className="h-20 w-full object-cover transition duration-300 group-hover:scale-105"
+                    />
                     {image.is_main && (
                       <span className="absolute left-2 top-2 rounded-full bg-indigo-600 px-2 py-1 text-[10px] font-semibold uppercase text-white">
                         Main
@@ -275,7 +368,11 @@ export function EditProductModal({
                   key={image.url}
                   className="group relative overflow-hidden rounded-2xl border border-indigo-200 dark:border-indigo-700 bg-slate-50 dark:bg-slate-800 ring-2 ring-indigo-100 dark:ring-indigo-900"
                 >
-                  <img src={image.url} alt="New upload" className="h-20 w-full object-cover transition duration-300 group-hover:scale-105" />
+                  <img
+                    src={image.url}
+                    alt="New upload"
+                    className="h-20 w-full object-cover transition duration-300 group-hover:scale-105"
+                  />
                   <button
                     type="button"
                     onClick={() => removeNewImage(index)}
@@ -319,7 +416,10 @@ export function EditProductModal({
                 <Sparkles size={16} />
                 Smart assistant
               </div>
-              <p>Existing images can now be removed directly. Newly added images can be previewed before saving.</p>
+              <p>
+                Existing images can now be removed directly. Newly added images can be previewed
+                before saving.
+              </p>
             </div>
           </div>
 
@@ -342,7 +442,10 @@ export function EditProductModal({
               <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
               <span className="relative flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/18 ring-1 ring-white/25 backdrop-blur-sm">
-                  <PencilLine size={18} className="transition-transform duration-300 group-hover:rotate-12" />
+                  <PencilLine
+                    size={18}
+                    className="transition-transform duration-300 group-hover:rotate-12"
+                  />
                 </span>
                 <span className="flex flex-col items-start leading-none">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/75">

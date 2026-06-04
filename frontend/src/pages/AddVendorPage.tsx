@@ -5,7 +5,9 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft,
   Building2,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Info,
   Loader2,
@@ -13,11 +15,98 @@ import {
   Save,
   UserRound,
 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 import { AppShell } from '../components/layout/AppShell'
 import { vendorsApi } from '../features/vendors/api'
 import { vendorSchema } from '../features/vendors/schemas'
 import type { VendorCreatePayload } from '../features/vendors/types'
+
+// ── Status Dropdown ───────────────────────────────────────────────────────────
+
+const statusOptions = [
+  { value: 'active', label: 'Active', color: 'bg-emerald-500' },
+  { value: 'inactive', label: 'Inactive', color: 'bg-slate-400' },
+]
+
+function StatusDropdown({
+  value,
+  onChange,
+}: {
+  value: 'active' | 'inactive'
+  onChange: (value: 'active' | 'inactive') => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const selected = statusOptions.find((o) => o.value === value) ?? statusOptions[0]
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`flex h-12 sm:h-14 w-full items-center gap-3 rounded-[18px] sm:rounded-[20px] border px-4 text-left transition-all duration-300
+          bg-slate-50/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-100
+          ${
+            isOpen
+              ? 'border-indigo-300 dark:border-indigo-600 shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:shadow-[0_0_0_5px_rgba(99,102,241,0.08)] bg-white dark:bg-slate-800 -translate-y-[1px]'
+              : 'border-indigo-100/80 dark:border-indigo-800/40 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:hover:shadow-[0_0_0_5px_rgba(99,102,241,0.08)] hover:bg-white dark:hover:bg-slate-800 hover:-translate-y-[1px]'
+          }`}
+      >
+        <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selected.color}`} />
+        <span className="flex-1 text-[15px] font-semibold">{selected.label}</span>
+        <ChevronDown
+          size={18}
+          className={`text-indigo-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown panel */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[18px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <div className="flex flex-col gap-0.5 p-1.5">
+            {statusOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(option.value as 'active' | 'inactive')
+                  setIsOpen(false)
+                }}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] text-left transition-colors duration-100
+                  ${
+                    option.value === value
+                      ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-semibold'
+                      : 'text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400'
+                  }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <span className={`h-2.5 w-2.5 rounded-full ${option.color}`} />
+                  {option.label}
+                </span>
+                {option.value === value && <Check size={16} className="text-indigo-500" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AddVendorPage() {
   const navigate = useNavigate()
@@ -83,7 +172,6 @@ export default function AddVendorPage() {
       const created = await vendorsApi.createVendor(vendorPayload)
 
       navigate(`/vendors/${created.id}`)
-
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save vendor'
@@ -95,7 +183,6 @@ export default function AddVendorPage() {
 
   return (
     <AppShell>
-      {/* Constrain max width; horizontal padding scales with screen size */}
       <div className="mx-auto max-w-[1600px] px-4 mt-2 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -117,26 +204,21 @@ export default function AddVendorPage() {
           {/* Page header */}
           <div className="mb-7 flex flex-col gap-4 sm:mb-9 sm:gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0">
-              {/* Breadcrumb badge */}
               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl sm:mb-4 sm:px-4 sm:py-2 sm:text-[11px]
                 dark:border-indigo-800/50 dark:bg-slate-800/70 dark:text-indigo-400 dark:shadow-[0_12px_30px_rgba(99,102,241,0.04)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 sm:h-2 sm:w-2 dark:bg-indigo-400" />
                 Vendors › Add New Vendor
               </div>
 
-              {/* Responsive heading */}
-              <h1 className="text-[32px] font-black tracking-[-0.04em] text-slate-950 sm:text-[42px] md:text-[56px]
-                dark:text-white">
+              <h1 className="text-[32px] font-black tracking-[-0.04em] text-slate-950 sm:text-[42px] md:text-[56px] dark:text-white">
                 Vendor Onboarding
               </h1>
 
-              <p className="mt-2 max-w-2xl text-[15px] leading-7 text-slate-600 sm:mt-3 sm:text-[18px] sm:leading-8
-                dark:text-slate-400">
+              <p className="mt-2 max-w-2xl text-[15px] leading-7 text-slate-600 sm:mt-3 sm:text-[18px] sm:leading-8 dark:text-slate-400">
                 Configure your vendor ecosystem with financial terms, approval workflows, and intelligent billing automation.
               </p>
             </div>
 
-            {/* Guided-setup badge */}
             <div className="hidden shrink-0 rounded-[28px] bg-white/70 p-4 shadow-[0_18px_48px_rgba(99,102,241,0.08)] backdrop-blur-xl lg:block
               dark:bg-slate-800/70 dark:shadow-[0_18px_48px_rgba(99,102,241,0.04)]">
               <div className="flex items-center gap-3">
@@ -211,22 +293,15 @@ export default function AddVendorPage() {
                     placeholder="7"
                   />
 
+                  {/* ── Custom Status Dropdown ── */}
                   <label className="space-y-2">
                     <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
                       Vendor Status
                     </span>
-
-                    <select
+                    <StatusDropdown
                       value={form.is_active ? 'active' : 'inactive'}
-                      onChange={(event) =>
-                        updateField('is_active', event.target.value === 'active')
-                      }
-                      className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] font-semibold text-slate-800 outline-none transition-all duration-300 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]
-                        dark:border-indigo-800/40 dark:bg-slate-800/90 dark:text-slate-100 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
+                      onChange={(val) => updateField('is_active', val === 'active')}
+                    />
                   </label>
                 </div>
               </div>
@@ -417,7 +492,7 @@ export default function AddVendorPage() {
                 </p>
               </div>
 
-              {/* Promo card — gradient, no dark changes needed */}
+              {/* Promo card */}
               <div className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-[#1a087a] via-[#2910a8] to-[#4f46e5] p-7 text-white shadow-[0_28px_70px_rgba(49,46,129,0.28)]">
                 <ClipboardCheck size={38} className="mb-20 opacity-85" />
 
