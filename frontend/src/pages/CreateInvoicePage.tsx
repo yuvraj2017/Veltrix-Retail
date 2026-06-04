@@ -33,20 +33,13 @@ const emptyCustomer: CustomerPayload = {
 
 function splitName(fullName?: string | null) {
   const value = (fullName || '').trim()
-  if (!value) {
-    return { first_name: '', last_name: '' }
-  }
-
+  if (!value) return { first_name: '', last_name: '' }
   const parts = value.split(' ')
-  return {
-    first_name: parts[0] || '',
-    last_name: parts.slice(1).join(' '),
-  }
+  return { first_name: parts[0] || '', last_name: parts.slice(1).join(' ') }
 }
 
 function mapInvoiceToCustomer(invoice: Invoice): CustomerPayload {
   const nameParts = splitName(invoice.customer_name_snapshot)
-
   return {
     id: invoice.customer_id ?? null,
     first_name: nameParts.first_name,
@@ -109,39 +102,30 @@ export default function CreateInvoicePage() {
     const discount = items.reduce((sum, item) => sum + item.total_discount_amount, 0)
     const tax = 0
     const final = subtotal - discount + tax
-
-    return {
-      subtotal,
-      discount,
-      tax,
-      final,
-    }
+    return { subtotal, discount, tax, final }
   }, [items])
 
-  const buildPayload = (): InvoiceCreatePayload => {
-    return {
-      customer,
-      items: items.map((item) => ({
-        product_id: item.product_id,
-        product_code: item.product_code,
-        quantity: item.quantity,
-        discount_percentage: item.discount_percentage,
-        discount_amount_per_unit: item.discount_amount_per_unit,
-        selling_price_per_unit: item.selling_price_per_unit,
-      })),
-      invoice_date: invoiceDate,
-      payment_status: paymentStatus,
-      payment_mode: paymentMode || null,
-      paid_amount: paidAmount,
-      total_tax_amount: totals.tax,
-      invoice_status: 'saved',
-      notes,
-    }
-  }
+  const buildPayload = (): InvoiceCreatePayload => ({
+    customer,
+    items: items.map((item) => ({
+      product_id: item.product_id,
+      product_code: item.product_code,
+      quantity: item.quantity,
+      discount_percentage: item.discount_percentage,
+      discount_amount_per_unit: item.discount_amount_per_unit,
+      selling_price_per_unit: item.selling_price_per_unit,
+    })),
+    invoice_date: invoiceDate,
+    payment_status: paymentStatus,
+    payment_mode: paymentMode || null,
+    paid_amount: paidAmount,
+    total_tax_amount: totals.tax,
+    invoice_status: 'saved',
+    notes,
+  })
 
   const normalizePayload = (payload: InvoiceCreatePayload): InvoiceCreatePayload => {
     const parsed = invoiceCreateSchema.parse(payload)
-
     return {
       customer: {
         id: parsed.customer.id ?? null,
@@ -175,13 +159,10 @@ export default function CreateInvoicePage() {
 
   const loadInvoiceForEdit = async () => {
     if (!isEditMode || !editInvoiceId) return
-
     try {
       setIsLoadingInvoice(true)
       setErrorMessage('')
-
       const data = await billingApi.getInvoice(editInvoiceId)
-
       setCustomer(mapInvoiceToCustomer(data))
       setItems((data.items || []).map(mapInvoiceItemToLocalItem))
       setPaidAmount(Number(data.paid_amount || 0))
@@ -206,25 +187,18 @@ export default function CreateInvoicePage() {
     try {
       setErrorMessage('')
       setSuccessMessage('')
-
       const payload = buildPayload()
       const parsed = invoiceCreateSchema.safeParse(payload)
-
       if (!parsed.success) {
-        setErrorMessage(
-          parsed.error.issues[0]?.message || 'Please check invoice details'
-        )
+        setErrorMessage(parsed.error.issues[0]?.message || 'Please check invoice details')
         return
       }
-
       setIsSaving(true)
-
       const normalizedPayload = normalizePayload(payload)
-
-      const invoice = isEditMode && editInvoiceId
-        ? await billingApi.updateInvoice(editInvoiceId, normalizedPayload)
-        : await billingApi.createInvoice(normalizedPayload)
-
+      const invoice =
+        isEditMode && editInvoiceId
+          ? await billingApi.updateInvoice(editInvoiceId, normalizedPayload)
+          : await billingApi.createInvoice(normalizedPayload)
       navigate(`/billing/${invoice.id}/preview`)
     } catch (error) {
       setErrorMessage(
@@ -243,10 +217,7 @@ export default function CreateInvoicePage() {
     const payload = buildPayload()
     localStorage.setItem(
       'billing_invoice_draft',
-      JSON.stringify({
-        ...payload,
-        edit_invoice_id: editInvoiceId,
-      })
+      JSON.stringify({ ...payload, edit_invoice_id: editInvoiceId })
     )
     setSuccessMessage(
       isEditMode
@@ -259,8 +230,8 @@ export default function CreateInvoicePage() {
     return (
       <AppShell>
         <div className="mx-auto max-w-[1200px]">
-          <div className="flex min-h-[520px] items-center justify-center rounded-[34px] bg-white/80">
-            <Loader2 size={34} className="animate-spin text-indigo-600" />
+          <div className="flex min-h-[520px] items-center justify-center rounded-[34px] bg-white/80 dark:bg-slate-800/80">
+            <Loader2 size={34} className="animate-spin text-indigo-600 dark:text-indigo-400" />
           </div>
         </div>
       </AppShell>
@@ -269,16 +240,17 @@ export default function CreateInvoicePage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-[1600px]">
+      <div className="mx-auto mt-2 max-w-[1600px]">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: 'easeOut' }}
         >
+          {/* Back button */}
           <button
             type="button"
             onClick={() => navigate('/billing')}
-            className="mb-6 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 bg-white/75 px-4 py-2.5 text-sm font-black text-slate-700 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700"
+            className="mb-6 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 dark:border-slate-700 bg-white/75 dark:bg-slate-800/75 px-4 py-2.5 text-sm font-black text-slate-700 dark:text-slate-300 shadow-[0_12px_30px_rgba(99,102,241,0.08)] dark:shadow-[0_12px_30px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700 dark:hover:text-indigo-400"
           >
             <ArrowLeft size={17} />
             Back to Billing
@@ -286,34 +258,37 @@ export default function CreateInvoicePage() {
 
           <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
-                <Sparkles size={14} />
+              {/* Badge */}
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 dark:border-indigo-800 bg-white/70 dark:bg-indigo-950/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 dark:text-indigo-400 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
+            
                 Billing › {isEditMode ? 'Edit Invoice' : 'New Invoice'}
               </div>
 
-              <h1 className="text-[42px] font-black tracking-[-0.04em] text-slate-950 md:text-[56px]">
+              <h1 className="text-[42px] font-black tracking-[-0.04em] text-slate-950 dark:text-white md:text-[56px]">
                 {isEditMode ? 'Edit Invoice' : 'Create New Invoice'}
               </h1>
 
-              <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600">
+              <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600 dark:text-slate-400">
                 {isEditMode
                   ? 'Update customer details, products, discount, and payment information for this invoice.'
                   : 'Select a customer, add products by code, apply discounts, and generate a clean invoice.'}
               </p>
             </div>
 
-            <div className="hidden items-center gap-4 rounded-[28px] bg-white/80 p-4 shadow-[0_18px_48px_rgba(99,102,241,0.08)] backdrop-blur-xl lg:flex">
+            {/* Steps indicator */}
+            <div className="hidden items-center gap-4 rounded-[28px] bg-white/80 dark:bg-slate-800/80 p-4 shadow-[0_18px_48px_rgba(99,102,241,0.08)] dark:shadow-[0_18px_48px_rgba(0,0,0,0.2)] backdrop-blur-xl lg:flex">
               <Step active number="1" label="Details" />
-              <div className="h-px w-16 bg-slate-200" />
+              <div className="h-px w-16 bg-slate-200 dark:bg-slate-700" />
               <Step number="2" label="Review" />
-              <div className="h-px w-16 bg-slate-200" />
+              <div className="h-px w-16 bg-slate-200 dark:bg-slate-700" />
               <Step number="3" label="Payment" />
             </div>
           </div>
 
+          {/* Error banner */}
           {errorMessage && (
-            <div className="mb-6 flex items-start gap-3 rounded-[24px] border border-red-100 bg-red-50 p-5 text-red-700">
-              <AlertCircle size={20} className="mt-0.5" />
+            <div className="mb-6 flex items-start gap-3 rounded-[24px] border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 p-5 text-red-700 dark:text-red-400">
+              <AlertCircle size={20} className="mt-0.5 shrink-0" />
               <div>
                 <p className="font-black">
                   {isEditMode ? 'Unable to update invoice' : 'Unable to create invoice'}
@@ -323,9 +298,10 @@ export default function CreateInvoicePage() {
             </div>
           )}
 
+          {/* Success banner */}
           {successMessage && (
-            <div className="mb-6 flex items-start gap-3 rounded-[24px] border border-emerald-100 bg-emerald-50 p-5 text-emerald-700">
-              <CheckCircle2 size={20} className="mt-0.5" />
+            <div className="mb-6 flex items-start gap-3 rounded-[24px] border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 p-5 text-emerald-700 dark:text-emerald-400">
+              <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
               <div>
                 <p className="font-black">Saved</p>
                 <p className="mt-1 text-sm">{successMessage}</p>
@@ -374,17 +350,19 @@ function Step({
   return (
     <div className="flex items-center gap-3">
       <div
-        className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-black ${
+        className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-black transition-colors ${
           active
             ? 'bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg'
-            : 'bg-slate-100 text-slate-400'
+            : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
         }`}
       >
         {number}
       </div>
       <span
-        className={`text-sm font-black ${
-          active ? 'text-indigo-700' : 'text-slate-400'
+        className={`text-sm font-black transition-colors ${
+          active
+            ? 'text-indigo-700 dark:text-indigo-400'
+            : 'text-slate-400 dark:text-slate-500'
         }`}
       >
         {label}

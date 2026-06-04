@@ -1,10 +1,5 @@
 import { motion } from 'framer-motion'
-import {
-  Handshake,
-  ReceiptText,
-  TimerReset,
-  TrendingUp,
-} from 'lucide-react'
+import { Handshake, ReceiptText, TimerReset, TrendingUp } from 'lucide-react'
 
 type VendorStatsProps = {
   activeVendors: number
@@ -32,8 +27,8 @@ export default function VendorStats({
       icon: Handshake,
       iconTone: 'from-indigo-500 to-violet-600',
       cardTone:
-        'from-white via-indigo-50/35 to-white shadow-[0_22px_60px_rgba(99,102,241,0.10)]',
-      helperClass: 'text-emerald-600',
+        'from-white via-indigo-50/35 to-white dark:from-slate-800 dark:via-indigo-950/40 dark:to-slate-800 shadow-[0_22px_60px_rgba(99,102,241,0.10)] dark:shadow-[0_22px_60px_rgba(99,102,241,0.08)]',
+      helperClass: 'text-emerald-600 dark:text-emerald-400',
       type: 'growth',
     },
     {
@@ -43,8 +38,8 @@ export default function VendorStats({
       icon: ReceiptText,
       iconTone: 'from-violet-500 to-indigo-600',
       cardTone:
-        'from-white via-violet-50/45 to-white shadow-[0_22px_60px_rgba(124,58,237,0.10)]',
-      helperClass: 'text-slate-500',
+        'from-white via-violet-50/45 to-white dark:from-slate-800 dark:via-violet-950/40 dark:to-slate-800 shadow-[0_22px_60px_rgba(124,58,237,0.10)] dark:shadow-[0_22px_60px_rgba(124,58,237,0.08)]',
+      helperClass: 'text-slate-500 dark:text-slate-400',
       type: 'progress',
     },
     {
@@ -54,8 +49,8 @@ export default function VendorStats({
       icon: TimerReset,
       iconTone: 'from-orange-400 to-rose-500',
       cardTone:
-        'from-white via-orange-50/55 to-white shadow-[0_22px_60px_rgba(249,115,22,0.10)]',
-      helperClass: 'text-slate-500',
+        'from-white via-orange-50/55 to-white dark:from-slate-800 dark:via-orange-950/30 dark:to-slate-800 shadow-[0_22px_60px_rgba(249,115,22,0.10)] dark:shadow-[0_22px_60px_rgba(249,115,22,0.08)]',
+      helperClass: 'text-slate-500 dark:text-slate-400',
       type: 'avatars',
     },
   ]
@@ -82,16 +77,15 @@ export default function VendorStats({
             }}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.38, ease: 'easeOut' }}
-            className={`group relative min-h-[190px] overflow-hidden rounded-[32px] bg-gradient-to-br ${stat.cardTone} p-7 backdrop-blur-xl transition-all duration-300`}
+            className={`group relative min-h-[190px] overflow-hidden rounded-[32px] bg-gradient-to-br border border-slate-100 dark:border-slate-700/60 ${stat.cardTone} p-7 backdrop-blur-xl transition-all duration-300`}
           >
             <div className="relative z-10 flex h-full flex-col justify-between">
               <div className="flex items-start justify-between gap-5">
                 <div>
-                  <p className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  <p className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
                     {stat.label}
                   </p>
-
-                  <h3 className="mt-5 text-[42px] font-black leading-none tracking-[-0.055em] text-slate-950">
+                  <h3 className="mt-5 text-[42px] font-black leading-none tracking-[-0.055em] text-slate-950 dark:text-slate-100">
                     {stat.value}
                   </h3>
                 </div>
@@ -105,7 +99,7 @@ export default function VendorStats({
 
               <div className="mt-6">
                 {stat.type === 'growth' && (
-                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-black text-emerald-600">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 dark:bg-emerald-950 px-3 py-1.5 text-sm font-black text-emerald-600 dark:text-emerald-400">
                     <TrendingUp size={15} />
                     {stat.helper}
                   </div>
@@ -116,8 +110,7 @@ export default function VendorStats({
                     <p className={`text-sm font-semibold ${stat.helperClass}`}>
                       {stat.helper}
                     </p>
-
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200/80">
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: '68%' }}
@@ -133,16 +126,14 @@ export default function VendorStats({
                     <p className={`text-sm font-semibold ${stat.helperClass}`}>
                       {stat.helper}
                     </p>
-
                     <div className="mt-4 flex items-center">
                       {[0, 1, 2, 3].map((item) => (
                         <div
                           key={item}
-                          className="-ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 shadow-[0_0_0_4px_rgba(255,255,255,0.9)] first:ml-0"
+                          className="-ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 shadow-[0_0_0_4px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_4px_rgba(30,41,59,0.9)] first:ml-0"
                         />
                       ))}
-
-                      <div className="-ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-violet-100 text-[10px] font-black text-indigo-700 shadow-[0_0_0_4px_rgba(255,255,255,0.9)]">
+                      <div className="-ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-violet-100 dark:from-indigo-900 dark:to-violet-900 text-[10px] font-black text-indigo-700 dark:text-indigo-300 shadow-[0_0_0_4px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_4px_rgba(30,41,59,0.9)]">
                         +{Math.max(1, pendingBills)}
                       </div>
                     </div>
@@ -151,8 +142,7 @@ export default function VendorStats({
               </div>
             </div>
 
-
-            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-white/80 blur-3xl" />
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-white/80 dark:bg-slate-700/30 blur-3xl" />
           </motion.div>
         )
       })}

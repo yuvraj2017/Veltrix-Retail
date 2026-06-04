@@ -72,11 +72,11 @@ function splitFullName(fullName: string | null | undefined) {
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      {/* Desktop: sm text label; Mobile: xs */}
-      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
+      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
         {label}
       </label>
-      <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-700">
+      <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:py-4 text-sm sm:text-base text-slate-700
+        dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
         {value || '-'}
       </div>
     </div>
@@ -94,17 +94,18 @@ function LogoutConfirmModal({
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
-        <h3 className="text-xl sm:text-2xl font-bold text-slate-900">Logout?</h3>
-        <p className="mt-2 text-sm sm:text-base text-slate-600">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm dark:bg-black/50">
+      <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl dark:bg-slate-900 dark:shadow-[0_24px_70px_rgba(0,0,0,0.5)]">
+        <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Logout?</h3>
+        <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-400">
           Are you sure you want to logout from your account?
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50
+              dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             Cancel
           </button>
@@ -276,10 +277,14 @@ export default function ProfilePage() {
     }
   }
 
+  // Shared input className for edit mode
+  const inputCls = "w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-900/40"
+  const labelCls = "mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500"
+
   if (loading) {
     return (
       <AppShell>
-        <div className="p-8 text-lg text-slate-600">Loading profile...</div>
+        <div className="p-8 text-lg text-slate-600 dark:text-slate-400">Loading profile...</div>
       </AppShell>
     )
   }
@@ -292,17 +297,15 @@ export default function ProfilePage() {
         onConfirm={logout}
       />
 
-      {/* Desktop: no horizontal padding (doc 2 style); Mobile/tablet: add padding */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-0">
 
         {/* Breadcrumb */}
-        <div className="mb-4 sm:mb-6">
-          <p className="text-sm font-medium text-slate-500">Settings / User Profile</p>
+        <div className="mb-4 mt-2 sm:mb-6">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Settings / User Profile</p>
         </div>
 
         {/* Header: Avatar + Name + Edit button */}
-        {/* Mobile: column stack; Desktop: row (doc 2 style) */}
-        <div className="mb-6 sm:mb-8 flex flex-col  gap-4 lg:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="mb-6 sm:mb-8 flex flex-col gap-4 lg:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
             {/* Avatar */}
             <div className="relative flex-shrink-0">
@@ -313,7 +316,8 @@ export default function ProfilePage() {
                   className="h-20 w-20 sm:h-28 sm:w-28 rounded-[24px] sm:rounded-[28px] object-cover shadow-sm"
                 />
               ) : (
-                <div className="flex h-20 w-20 sm:h-28 sm:w-28 items-center justify-center rounded-[24px] sm:rounded-[28px] bg-indigo-50 text-indigo-600 shadow-sm">
+                <div className="flex h-20 w-20 sm:h-28 sm:w-28 items-center justify-center rounded-[24px] sm:rounded-[28px] bg-indigo-50 text-indigo-600 shadow-sm
+                  dark:bg-indigo-950/60 dark:text-indigo-400">
                   <UserCircle2 size={44} className="sm:hidden" />
                   <UserCircle2 size={58} className="hidden sm:block" />
                 </div>
@@ -324,15 +328,15 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Name + role — Desktop uses large doc-2 sizes */}
+            {/* Name + role */}
             <div className="min-w-0">
-              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-[-0.03em] text-slate-900 truncate">
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-[-0.03em] text-slate-900 truncate dark:text-white">
                 {displayFullName}
               </h1>
-              <div className="mt-1 sm:mt-2 flex flex-wrap items-center gap-1 sm:gap-2 text-base sm:text-xl lg:text-2xl text-slate-500">
+              <div className="mt-1 sm:mt-2 flex flex-wrap items-center gap-1 sm:gap-2 text-base sm:text-xl lg:text-2xl text-slate-500 dark:text-slate-400">
                 <span>{profile?.role || 'Store Manager'}</span>
                 <span>•</span>
-                <span className="font-medium text-indigo-600">Admin Access</span>
+                <span className="font-medium text-indigo-600 dark:text-indigo-400">Admin Access</span>
               </div>
             </div>
           </div>
@@ -344,14 +348,16 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="group relative overflow-hidden rounded-[18px] border border-indigo-200/70 bg-white px-3 py-2.5 sm:px-5 sm:py-3 text-slate-700 shadow-[0_10px_24px_rgba(99,102,241,0.08)] transition-all duration-300 hover:-translate-y-[1px] hover:border-violet-300/70 hover:shadow-[0_12px_28px_rgba(99,102,241,0.14)] active:translate-y-0"
+                  className="group relative overflow-hidden rounded-[18px] border border-indigo-200/70 bg-white px-3 py-2.5 sm:px-5 sm:py-3 text-slate-700 shadow-[0_10px_24px_rgba(99,102,241,0.08)] transition-all duration-300 hover:-translate-y-[1px] hover:border-violet-300/70 hover:shadow-[0_12px_28px_rgba(99,102,241,0.14)] active:translate-y-0
+                    dark:border-indigo-800/50 dark:bg-slate-800 dark:text-slate-200 dark:shadow-[0_10px_24px_rgba(99,102,241,0.04)] dark:hover:border-indigo-700"
                 >
                   <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.08),transparent_35%)]" />
                   <span className="relative flex items-center gap-2 sm:gap-3">
-                    <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 ring-1 ring-indigo-100 transition-all duration-300 group-hover:scale-105 group-hover:bg-indigo-100 group-hover:text-indigo-600">
+                    <span className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 ring-1 ring-indigo-100 transition-all duration-300 group-hover:scale-105 group-hover:bg-indigo-100 group-hover:text-indigo-600
+                      dark:bg-indigo-950/60 dark:text-indigo-400 dark:ring-indigo-800">
                       <X size={14} className="transition-transform duration-300 group-hover:rotate-90" />
                     </span>
-                    <span className="text-sm sm:text-[15px] font-semibold text-slate-700">Cancel</span>
+                    <span className="text-sm sm:text-[15px] font-semibold text-slate-700 dark:text-slate-200">Cancel</span>
                   </span>
                 </button>
 
@@ -393,41 +399,31 @@ export default function ProfilePage() {
         </div>
 
         {/* Personal Info + Preferences */}
-        {/* Mobile: 1 col stack; Desktop: doc-2 ratio [1.8fr 0.9fr] */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_0.9fr] gap-6">
 
           {/* Personal Information */}
-          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm
+            dark:bg-slate-900 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             <div className="mb-6 sm:mb-8 flex items-center gap-3">
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600
+                dark:bg-indigo-950/60 dark:text-indigo-400">
                 <UserCircle2 size={18} className="sm:hidden" />
                 <UserCircle2 size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Personal Information</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white">Personal Information</h2>
             </div>
 
             <form className="space-y-4 sm:space-y-6">
-              {/* First/Last name: 1 col on mobile, 2 col on sm+ */}
               <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
                 {isEditing ? (
                   <>
                     <div>
-                      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        First Name
-                      </label>
-                      <input
-                        {...profileForm.register('first_name')}
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
-                      />
+                      <label className={labelCls}>First Name</label>
+                      <input {...profileForm.register('first_name')} className={inputCls} />
                     </div>
                     <div>
-                      <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        Last Name
-                      </label>
-                      <input
-                        {...profileForm.register('last_name')}
-                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
-                      />
+                      <label className={labelCls}>Last Name</label>
+                      <input {...profileForm.register('last_name')} className={inputCls} />
                     </div>
                   </>
                 ) : (
@@ -442,13 +438,8 @@ export default function ProfilePage() {
 
               {isEditing ? (
                 <div>
-                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Phone Number
-                  </label>
-                  <input
-                    {...profileForm.register('phone')}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
-                  />
+                  <label className={labelCls}>Phone Number</label>
+                  <input {...profileForm.register('phone')} className={inputCls} />
                 </div>
               ) : (
                 <ReadOnlyField label="Phone Number" value={profile?.phone || ''} />
@@ -456,13 +447,11 @@ export default function ProfilePage() {
 
               {isEditing ? (
                 <div>
-                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Profile Image URL
-                  </label>
+                  <label className={labelCls}>Profile Image URL</label>
                   <input
                     {...profileForm.register('profile_image_url')}
                     placeholder="https://..."
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className={inputCls}
                   />
                 </div>
               ) : (
@@ -470,34 +459,34 @@ export default function ProfilePage() {
               )}
 
               {profileError && (
-                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{profileError}</div>
+                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-400">{profileError}</div>
               )}
               {profileSuccess && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{profileSuccess}</div>
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">{profileSuccess}</div>
               )}
             </form>
           </div>
 
           {/* Preferences */}
-          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm
+            dark:bg-slate-900 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             <div className="mb-6 sm:mb-8 flex items-center gap-3">
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600
+                dark:bg-indigo-950/60 dark:text-indigo-400">
                 <Globe size={18} className="sm:hidden" />
                 <Globe size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Preferences</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white">Preferences</h2>
             </div>
 
             <div className="space-y-6 sm:space-y-8">
               {isEditing ? (
                 <>
                   <div>
-                    <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Language
-                    </label>
+                    <label className={labelCls}>Language</label>
                     <select
                       {...profileForm.register('language')}
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                      className={inputCls}
                     >
                       {languageOptions.map((item) => (
                         <option key={item} value={item}>{item}</option>
@@ -506,12 +495,10 @@ export default function ProfilePage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Timezone
-                    </label>
+                    <label className={labelCls}>Timezone</label>
                     <select
                       {...profileForm.register('timezone')}
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                      className={inputCls}
                     >
                       {timezoneOptions.map((item) => (
                         <option key={item} value={item}>{item}</option>
@@ -519,16 +506,17 @@ export default function ProfilePage() {
                     </select>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-4
+                    dark:bg-slate-800">
                     <div className="pr-4">
-                      <p className="text-base sm:text-xl font-semibold text-slate-900">Two-factor Authentication</p>
-                      <p className="mt-1 text-xs sm:text-sm text-slate-500">Add an extra layer of security</p>
+                      <p className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white">Two-factor Authentication</p>
+                      <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">Add an extra layer of security</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => profileForm.setValue('two_factor_enabled', !watchedTwoFactor)}
                       className={`relative h-7 w-12 sm:h-8 sm:w-14 flex-shrink-0 rounded-full transition ${
-                        watchedTwoFactor ? 'bg-indigo-600' : 'bg-slate-300'
+                        watchedTwoFactor ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
                       }`}
                     >
                       <span
@@ -554,75 +542,63 @@ export default function ProfilePage() {
         </div>
 
         {/* Account Security + Login Activity */}
-        {/* Mobile: 1 col; Desktop: equal 2 col (doc-2 style) */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           {/* Account Security */}
-          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm
+            dark:bg-slate-900 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             <div className="mb-6 sm:mb-8 flex items-center gap-3">
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600
+                dark:bg-indigo-950/60 dark:text-indigo-400">
                 <Lock size={18} className="sm:hidden" />
                 <Lock size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Account Security</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white">Account Security</h2>
             </div>
 
             <form onSubmit={passwordForm.handleSubmit(onSubmitPassword)} className="space-y-4 sm:space-y-5">
               <div>
-                <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Current Password
-                </label>
+                <label className={labelCls}>Current Password</label>
                 <input
                   type="password"
                   {...passwordForm.register('current_password')}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                  className={inputCls}
                 />
                 {passwordForm.formState.errors.current_password && (
-                  <p className="mt-1 text-xs text-red-500">
-                    {passwordForm.formState.errors.current_password.message}
-                  </p>
+                  <p className="mt-1 text-xs text-red-500">{passwordForm.formState.errors.current_password.message}</p>
                 )}
               </div>
 
-              {/* New + Confirm: 1 col on mobile, 2 col on sm+ */}
               <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    New Password
-                  </label>
+                  <label className={labelCls}>New Password</label>
                   <input
                     type="password"
                     {...passwordForm.register('new_password')}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className={inputCls}
                   />
                   {passwordForm.formState.errors.new_password && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {passwordForm.formState.errors.new_password.message}
-                    </p>
+                    <p className="mt-1 text-xs text-red-500">{passwordForm.formState.errors.new_password.message}</p>
                   )}
                 </div>
                 <div>
-                  <label className="mb-2 block text-xs sm:text-sm font-semibold uppercase tracking-[0.16em] text-slate-400">
-                    Confirm New Password
-                  </label>
+                  <label className={labelCls}>Confirm New Password</label>
                   <input
                     type="password"
                     {...passwordForm.register('confirm_password')}
-                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 sm:py-4 text-sm sm:text-base outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
+                    className={inputCls}
                   />
                   {passwordForm.formState.errors.confirm_password && (
-                    <p className="mt-1 text-xs text-red-500">
-                      {passwordForm.formState.errors.confirm_password.message}
-                    </p>
+                    <p className="mt-1 text-xs text-red-500">{passwordForm.formState.errors.confirm_password.message}</p>
                   )}
                 </div>
               </div>
 
               {passwordError && (
-                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{passwordError}</div>
+                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-400">{passwordError}</div>
               )}
               {passwordSuccess && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{passwordSuccess}</div>
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">{passwordSuccess}</div>
               )}
 
               <button
@@ -645,13 +621,15 @@ export default function ProfilePage() {
           </div>
 
           {/* Recent Login Activity */}
-          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm">
+          <div className="rounded-[24px] sm:rounded-[30px] bg-white p-5 sm:p-8 shadow-sm
+            dark:bg-slate-900 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             <div className="mb-6 sm:mb-8 flex items-center gap-3">
-              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600">
+              <div className="flex h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600
+                dark:bg-indigo-950/60 dark:text-indigo-400">
                 <Bell size={18} className="sm:hidden" />
                 <Bell size={20} className="hidden sm:block" />
               </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Recent Login Activity</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white">Recent Login Activity</h2>
             </div>
 
             <div className="space-y-3 sm:space-y-4">
@@ -660,20 +638,23 @@ export default function ProfilePage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3 sm:px-4 sm:py-4 transition hover:bg-slate-100"
+                    className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3 sm:px-4 sm:py-4 transition hover:bg-slate-100
+                      dark:bg-slate-800 dark:hover:bg-slate-700/70"
                   >
                     <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                      <div className="flex h-10 w-10 sm:h-11 sm:w-11 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-white text-slate-600 shadow-sm">
+                      <div className="flex h-10 w-10 sm:h-11 sm:w-11 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-white text-slate-600 shadow-sm
+                        dark:bg-slate-700 dark:text-slate-300 dark:shadow-none">
                         <Icon size={18} className="sm:hidden" />
                         <Icon size={20} className="hidden sm:block" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm sm:text-base font-semibold text-slate-900 truncate">{item.title}</p>
-                        <p className="text-xs sm:text-sm text-slate-500 truncate">{item.subtitle}</p>
+                        <p className="text-sm sm:text-base font-semibold text-slate-900 truncate dark:text-white">{item.title}</p>
+                        <p className="text-xs sm:text-sm text-slate-500 truncate dark:text-slate-400">{item.subtitle}</p>
                       </div>
                     </div>
                     {item.current && (
-                      <span className="ml-2 flex-shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      <span className="ml-2 flex-shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700
+                        dark:bg-emerald-900/40 dark:text-emerald-400">
                         CURRENT
                       </span>
                     )}
@@ -685,11 +666,12 @@ export default function ProfilePage() {
         </div>
 
         {/* Delete Account */}
-        <div className="mt-6 rounded-[24px] sm:rounded-[30px] border border-red-200 bg-red-50 px-5 py-5 sm:px-8 sm:py-8">
+        <div className="mt-6 rounded-[24px] sm:rounded-[30px] border border-red-200 bg-red-50 px-5 py-5 sm:px-8 sm:py-8
+          dark:border-red-900/40 dark:bg-red-950/30">
           <div className="flex flex-col gap-4 md:flex-row-1 lg:flex-row md:items-center md:justify-between md:gap-4">
             <div>
-              <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">Delete Account</h3>
-              <p className="mt-2 text-sm sm:text-base text-slate-600">
+              <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600 dark:text-red-400">Delete Account</h3>
+              <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-400">
                 Permanently remove your personal data and account access. This action cannot be undone.
               </p>
             </div>
@@ -700,7 +682,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 text-xs sm:text-sm text-slate-400">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 text-xs sm:text-sm text-slate-400 dark:text-slate-600">
           <p>© 2024 RetailFlow Enterprise. All rights reserved.</p>
           <div className="flex flex-wrap gap-4 sm:gap-6">
             <span>Privacy Policy</span>
@@ -713,7 +695,8 @@ export default function ProfilePage() {
         <div className="mt-4 pb-8">
           <button
             onClick={() => setShowLogoutModal(true)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100
+              dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
           >
             <LogOut size={15} />
             Logout

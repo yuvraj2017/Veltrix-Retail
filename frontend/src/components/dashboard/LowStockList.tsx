@@ -18,7 +18,7 @@ function ProductImage({ image, name }: { image?: string | null; name: string }) 
 
   if (!imageUrl || hasError) {
     return (
-      <div className="flex h-12 w-12 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-[#eef1f6] text-[9px] sm:text-[10px] font-bold text-slate-500">
+      <div className="flex h-12 w-12 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-[#eef1f6] dark:bg-slate-700 text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400">
         No Image
       </div>
     )
@@ -30,32 +30,35 @@ function ProductImage({ image, name }: { image?: string | null; name: string }) 
       alt={name}
       loading="lazy"
       onError={() => setHasError(true)}
-      className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 rounded-xl sm:rounded-2xl bg-[#eef1f6] object-cover"
+      className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 rounded-xl sm:rounded-2xl bg-[#eef1f6] dark:bg-slate-700 object-cover"
     />
   )
 }
 
 export function LowStockList({ products }: { products: LowStockProduct[] }) {
   return (
-    <div className="w-full rounded-[1.5rem] sm:rounded-[2rem] bg-white/90 p-4 sm:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+    <div className="w-full rounded-[1.5rem] sm:rounded-[2rem] bg-white/90 dark:bg-slate-800/90 p-4 sm:p-6 shadow-[0_18px_45px_rgba(15,23,42,0.06)] dark:shadow-[0_18px_45px_rgba(0,0,0,0.3)]">
+
       {/* Header */}
       <div className="mb-4 sm:mb-6">
-        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] text-red-500">
+        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] text-red-500 dark:text-red-400">
           Immediate Action Required
         </p>
-        <h3 className="mt-1.5 sm:mt-2 text-lg sm:text-xl font-bold tracking-tight text-slate-950">
+        <h3 className="mt-1.5 sm:mt-2 text-lg sm:text-xl font-bold tracking-tight text-slate-950 dark:text-white">
           Low Stock Products
         </h3>
       </div>
 
       <div className="space-y-2.5 sm:space-y-3">
         {products.length === 0 ? (
-          <div className="flex min-h-[160px] sm:min-h-[180px] flex-col items-center justify-center rounded-[1.25rem] sm:rounded-[1.5rem] bg-[#f8f9fd] px-4 sm:px-5 text-center">
-            <div className="mb-3 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
+          <div className="flex min-h-[160px] sm:min-h-[180px] flex-col items-center justify-center rounded-[1.25rem] sm:rounded-[1.5rem] bg-[#f8f9fd] dark:bg-slate-700/40 px-4 sm:px-5 text-center">
+            <div className="mb-3 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-white dark:bg-slate-600 shadow-sm">
               <span className="text-lg sm:text-xl">✓</span>
             </div>
-            <p className="text-sm font-bold text-slate-700">No low stock products right now.</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+              No low stock products right now.
+            </p>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
               Products needing restock will appear here.
             </p>
           </div>
@@ -63,26 +66,26 @@ export function LowStockList({ products }: { products: LowStockProduct[] }) {
           products.map((product) => (
             <div
               key={product.id}
-              className="group flex items-center gap-3 sm:gap-4 rounded-[1.2rem] sm:rounded-[1.4rem] bg-[#f8f9fd]/60 p-2.5 sm:p-3 transition hover:bg-indigo-50/70"
+              className="group flex items-center gap-3 sm:gap-4 rounded-[1.2rem] sm:rounded-[1.4rem] bg-[#f8f9fd]/60 dark:bg-slate-700/40 p-2.5 sm:p-3 transition hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"
             >
               <ProductImage image={product.image} name={product.name} />
 
-              {/* Name + SKU — grows to fill available space */}
+              {/* Name + SKU */}
               <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-xs sm:text-sm font-bold text-slate-950 leading-snug">
+                <p className="line-clamp-2 text-xs sm:text-sm font-bold text-slate-950 dark:text-white leading-snug">
                   {product.name}
                 </p>
-                <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs font-semibold text-slate-500 truncate">
+                <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
                   SKU: {product.sku || '-'}
                 </p>
               </div>
 
-              {/* Stock count + action — always right-aligned, never wraps */}
+              {/* Stock count + action */}
               <div className="shrink-0 text-right flex flex-col items-end gap-1.5 sm:gap-2">
-                <p className="text-xs sm:text-sm font-extrabold text-red-600 whitespace-nowrap">
+                <p className="text-xs sm:text-sm font-extrabold text-red-600 dark:text-red-400 whitespace-nowrap">
                   {product.left} Left
                 </p>
-                <button className="rounded-full bg-white px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.08em] text-indigo-600 shadow-sm transition group-hover:bg-indigo-600 group-hover:text-white whitespace-nowrap">
+                <button className="rounded-full bg-white dark:bg-slate-600 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-[0.08em] text-indigo-600 dark:text-indigo-300 shadow-sm transition group-hover:bg-indigo-600 dark:group-hover:bg-indigo-500 group-hover:text-white whitespace-nowrap">
                   Restock
                 </button>
               </div>
@@ -92,7 +95,7 @@ export function LowStockList({ products }: { products: LowStockProduct[] }) {
       </div>
 
       {products.length > 0 && (
-        <button className="mt-4 sm:mt-6 w-full rounded-xl sm:rounded-2xl bg-red-50 px-4 py-3 sm:py-4 text-xs sm:text-sm font-bold text-red-600 transition hover:bg-red-100 active:scale-[0.98]">
+        <button className="mt-4 sm:mt-6 w-full rounded-xl sm:rounded-2xl bg-red-50 dark:bg-red-900/20 px-4 py-3 sm:py-4 text-xs sm:text-sm font-bold text-red-600 dark:text-red-400 transition hover:bg-red-100 dark:hover:bg-red-900/30 active:scale-[0.98]">
           Bulk Order All Low Stock
         </button>
       )}

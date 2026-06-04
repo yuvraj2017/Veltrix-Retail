@@ -1,15 +1,8 @@
 import { motion } from 'framer-motion'
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  BadgeIndianRupee,
-  CalendarDays,
-  FileText,
-  ReceiptText,
-  TrendingUp,
-  WalletCards,
+  ArrowDownRight, ArrowUpRight, BadgeIndianRupee,
+  CalendarDays, FileText, ReceiptText, TrendingUp, WalletCards,
 } from 'lucide-react'
-
 import type { InvoiceStats } from '../../features/billing/types'
 
 type BillingStatsProps = {
@@ -19,21 +12,14 @@ type BillingStatsProps = {
 
 const money = (value: string | number) => {
   const amount = Number(value || 0)
-
-  return amount.toLocaleString('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  })
+  return amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
 }
 
 const shortMoney = (value: string | number) => {
   const amount = Number(value || 0)
-
   if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(1)}Cr`
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`
-  if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}k`
-
+  if (amount >= 100000)   return `₹${(amount / 100000).toFixed(1)}L`
+  if (amount >= 1000)     return `₹${(amount / 1000).toFixed(1)}k`
   return money(amount)
 }
 
@@ -44,9 +30,9 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
       value: stats.total_invoices,
       helper: 'Invoices generated',
       icon: FileText,
-      tone: 'from-white via-indigo-50/40 to-white',
+      tone: 'from-white via-indigo-50/40 to-white dark:from-slate-800 dark:via-indigo-950/40 dark:to-slate-800',
       iconTone: 'from-indigo-500 to-violet-600',
-      accent: 'text-indigo-600',
+      accent: 'text-indigo-600 dark:text-indigo-400',
       visual: 'spark',
     },
     {
@@ -54,9 +40,9 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
       value: shortMoney(stats.total_sales_amount),
       helper: 'Lifetime invoice value',
       icon: BadgeIndianRupee,
-      tone: 'from-white via-violet-50/40 to-white',
+      tone: 'from-white via-violet-50/40 to-white dark:from-slate-800 dark:via-violet-950/40 dark:to-slate-800',
       iconTone: 'from-violet-500 to-indigo-600',
-      accent: 'text-emerald-600',
+      accent: 'text-emerald-600 dark:text-emerald-400',
       visual: 'progress',
     },
     {
@@ -64,9 +50,9 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
       value: shortMoney(stats.today_sales),
       helper: 'Current business day',
       icon: CalendarDays,
-      tone: 'from-white via-cyan-50/40 to-white',
+      tone: 'from-white via-cyan-50/40 to-white dark:from-slate-800 dark:via-cyan-950/40 dark:to-slate-800',
       iconTone: 'from-cyan-500 to-indigo-600',
-      accent: 'text-cyan-700',
+      accent: 'text-cyan-700 dark:text-cyan-400',
       visual: 'growth',
     },
     {
@@ -74,9 +60,9 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
       value: shortMoney(stats.total_profit),
       helper: 'Analytics-ready margin',
       icon: TrendingUp,
-      tone: 'from-white via-emerald-50/45 to-white',
+      tone: 'from-white via-emerald-50/45 to-white dark:from-slate-800 dark:via-emerald-950/40 dark:to-slate-800',
       iconTone: 'from-emerald-500 to-teal-600',
-      accent: 'text-emerald-600',
+      accent: 'text-emerald-600 dark:text-emerald-400',
       visual: 'profit',
     },
     {
@@ -84,9 +70,9 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
       value: shortMoney(stats.total_discount_given),
       helper: 'Customer savings',
       icon: ReceiptText,
-      tone: 'from-white via-orange-50/45 to-white',
+      tone: 'from-white via-orange-50/45 to-white dark:from-slate-800 dark:via-orange-950/40 dark:to-slate-800',
       iconTone: 'from-orange-400 to-rose-500',
-      accent: 'text-orange-600',
+      accent: 'text-orange-600 dark:text-orange-400',
       visual: 'discount',
     },
     {
@@ -94,9 +80,9 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
       value: shortMoney(stats.pending_amount),
       helper: `${stats.pending_invoices} pending • ${stats.partial_invoices} partial`,
       icon: WalletCards,
-      tone: 'from-white via-rose-50/40 to-white',
+      tone: 'from-white via-rose-50/40 to-white dark:from-slate-800 dark:via-rose-950/40 dark:to-slate-800',
       iconTone: 'from-rose-500 to-red-500',
-      accent: 'text-rose-600',
+      accent: 'text-rose-600 dark:text-rose-400',
       visual: 'pending',
     },
   ]
@@ -107,7 +93,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
         {[1, 2, 3, 4, 5, 6].map((item) => (
           <div
             key={item}
-            className="h-[190px] animate-pulse rounded-[32px] bg-white/70 shadow-[0_22px_60px_rgba(15,23,42,0.05)]"
+            className="h-[190px] animate-pulse rounded-[32px] bg-white/70 dark:bg-slate-800 shadow-[0_22px_60px_rgba(15,23,42,0.05)]"
           />
         ))}
       </div>
@@ -118,14 +104,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
     <motion.div
       initial="hidden"
       animate="visible"
-      variants={{
-        hidden: {},
-        visible: {
-          transition: {
-            staggerChildren: 0.07,
-          },
-        },
-      }}
+      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
       className="grid grid-cols-1 gap-5 sm:grid-cols-1 sm:auto-rows-fr xl:grid-cols-3"
     >
       {cards.map((card) => {
@@ -134,29 +113,23 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
         return (
           <motion.div
             key={card.label}
-            variants={{
-              hidden: { opacity: 0, y: 18 },
-              visible: { opacity: 1, y: 0 },
-            }}
+            variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0 } }}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.35, ease: 'easeOut' }}
-            className={`group relative h-full min-h-[190px] overflow-hidden rounded-[32px] bg-gradient-to-br ${card.tone} p-7 shadow-[0_22px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl`}
+            className={`group relative h-full min-h-[190px] overflow-hidden rounded-[32px] border border-slate-100 dark:border-slate-700/60 bg-gradient-to-br ${card.tone} p-7 shadow-[0_22px_60px_rgba(15,23,42,0.06)] dark:shadow-[0_22px_60px_rgba(0,0,0,0.25)] backdrop-blur-xl`}
           >
             <div className="relative z-10 flex h-full flex-col justify-between">
               <div className="flex items-start justify-between gap-5">
                 <div>
-                  <p className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  <p className="text-[12px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
                     {card.label}
                   </p>
-
-                  <h3 className="mt-5 text-[40px] font-black leading-none tracking-[-0.055em] text-slate-950">
+                  <h3 className="mt-5 text-[40px] font-black leading-none tracking-[-0.055em] text-slate-950 dark:text-slate-100">
                     {card.value}
                   </h3>
                 </div>
 
-                <div
-                  className={`flex h-14 w-14 items-center justify-center rounded-[22px] bg-gradient-to-br ${card.iconTone} text-white shadow-[0_18px_38px_rgba(79,70,229,0.22)] transition duration-300 group-hover:scale-105 group-hover:rotate-3`}
-                >
+                <div className={`flex h-14 w-14 items-center justify-center rounded-[22px] bg-gradient-to-br ${card.iconTone} text-white shadow-[0_18px_38px_rgba(79,70,229,0.22)] transition duration-300 group-hover:scale-105 group-hover:rotate-3`}>
                   <Icon size={24} />
                 </div>
               </div>
@@ -164,12 +137,11 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
               <div className="mt-6">
                 {card.visual === 'progress' && (
                   <>
-                    <div className="flex items-center gap-2 text-sm font-black text-emerald-600">
+                    <div className="flex items-center gap-2 text-sm font-black text-emerald-600 dark:text-emerald-400">
                       <ArrowUpRight size={15} />
                       {card.helper}
                     </div>
-
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200/80">
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: '76%' }}
@@ -181,15 +153,15 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
                 )}
 
                 {card.visual === 'discount' && (
-                  <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 px-3 py-1.5 text-sm font-black text-orange-600">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 dark:bg-orange-950 px-3 py-1.5 text-sm font-black text-orange-600 dark:text-orange-400">
                     <ArrowDownRight size={15} />
                     {card.helper}
                   </div>
                 )}
 
                 {card.visual === 'pending' && (
-                  <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1.5 text-sm font-black text-rose-600">
-                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse time-duration-5000" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 dark:bg-rose-950 px-3 py-1.5 text-sm font-black text-rose-600 dark:text-rose-400">
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
                     {card.helper}
                   </div>
                 )}
@@ -204,12 +176,7 @@ export default function BillingStats({ stats, loading = false }: BillingStatsPro
               </div>
             </div>
 
-            {/* <Icon
-              size={78}
-              className="absolute bottom-0 right-0 text-slate-950/[0.035] transition duration-300 group-hover:-translate-y-2 group-hover:translate-x-2"
-            /> */}
-
-            <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/80 blur-3xl" />
+            <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/80 dark:bg-slate-700/20 blur-3xl" />
           </motion.div>
         )
       })}

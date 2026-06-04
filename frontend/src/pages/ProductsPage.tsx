@@ -159,14 +159,14 @@ export default function ProductsPage() {
   return (
     <AppShell>
       {/* Responsive container: full width on mobile, capped on large screens */}
-      <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1600px] px-4 mt-2 sm:px-6 lg:px-8">
 
         {/* Page header: stacks on mobile, fits side-by-side on sm+ */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-3xl font-bold tracking-[-0.02em] text-slate-900 sm:text-4xl lg:text-5xl">
+          <h1 className="text-3xl font-bold tracking-[-0.02em] text-slate-900 sm:text-4xl dark:text-slate-100 lg:text-5xl">
             Product Inventory
           </h1>
-          <p className="mt-1 text-base text-slate-600 sm:mt-2 sm:text-lg lg:text-2xl">
+          <p className="mt-1 text-base text-slate-500 sm:mt-2 sm:text-lg lg:text-2xl">
             Manage your retail stock levels and catalog details.
           </p>
         </div>

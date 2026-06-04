@@ -96,7 +96,7 @@ export default function AddVendorPage() {
   return (
     <AppShell>
       {/* Constrain max width; horizontal padding scales with screen size */}
-      <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1600px] px-4 mt-2 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -106,7 +106,8 @@ export default function AddVendorPage() {
           <button
             type="button"
             onClick={() => navigate('/vendors')}
-            className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 bg-white/75 px-3 py-2 text-sm font-black text-slate-700 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700 sm:mb-6 sm:px-4 sm:py-2.5"
+            className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 bg-white/75 px-3 py-2 text-sm font-black text-slate-700 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700 sm:mb-6 sm:px-4 sm:py-2.5
+              dark:border-indigo-900/50 dark:bg-slate-800/75 dark:text-slate-200 dark:shadow-[0_12px_30px_rgba(99,102,241,0.04)] dark:hover:text-indigo-400"
           >
             <ArrowLeft size={16} />
             <span className="hidden xs:inline">Back to Vendors</span>
@@ -117,46 +118,50 @@ export default function AddVendorPage() {
           <div className="mb-7 flex flex-col gap-4 sm:mb-9 sm:gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0">
               {/* Breadcrumb badge */}
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl sm:mb-4 sm:px-4 sm:py-2 sm:text-[11px]">
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 sm:h-2 sm:w-2" />
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl sm:mb-4 sm:px-4 sm:py-2 sm:text-[11px]
+                dark:border-indigo-800/50 dark:bg-slate-800/70 dark:text-indigo-400 dark:shadow-[0_12px_30px_rgba(99,102,241,0.04)]">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 sm:h-2 sm:w-2 dark:bg-indigo-400" />
                 Vendors › Add New Vendor
               </div>
 
               {/* Responsive heading */}
-              <h1 className="text-[32px] font-black tracking-[-0.04em] text-slate-950 sm:text-[42px] md:text-[56px]">
+              <h1 className="text-[32px] font-black tracking-[-0.04em] text-slate-950 sm:text-[42px] md:text-[56px]
+                dark:text-white">
                 Vendor Onboarding
               </h1>
 
-              <p className="mt-2 max-w-2xl text-[15px] leading-7 text-slate-600 sm:mt-3 sm:text-[18px] sm:leading-8">
+              <p className="mt-2 max-w-2xl text-[15px] leading-7 text-slate-600 sm:mt-3 sm:text-[18px] sm:leading-8
+                dark:text-slate-400">
                 Configure your vendor ecosystem with financial terms, approval workflows, and intelligent billing automation.
               </p>
             </div>
 
-            {/* Guided-setup badge — hide on mobile to save space */}
-            <div className="hidden shrink-0 rounded-[28px] bg-white/70 p-4 shadow-[0_18px_48px_rgba(99,102,241,0.08)] backdrop-blur-xl lg:block">
+            {/* Guided-setup badge */}
+            <div className="hidden shrink-0 rounded-[28px] bg-white/70 p-4 shadow-[0_18px_48px_rgba(99,102,241,0.08)] backdrop-blur-xl lg:block
+              dark:bg-slate-800/70 dark:shadow-[0_18px_48px_rgba(99,102,241,0.04)]">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">
                   <CheckCircle2 size={22} />
                 </div>
                 <div>
-                  <p className="text-sm font-black text-slate-950">Guided setup</p>
-                  <p className="text-xs text-slate-500">Vendor data syncs with bills</p>
+                  <p className="text-sm font-black text-slate-950 dark:text-white">Guided setup</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Vendor data syncs with bills</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ── Main form grid ──
-              Mobile: single column (main card stacked above sidebar)
-              XL: two columns [1fr / 360px] with sticky sidebar              */}
+          {/* ── Main form grid ── */}
           <form
             onSubmit={handleSubmit}
             className="grid gap-6 sm:gap-8 xl:grid-cols-[1fr_360px]"
           >
             {/* ── Left / main card ── */}
-            <div className="rounded-[28px] bg-white/78 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl sm:rounded-[34px] sm:p-8">
+            <div className="rounded-[28px] bg-white/78 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl sm:rounded-[34px] sm:p-8
+              dark:bg-slate-900/80 dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
               {errorMessage && (
-                <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700
+                  dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400">
                   {errorMessage}
                 </div>
               )}
@@ -179,7 +184,6 @@ export default function AddVendorPage() {
                   placeholder="Optional business name"
                 />
 
-                {/* Two-col on sm+ */}
                 <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2 sm:gap-5">
                   <Input
                     label="Payment Terms"
@@ -208,7 +212,7 @@ export default function AddVendorPage() {
                   />
 
                   <label className="space-y-2">
-                    <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
+                    <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
                       Vendor Status
                     </span>
 
@@ -217,7 +221,8 @@ export default function AddVendorPage() {
                       onChange={(event) =>
                         updateField('is_active', event.target.value === 'active')
                       }
-                      className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] font-semibold text-slate-800 outline-none transition-all duration-300 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
+                      className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] font-semibold text-slate-800 outline-none transition-all duration-300 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]
+                        dark:border-indigo-800/40 dark:bg-slate-800/90 dark:text-slate-100 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
                     >
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
@@ -231,7 +236,7 @@ export default function AddVendorPage() {
               {/* ── Primary Contact ── */}
               <SectionTitle icon={UserRound} title="Primary Contact" />
 
-              <div className="grid gap-4  sm:gap-5">
+              <div className="grid gap-4 sm:gap-5">
                 <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2 sm:gap-5">
                   <Input
                     label="Primary Contact Person"
@@ -318,7 +323,7 @@ export default function AddVendorPage() {
                 </div>
 
                 <label className="space-y-2">
-                  <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
+                  <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
                     Notes
                   </span>
                   <textarea
@@ -326,12 +331,13 @@ export default function AddVendorPage() {
                     onChange={(event) => updateField('notes', event.target.value)}
                     rows={4}
                     placeholder="Internal vendor notes"
-                    className="w-full resize-none rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
+                    className="w-full resize-none rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]
+                      dark:border-indigo-800/40 dark:bg-slate-800/90 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
                   />
                 </label>
               </div>
 
-              {/* ── Mobile-only action buttons (inside form card) ── */}
+              {/* ── Mobile-only action buttons ── */}
               <div className="mt-8 space-y-3 xl:hidden">
                 <motion.button
                   whileTap={{ scale: 0.98 }}
@@ -350,20 +356,20 @@ export default function AddVendorPage() {
                 <button
                   type="button"
                   onClick={() => navigate('/vendors')}
-                  className="h-14 w-full rounded-[22px] bg-slate-100 text-sm font-black text-slate-800 transition hover:bg-slate-200"
+                  className="h-14 w-full rounded-[22px] bg-slate-100 text-sm font-black text-slate-800 transition hover:bg-slate-200
+                    dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
               </div>
             </div>
 
-            {/* ── Right / sidebar ──
-                Hidden on mobile (actions live inside the main card above).
-                Shown + sticky on xl.                                        */}
+            {/* ── Right / sidebar ── */}
             <aside className="hidden xl:sticky xl:top-6 xl:block xl:space-y-6 xl:self-start">
               {/* Actions card */}
-              <div className="rounded-[34px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl">
-                <p className="mb-5 text-[12px] font-black uppercase tracking-[0.2em] text-slate-500">
+              <div className="rounded-[34px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl
+                dark:bg-slate-900/80 dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+                <p className="mb-5 text-[12px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                   Actions
                 </p>
 
@@ -385,31 +391,33 @@ export default function AddVendorPage() {
                 <button
                   type="button"
                   onClick={() => navigate('/vendors')}
-                  className="mt-3 h-14 w-full rounded-[22px] bg-slate-100 text-sm font-black text-slate-800 transition hover:bg-slate-200"
+                  className="mt-3 h-14 w-full rounded-[22px] bg-slate-100 text-sm font-black text-slate-800 transition hover:bg-slate-200
+                    dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
 
-                <p className="mt-6 text-sm leading-6 text-slate-500">
+                <p className="mt-6 text-sm leading-6 text-slate-500 dark:text-slate-400">
                   This vendor will be available for purchase bills, payment
                   tracking, and due reminders.
                 </p>
               </div>
 
               {/* Pro tip */}
-              <div className="rounded-[28px] border border-indigo-100 bg-indigo-50/80 p-6 text-indigo-950 shadow-[0_18px_40px_rgba(99,102,241,0.08)] backdrop-blur-xl">
-                <div className="mb-3 flex items-center gap-2 text-sm font-black text-indigo-700">
+              <div className="rounded-[28px] border border-indigo-100 bg-indigo-50/80 p-6 text-indigo-950 shadow-[0_18px_40px_rgba(99,102,241,0.08)] backdrop-blur-xl
+                dark:border-indigo-800/40 dark:bg-indigo-950/50 dark:text-indigo-100">
+                <div className="mb-3 flex items-center gap-2 text-sm font-black text-indigo-700 dark:text-indigo-400">
                   <Info size={18} />
                   Pro Tip
                 </div>
 
-                <p className="text-sm leading-6">
+                <p className="text-sm leading-6 dark:text-indigo-200/70">
                   Accurate payment terms help Veltrix calculate reminders and
                   payable insights more clearly.
                 </p>
               </div>
 
-              {/* Promo card */}
+              {/* Promo card — gradient, no dark changes needed */}
               <div className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-[#1a087a] via-[#2910a8] to-[#4f46e5] p-7 text-white shadow-[0_28px_70px_rgba(49,46,129,0.28)]">
                 <ClipboardCheck size={38} className="mb-20 opacity-85" />
 
@@ -443,11 +451,12 @@ function SectionTitle({
 }) {
   return (
     <div className="mb-5 flex items-center gap-3 sm:mb-6 sm:gap-4">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] sm:h-12 sm:w-12">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.08)] sm:h-12 sm:w-12
+        dark:bg-indigo-950/60 dark:text-indigo-400 dark:shadow-[inset_0_0_0_1px_rgba(99,102,241,0.15)]">
         <Icon size={20} />
       </div>
 
-      <h2 className="text-lg font-black tracking-[-0.03em] text-slate-950 sm:text-xl">
+      <h2 className="text-lg font-black tracking-[-0.03em] text-slate-950 sm:text-xl dark:text-white">
         {title}
       </h2>
     </div>
@@ -456,7 +465,7 @@ function SectionTitle({
 
 function SoftDivider() {
   return (
-    <div className="my-7 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent sm:my-9" />
+    <div className="my-7 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent sm:my-9 dark:via-slate-700" />
   )
 }
 
@@ -475,7 +484,7 @@ function Input({
 }) {
   return (
     <label className="space-y-2">
-      <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
+      <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
         {label}
       </span>
 
@@ -484,8 +493,8 @@ function Input({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        /* min-h ensures comfortable tap targets on mobile */
-        className="h-12 w-full rounded-[18px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] sm:h-14 sm:rounded-[20px]"
+        className="h-12 w-full rounded-[18px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] sm:h-14 sm:rounded-[20px]
+          dark:border-indigo-800/40 dark:bg-slate-800/90 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
       />
     </label>
   )

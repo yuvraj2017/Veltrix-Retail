@@ -36,50 +36,40 @@ function getInitial(name?: string | null) {
   return name.trim().charAt(0).toUpperCase()
 }
 
-const MOBILE_BREAKPOINT = 768 // px — same as Tailwind's `md`
+const MOBILE_BREAKPOINT = 768
 
 interface AppSidebarProps {
   isOpen: boolean
   onToggle: () => void
-  onClose: () => void // <-- add this to your parent + pass it down
+  onClose: () => void
 }
 
 export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
   const { user, shop } = useAuth()
 
-  // ─── Auto-close on mobile ────────────────────────────────────────────────
   useEffect(() => {
-    // Close immediately if already on a small screen
-    if (window.innerWidth < MOBILE_BREAKPOINT) {
-      onClose()
-    }
-
+    if (window.innerWidth < MOBILE_BREAKPOINT) onClose()
     const handleResize = () => {
-      if (window.innerWidth < MOBILE_BREAKPOINT) {
-        onClose()
-      }
+      if (window.innerWidth < MOBILE_BREAKPOINT) onClose()
     }
-
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [onClose])
-  // ─────────────────────────────────────────────────────────────────────────
 
   const shopName = shop?.name || user?.shop_name || 'Editorial Merchant'
-
   const shopLogoUrl =
     resolveImageUrl(shop?.logo_url) ||
     resolveImageUrl(user?.shop_logo_url) ||
     null
-
   const bottomCardSubtitle = user?.full_name || user?.role || 'owner'
 
   return (
-    <aside className="relative flex h-full overflow-hidden flex-col bg-[#f3f5f9]">
+    <aside className="relative flex h-full overflow-hidden flex-col bg-[#f3f5f9] dark:bg-slate-900">
+
       {/* Toggle Button */}
       <button
         onClick={onToggle}
-        className="absolute right-1 top- z-10 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white shadow-md text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-colors duration-200"
+        className="absolute right-1 top-6 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors duration-200"
         title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
       >
         {isOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
@@ -91,7 +81,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
           <img
             src={shopLogoUrl}
             alt={shopName}
-            className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 bg-white object-cover shadow-sm"
+            className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 object-cover shadow-sm"
           />
         ) : (
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm">
@@ -104,10 +94,10 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
             isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0'
           }`}
         >
-          <h2 className="truncate text-xl font-semibold leading-6 text-indigo-600 whitespace-nowrap">
+          <h2 className="truncate text-xl font-semibold leading-6 text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
             {shopName}
           </h2>
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500 whitespace-nowrap">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 whitespace-nowrap">
             Premium Retail Admin
           </p>
         </div>
@@ -127,8 +117,8 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
                   isOpen ? 'px-4' : 'justify-center px-0'
                 } ${
                   isActive
-                    ? 'bg-indigo-50 text-indigo-600 shadow-sm'
-                    : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                    ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
                 }`
               }
             >
@@ -150,7 +140,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         <Link
           to="/billing"
           title={!isOpen ? 'New Transaction' : undefined}
-          className={`flex w-full items-center gap-2 rounded-2xl bg-indigo-600 py-4 text-base font-semibold text-white shadow-md transition hover:bg-indigo-700 ${
+          className={`flex w-full items-center gap-2 rounded-2xl bg-indigo-600 dark:bg-indigo-700 py-4 text-base font-semibold text-white shadow-md transition hover:bg-indigo-700 dark:hover:bg-indigo-600 ${
             isOpen ? 'justify-center px-4' : 'justify-center px-0'
           }`}
         >
@@ -167,7 +157,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         <Link
           to="/profile"
           title={!isOpen ? shopName : undefined}
-          className={`group flex items-center gap-3 rounded-2xl bg-white py-3 shadow-sm transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-md ${
+          className={`group flex items-center gap-3 rounded-2xl bg-white dark:bg-slate-800 py-3 shadow-sm transition-all duration-300 hover:-translate-y-[1px] hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-md ${
             isOpen ? 'px-4' : 'justify-center px-0'
           }`}
         >
@@ -175,10 +165,10 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
             <img
               src={shopLogoUrl}
               alt={shopName}
-              className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 object-cover transition duration-300 group-hover:scale-105"
+              className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-600 object-cover transition duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-sm font-bold text-emerald-700 transition duration-300 group-hover:scale-105">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900 text-sm font-bold text-emerald-700 dark:text-emerald-300 transition duration-300 group-hover:scale-105">
               {getInitial(shopName)}
             </div>
           )}
@@ -188,10 +178,10 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
               isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0'
             }`}
           >
-            <p className="truncate text-sm font-semibold text-slate-900 whitespace-nowrap">
+            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
               {shopName}
             </p>
-            <p className="truncate text-xs text-slate-500 whitespace-nowrap">
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
               {bottomCardSubtitle}
             </p>
           </div>

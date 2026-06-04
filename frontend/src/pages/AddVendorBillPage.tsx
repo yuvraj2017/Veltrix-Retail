@@ -108,26 +108,30 @@ export default function AddVendorBillPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-[1600px]">
+        {/* Back button */}
         <button
           type="button"
           onClick={() => navigate(`/vendors/${id}`)}
-          className="mb-6 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 bg-white/75 px-4 py-2.5 text-sm font-black text-slate-700 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700"
+          className="mb-6 inline-flex items-center gap-2 rounded-2xl border border-indigo-100 bg-white/75 px-4 py-2.5 text-sm font-black text-slate-700 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-[1px] hover:text-indigo-700
+            dark:border-indigo-900/50 dark:bg-slate-800/75 dark:text-slate-200 dark:hover:text-indigo-400"
         >
           <ArrowLeft size={17} />
           Back to Vendor
         </button>
 
+        {/* Page header */}
         <div className="mb-9">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl
+            dark:border-indigo-900/50 dark:bg-slate-800/70 dark:text-indigo-400">
             <ReceiptText size={15} />
             New Transaction
           </div>
 
-          <h1 className="text-[42px] font-black tracking-[-0.05em] text-slate-950 md:text-[60px]">
+          <h1 className="text-[42px] font-black tracking-[-0.05em] text-slate-950 md:text-[60px] dark:text-white">
             Add New Bill
           </h1>
 
-          <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600">
+          <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600 dark:text-slate-400">
             Register a vendor invoice, define due date, and configure payment
             alerts. Remaining amount updates in real time.
           </p>
@@ -137,9 +141,12 @@ export default function AddVendorBillPage() {
           onSubmit={handleSubmit}
           className="grid gap-8 xl:grid-cols-[1fr_410px]"
         >
-          <div className="rounded-[34px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl md:p-8">
+          {/* ── Main card ── */}
+          <div className="rounded-[34px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl md:p-8
+            dark:bg-slate-900/80 dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
             {errorMessage && (
-              <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700
+                dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400">
                 {errorMessage}
               </div>
             )}
@@ -187,27 +194,31 @@ export default function AddVendorBillPage() {
 
             <SoftDivider />
 
+            {/* Reminder section header */}
             <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600
+                dark:bg-indigo-950/60 dark:text-indigo-400">
                 <BellRing size={22} />
               </div>
               <div>
-                <h2 className="text-xl font-black tracking-[-0.03em]">
+                <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
                   Payment Reminder
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   Choose when the system should alert you.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-[26px] bg-slate-50/90 p-5 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.06)]">
+            {/* Reminder box */}
+            <div className="rounded-[26px] bg-slate-50/90 p-5 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.06)]
+              dark:bg-slate-800/80 dark:shadow-[inset_0_0_0_1px_rgba(99,102,241,0.10)]">
               <div className="grid gap-5 md:grid-cols-[1fr_190px] md:items-center">
                 <div>
-                  <p className="font-black text-slate-950">
+                  <p className="font-black text-slate-950 dark:text-white">
                     Send notification in advance
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                  <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
                     Configure how many days before the due date you want to be
                     alerted.
                   </p>
@@ -216,12 +227,10 @@ export default function AddVendorBillPage() {
                 <select
                   value={form.reminder_days_before}
                   onChange={(event) =>
-                    updateField(
-                      'reminder_days_before',
-                      Number(event.target.value)
-                    )
+                    updateField('reminder_days_before', Number(event.target.value))
                   }
-                  className="rounded-[18px] border border-indigo-100 bg-white px-4 py-3 text-sm font-black text-indigo-700 outline-none transition-all duration-300 focus:border-indigo-300 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
+                  className="rounded-[18px] border border-indigo-100 bg-white px-4 py-3 text-sm font-black text-indigo-700 outline-none transition-all duration-300 focus:border-indigo-300 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]
+                    dark:border-indigo-800/40 dark:bg-slate-700 dark:text-indigo-300 dark:focus:border-indigo-600 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
                 >
                   <option value={3}>3 Days</option>
                   <option value={5}>5 Days</option>
@@ -248,8 +257,9 @@ export default function AddVendorBillPage() {
               />
             </div>
 
+            {/* Notes */}
             <label className="mt-8 block space-y-2">
-              <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
+              <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
                 Notes
               </span>
               <textarea
@@ -257,10 +267,12 @@ export default function AddVendorBillPage() {
                 onChange={(event) => updateField('notes', event.target.value)}
                 rows={4}
                 placeholder="Internal bill notes"
-                className="w-full resize-none rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
+                className="w-full resize-none rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 py-3 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]
+                  dark:border-indigo-800/40 dark:bg-slate-800/90 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
               />
             </label>
 
+            {/* Action buttons */}
             <div className="mt-8 flex flex-col gap-4 sm:flex-row">
               <motion.button
                 whileTap={{ scale: 0.98 }}
@@ -280,14 +292,17 @@ export default function AddVendorBillPage() {
               <button
                 type="button"
                 onClick={() => navigate(`/vendors/${id}`)}
-                className="h-14 rounded-[22px] bg-slate-100 px-8 text-sm font-black text-slate-800 transition hover:bg-slate-200"
+                className="h-14 rounded-[22px] bg-slate-100 px-8 text-sm font-black text-slate-800 transition hover:bg-slate-200
+                  dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>
             </div>
           </div>
 
+          {/* ── Sidebar ── */}
           <aside className="space-y-6">
+            {/* Real-time calculation card — gradient stays as-is */}
             <div className="rounded-[34px] bg-gradient-to-br from-[#7c6cff] via-[#5b43f3] to-[#2f20d6] p-7 text-white shadow-[0_28px_70px_rgba(79,70,229,0.30)]">
               <p className="mb-8 flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.18em] text-white/80">
                 <CalendarDays size={15} />
@@ -323,34 +338,41 @@ export default function AddVendorBillPage() {
               </div>
             </div>
 
-            <div className="rounded-[30px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl">
-              <p className="mb-4 flex items-center gap-2 text-sm font-black">
-                <ShieldCheck size={18} className="text-indigo-600" />
+            {/* Active Vendor card */}
+            <div className="rounded-[30px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl
+              dark:bg-slate-900/80 dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+              <p className="mb-4 flex items-center gap-2 text-sm font-black text-slate-950 dark:text-white">
+                <ShieldCheck size={18} className="text-indigo-600 dark:text-indigo-400" />
                 Active Vendor
               </p>
 
-              <div className="flex items-center gap-4 rounded-[24px] bg-slate-50/90 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+              <div className="flex items-center gap-4 rounded-[24px] bg-slate-50/90 p-4
+                dark:bg-slate-800/80">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600
+                  dark:bg-indigo-950/60 dark:text-indigo-400">
                   <FileText size={22} />
                 </div>
 
                 <div>
-                  <p className="font-black text-slate-950">
+                  <p className="font-black text-slate-950 dark:text-white">
                     {vendor?.company_name || vendor?.vendor_name || 'Vendor'}
                   </p>
-                  <p className="text-sm text-slate-500">Supply Partner</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Supply Partner</p>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[30px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+            {/* Pro tip card */}
+            <div className="rounded-[30px] bg-white/78 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.07)] backdrop-blur-xl
+              dark:bg-slate-900/80 dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600
+                dark:bg-indigo-950/60 dark:text-indigo-400">
                 <Sparkles size={22} />
               </div>
-              <h3 className="text-xl font-black tracking-[-0.03em]">
+              <h3 className="text-xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">
                 Pro Tip: Automated Reconciliation
               </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
+              <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
                 Set the initial paid amount correctly. Veltrix will calculate
                 remaining balance and payment status automatically.
               </p>
@@ -364,7 +386,7 @@ export default function AddVendorBillPage() {
 
 function SoftDivider() {
   return (
-    <div className="my-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+    <div className="my-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-slate-700" />
   )
 }
 
@@ -383,7 +405,7 @@ function Input({
 }) {
   return (
     <label className="space-y-2">
-      <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600">
+      <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
         {label}
       </span>
 
@@ -392,7 +414,8 @@ function Input({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
+        className="h-14 w-full rounded-[20px] border border-indigo-100/80 bg-slate-50/90 px-4 text-[15px] text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:-translate-y-[1px] focus:border-indigo-300 focus:bg-white focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]
+          dark:border-indigo-800/40 dark:bg-slate-800/90 dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-indigo-600 dark:focus:bg-slate-800 dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.08)]"
       />
     </label>
   )
