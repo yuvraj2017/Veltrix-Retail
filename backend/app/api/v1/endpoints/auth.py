@@ -65,7 +65,7 @@ def register(
     )
 
 
-@router.post("/", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return login_user(payload, db)
 
