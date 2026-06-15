@@ -94,6 +94,84 @@ def _calculate_payment_status(final_amount: Decimal, paid_amount: Decimal) -> tu
     return remaining_amount, "pending"
 
 
+def _resolve_invoice_item_pricing(
+    *,
+    mrp: Decimal,
+    buy_price: Decimal,
+    requested_quantity: Decimal,
+    product_name: str,
+    discount_percentage_input: Decimal | None = None,
+    discount_amount_per_unit_input: Decimal | None = None,
+    selling_price_per_unit_input: Decimal | None = None,
+):
+    if selling_price_per_unit_input is not None:
+        selling_price_per_unit = _money(selling_price_per_unit_input)
+
+        if selling_price_per_unit < Decimal("0.00"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Selling price cannot be negative for {product_name}",
+            )
+
+        if selling_price_per_unit > mrp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Selling price cannot be greater than MRP for {product_name}",
+            )
+
+        discount_amount_per_unit = _money(mrp - selling_price_per_unit)
+        discount_percentage = (
+            _money(discount_amount_per_unit * Decimal("100") / mrp)
+            if mrp > Decimal("0.00")
+            else Decimal("0.00")
+        )
+    elif discount_amount_per_unit_input is not None:
+        discount_amount_per_unit = _money(discount_amount_per_unit_input)
+
+        if discount_amount_per_unit > mrp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Discount cannot be greater than MRP for {product_name}",
+            )
+
+        selling_price_per_unit = _money(mrp - discount_amount_per_unit)
+        discount_percentage = (
+            _money(discount_amount_per_unit * Decimal("100") / mrp)
+            if mrp > Decimal("0.00")
+            else Decimal("0.00")
+        )
+    else:
+        discount_percentage = _to_decimal(discount_percentage_input)
+        discount_amount_per_unit = _money(
+            mrp * discount_percentage / Decimal("100")
+        )
+
+        if discount_amount_per_unit > mrp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Discount cannot be greater than MRP for {product_name}",
+            )
+
+        selling_price_per_unit = _money(mrp - discount_amount_per_unit)
+
+    total_item_discount = _money(discount_amount_per_unit * requested_quantity)
+    total_selling_price = _money(selling_price_per_unit * requested_quantity)
+    item_total_buy_cost = _money(buy_price * requested_quantity)
+    profit_per_unit = _money(selling_price_per_unit - buy_price)
+    item_total_profit = _money(total_selling_price - item_total_buy_cost)
+
+    return {
+        "discount_percentage": discount_percentage,
+        "discount_amount_per_unit": discount_amount_per_unit,
+        "selling_price_per_unit": selling_price_per_unit,
+        "total_discount_amount": total_item_discount,
+        "total_selling_price": total_selling_price,
+        "total_buy_cost": item_total_buy_cost,
+        "profit_per_unit": profit_per_unit,
+        "total_profit": item_total_profit,
+    }
+
+
 def _generate_invoice_number(db: Session, shop_id: int, invoice_date: date) -> str:
     """
     Format: INV-20260512-001
@@ -365,44 +443,20 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
         mrp = _get_product_mrp(product)
         buy_price = _get_product_buying_price(product)
 
-        discount_percentage = _to_decimal(item_payload.discount_percentage)
-
-        calculated_discount_per_unit = _money(
-            mrp * discount_percentage / Decimal("100")
+        pricing = _resolve_invoice_item_pricing(
+            mrp=mrp,
+            buy_price=buy_price,
+            requested_quantity=requested_quantity,
+            product_name=product.name,
+            discount_percentage_input=item_payload.discount_percentage,
+            discount_amount_per_unit_input=item_payload.discount_amount_per_unit,
+            selling_price_per_unit_input=item_payload.selling_price_per_unit,
         )
 
-        if item_payload.discount_amount_per_unit is not None:
-            discount_amount_per_unit = _money(item_payload.discount_amount_per_unit)
-        else:
-            discount_amount_per_unit = calculated_discount_per_unit
-
-        if discount_amount_per_unit > mrp:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Discount cannot be greater than MRP for {product.name}",
-            )
-
-        if item_payload.selling_price_per_unit is not None:
-            selling_price_per_unit = _money(item_payload.selling_price_per_unit)
-        else:
-            selling_price_per_unit = _money(mrp - discount_amount_per_unit)
-
-        if selling_price_per_unit < Decimal("0.00"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Selling price cannot be negative for {product.name}",
-            )
-
-        total_item_discount = _money(discount_amount_per_unit * requested_quantity)
-        total_selling_price = _money(selling_price_per_unit * requested_quantity)
-        item_total_buy_cost = _money(buy_price * requested_quantity)
-        profit_per_unit = _money(selling_price_per_unit - buy_price)
-        item_total_profit = _money(total_selling_price - item_total_buy_cost)
-
         subtotal_amount += _money(mrp * requested_quantity)
-        total_discount_amount += total_item_discount
-        total_buy_cost += item_total_buy_cost
-        total_profit += item_total_profit
+        total_discount_amount += pricing["total_discount_amount"]
+        total_buy_cost += pricing["total_buy_cost"]
+        total_profit += pricing["total_profit"]
 
         prepared_items.append(
             {
@@ -414,14 +468,7 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
                 "unit_snapshot": getattr(product, "unit", None),
                 "mrp": mrp,
                 "buy_price": buy_price,
-                "discount_percentage": discount_percentage,
-                "discount_amount_per_unit": discount_amount_per_unit,
-                "total_discount_amount": total_item_discount,
-                "selling_price_per_unit": selling_price_per_unit,
-                "total_selling_price": total_selling_price,
-                "total_buy_cost": item_total_buy_cost,
-                "profit_per_unit": profit_per_unit,
-                "total_profit": item_total_profit,
+                **pricing,
             }
         )
 
@@ -690,44 +737,20 @@ def update_invoice(
             mrp = _get_product_mrp(product)
             buy_price = _get_product_buying_price(product)
 
-            discount_percentage = _to_decimal(item_payload.discount_percentage)
-
-            calculated_discount_per_unit = _money(
-                mrp * discount_percentage / Decimal("100")
+            pricing = _resolve_invoice_item_pricing(
+                mrp=mrp,
+                buy_price=buy_price,
+                requested_quantity=requested_quantity,
+                product_name=product.name,
+                discount_percentage_input=item_payload.discount_percentage,
+                discount_amount_per_unit_input=item_payload.discount_amount_per_unit,
+                selling_price_per_unit_input=item_payload.selling_price_per_unit,
             )
 
-            if item_payload.discount_amount_per_unit is not None:
-                discount_amount_per_unit = _money(item_payload.discount_amount_per_unit)
-            else:
-                discount_amount_per_unit = calculated_discount_per_unit
-
-            if discount_amount_per_unit > mrp:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Discount cannot be greater than MRP for {product.name}",
-                )
-
-            if item_payload.selling_price_per_unit is not None:
-                selling_price_per_unit = _money(item_payload.selling_price_per_unit)
-            else:
-                selling_price_per_unit = _money(mrp - discount_amount_per_unit)
-
-            if selling_price_per_unit < Decimal("0.00"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Selling price cannot be negative for {product.name}",
-                )
-
-            total_item_discount = _money(discount_amount_per_unit * requested_quantity)
-            total_selling_price = _money(selling_price_per_unit * requested_quantity)
-            item_total_buy_cost = _money(buy_price * requested_quantity)
-            profit_per_unit = _money(selling_price_per_unit - buy_price)
-            item_total_profit = _money(total_selling_price - item_total_buy_cost)
-
             subtotal_amount += _money(mrp * requested_quantity)
-            total_discount_amount += total_item_discount
-            total_buy_cost += item_total_buy_cost
-            total_profit += item_total_profit
+            total_discount_amount += pricing["total_discount_amount"]
+            total_buy_cost += pricing["total_buy_cost"]
+            total_profit += pricing["total_profit"]
 
             prepared_items.append(
                 {
@@ -739,14 +762,7 @@ def update_invoice(
                     "unit_snapshot": getattr(product, "unit", None),
                     "mrp": mrp,
                     "buy_price": buy_price,
-                    "discount_percentage": discount_percentage,
-                    "discount_amount_per_unit": discount_amount_per_unit,
-                    "total_discount_amount": total_item_discount,
-                    "selling_price_per_unit": selling_price_per_unit,
-                    "total_selling_price": total_selling_price,
-                    "total_buy_cost": item_total_buy_cost,
-                    "profit_per_unit": profit_per_unit,
-                    "total_profit": item_total_profit,
+                    **pricing,
                 }
             )
 

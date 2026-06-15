@@ -10,6 +10,8 @@ type InvoiceItemsTableProps = {
   onItemsChange: (items: LocalInvoiceItem[]) => void
 }
 
+type RecalculationMode = 'discount' | 'unit-price' | 'total' | 'preserve-unit-price'
+
 const money = (value: number) => {
   return value.toLocaleString('en-IN', {
     style: 'currency',
@@ -19,6 +21,8 @@ const money = (value: number) => {
 }
 
 const toNumber = (value: string | number) => Number(value || 0)
+const roundMoney = (value: number) => Number(value.toFixed(2))
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
 const buildLocalItem = (product: BillingProduct): LocalInvoiceItem => {
   const mrp = toNumber(product.mrp)
@@ -51,18 +55,36 @@ const buildLocalItem = (product: BillingProduct): LocalInvoiceItem => {
 
 const recalculateItem = (
   item: LocalInvoiceItem,
-  updates: Partial<LocalInvoiceItem>
+  updates: Partial<LocalInvoiceItem>,
+  mode: RecalculationMode = 'preserve-unit-price'
 ): LocalInvoiceItem => {
   const next = { ...item, ...updates }
   const quantity = Math.max(Number(next.quantity || 0), 0)
-  const discountPercentage = Math.min(Math.max(Number(next.discount_percentage || 0), 0), 100)
-  const discountAmountPerUnit = Number(((next.mrp * discountPercentage) / 100).toFixed(2))
-  const sellingPricePerUnit = Number(Math.max(next.mrp - discountAmountPerUnit, 0).toFixed(2))
-  const totalDiscountAmount = Number((discountAmountPerUnit * quantity).toFixed(2))
-  const totalSellingPrice = Number((sellingPricePerUnit * quantity).toFixed(2))
-  const totalBuyCost = Number((next.buy_price * quantity).toFixed(2))
-  const profitPerUnit = Number((sellingPricePerUnit - next.buy_price).toFixed(2))
-  const totalProfit = Number((totalSellingPrice - totalBuyCost).toFixed(2))
+  const mrp = Math.max(Number(next.mrp || 0), 0)
+  const buyPrice = Math.max(Number(next.buy_price || 0), 0)
+
+  let discountPercentage = clamp(Number(next.discount_percentage || 0), 0, 100)
+  let sellingPricePerUnit = roundMoney(clamp(Number(next.selling_price_per_unit || 0), 0, mrp))
+
+  if (mode === 'discount') {
+    const discountAmount = roundMoney((mrp * discountPercentage) / 100)
+    sellingPricePerUnit = roundMoney(Math.max(mrp - discountAmount, 0))
+  } else if (mode === 'total') {
+    const requestedTotal = Math.max(Number(next.total_selling_price || 0), 0)
+    const derivedUnitPrice = quantity > 0 ? requestedTotal / quantity : 0
+    sellingPricePerUnit = roundMoney(clamp(derivedUnitPrice, 0, mrp))
+  } else {
+    sellingPricePerUnit = roundMoney(clamp(Number(next.selling_price_per_unit || 0), 0, mrp))
+  }
+
+  const discountAmountPerUnit = roundMoney(Math.max(mrp - sellingPricePerUnit, 0))
+  discountPercentage = mrp > 0 ? roundMoney((discountAmountPerUnit / mrp) * 100) : 0
+
+  const totalDiscountAmount = roundMoney(discountAmountPerUnit * quantity)
+  const totalSellingPrice = roundMoney(sellingPricePerUnit * quantity)
+  const totalBuyCost = roundMoney(buyPrice * quantity)
+  const profitPerUnit = roundMoney(sellingPricePerUnit - buyPrice)
+  const totalProfit = roundMoney(totalSellingPrice - totalBuyCost)
 
   return {
     ...next,
@@ -88,7 +110,7 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
           if (item.product_id !== product.id) return item
           return recalculateItem(item, {
             quantity: Math.min(item.quantity + 1, item.available_stock),
-          })
+          }, 'preserve-unit-price')
         })
       )
       return
@@ -97,11 +119,15 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
     onItemsChange([...items, buildLocalItem(product)])
   }
 
-  const updateItem = (productId: number, updates: Partial<LocalInvoiceItem>) => {
+  const updateItem = (
+    productId: number,
+    updates: Partial<LocalInvoiceItem>,
+    mode: RecalculationMode = 'preserve-unit-price'
+  ) => {
     onItemsChange(
       items.map((item) => {
         if (item.product_id !== productId) return item
-        return recalculateItem(item, updates)
+        return recalculateItem(item, updates, mode)
       })
     )
   }
@@ -125,7 +151,7 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
               Line Items
             </h2>
             <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-              Add products, quantity, and discount details.
+              Add products, then adjust discount, unit price, or total as needed.
             </p>
           </div>
         </div>
@@ -183,7 +209,7 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
                 const value = Number(event.target.value || 0)
                 updateItem(item.product_id, {
                   quantity: Math.min(value, item.available_stock),
-                })
+                }, 'preserve-unit-price')
               }}
               className="h-12 rounded-2xl border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 font-bold text-slate-800 dark:text-slate-200 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
             />
@@ -197,16 +223,26 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
               onChange={(event) =>
                 updateItem(item.product_id, {
                   discount_percentage: Number(event.target.value || 0),
-                })
+                }, 'discount')
               }
               className="h-12 rounded-2xl border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 font-bold text-slate-800 dark:text-slate-200 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
             />
 
             {/* Unit price */}
             <div>
-              <p className="font-black text-indigo-700 dark:text-indigo-400">
-                {money(item.selling_price_per_unit)}
-              </p>
+              <input
+                type="number"
+                min={0}
+                max={item.mrp}
+                step="0.01"
+                value={item.selling_price_per_unit}
+                onChange={(event) =>
+                  updateItem(item.product_id, {
+                    selling_price_per_unit: Number(event.target.value || 0),
+                  }, 'unit-price')
+                }
+                className="h-12 w-full rounded-2xl border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 font-bold text-indigo-700 dark:text-indigo-400 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
+              />
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Discount {money(item.discount_amount_per_unit)}
               </p>
@@ -214,9 +250,19 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
 
             {/* Row total */}
             <div>
-              <p className="font-black text-slate-950 dark:text-white">
-                {money(item.total_selling_price)}
-              </p>
+              <input
+                type="number"
+                min={0}
+                max={item.mrp * item.quantity}
+                step="0.01"
+                value={item.total_selling_price}
+                onChange={(event) =>
+                  updateItem(item.product_id, {
+                    total_selling_price: Number(event.target.value || 0),
+                  }, 'total')
+                }
+                className="h-12 w-full rounded-2xl border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 font-bold text-slate-950 dark:text-white outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
+              />
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Profit {money(item.total_profit)}
               </p>
