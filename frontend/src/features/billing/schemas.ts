@@ -32,6 +32,7 @@ export const invoiceCreateSchema = z.object({
     .optional()
     .nullable(),
   paid_amount: z.number().min(0),
+  total_payable_amount: z.number().min(0).optional().nullable(),
   total_tax_amount: z.number().min(0),
   invoice_status: z.enum(['draft', 'saved', 'cancelled']),
   notes: z.string().optional().nullable(),

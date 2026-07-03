@@ -215,16 +215,24 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
             />
 
             {/* Discount % input */}
+            {/* Discount % input */}
             <input
               type="number"
               min={0}
               max={100}
-              value={item.discount_percentage}
-              onChange={(event) =>
-                updateItem(item.product_id, {
-                  discount_percentage: Number(event.target.value || 0),
-                }, 'discount')
-              }
+              value={item.discount_percentage === 0 ? '' : item.discount_percentage}
+              placeholder="0"
+              onChange={(event) => {
+                const value = event.target.value
+
+                updateItem(
+                  item.product_id,
+                  {
+                    discount_percentage: value === '' ? 0 : Number(value),
+                  },
+                  'discount'
+                )
+              }}
               className="h-12 rounded-2xl border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 font-bold text-slate-800 dark:text-slate-200 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
             />
 

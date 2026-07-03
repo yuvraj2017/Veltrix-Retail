@@ -12,6 +12,9 @@ import type { LocalInvoiceItem, PaymentMode, PaymentStatus } from '../../feature
 
 type InvoiceSummaryCardProps = {
   items: LocalInvoiceItem[]
+  totalBilledAmount: number
+  totalPayable: number
+  onTotalPayableChange: (value: number) => void
   paidAmount: number
   onPaidAmountChange: (value: number) => void
   paymentMode: PaymentMode | ''
@@ -37,6 +40,9 @@ const money = (value: number) => {
 
 export default function InvoiceSummaryCard({
   items,
+  totalBilledAmount,
+  totalPayable,
+  onTotalPayableChange,
   paidAmount,
   onPaidAmountChange,
   paymentMode,
@@ -52,10 +58,11 @@ export default function InvoiceSummaryCard({
   secondaryActionLabel = 'Save Draft Locally',
 }: InvoiceSummaryCardProps) {
   const subtotal = items.reduce((sum, item) => sum + item.mrp * item.quantity, 0)
-  const discountTotal = items.reduce((sum, item) => sum + item.total_discount_amount, 0)
+  const itemDiscountTotal = items.reduce((sum, item) => sum + item.total_discount_amount, 0)
   const taxAmount = 0
-  const finalAmount = subtotal - discountTotal + taxAmount
-  const remainingAmount = Math.max(finalAmount - paidAmount, 0)
+  const extraDiscountAmount = Math.max(totalBilledAmount - totalPayable, 0)
+  const discountTotal = itemDiscountTotal + extraDiscountAmount
+  const remainingAmount = Math.max(totalPayable - paidAmount, 0)
 
   return (
     <aside className="space-y-6">
@@ -83,17 +90,20 @@ export default function InvoiceSummaryCard({
         <div className="space-y-4">
           <SummaryRow label="Subtotal" value={money(subtotal)} />
           <SummaryRow label="Discount Total" value={`-${money(discountTotal)}`} danger />
+          {extraDiscountAmount > 0 && (
+            <SummaryRow label="Extra Discount" value={`-${money(extraDiscountAmount)}`} danger />
+          )}
           <SummaryRow label="Tax" value={money(taxAmount)} />
 
           <div className="my-5 h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-600 to-transparent" />
 
-          <div className="flex items-end justify-between gap-4">
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
               <p className="text-[12px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                Total Payable
+                Total Billed Amount
               </p>
               <h3 className="mt-2 text-[38px] font-black tracking-[-0.055em] text-indigo-700 dark:text-indigo-400">
-                {money(finalAmount)}
+                {money(totalBilledAmount)}
               </h3>
             </div>
 
@@ -112,13 +122,38 @@ export default function InvoiceSummaryCard({
         <div className="mt-7 grid gap-4">
           <label className="space-y-2">
             <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
+              Total Payable Edit
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={totalBilledAmount}
+              step="0.01"
+              value={totalPayable}
+              onChange={(event) => {
+                const nextValue = Number(event.target.value || 0)
+                onTotalPayableChange(Math.min(Math.max(nextValue, 0), totalBilledAmount))
+              }}
+              className="h-13 w-full rounded-[20px] border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 font-bold text-slate-800 dark:text-slate-200 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
+            />
+            <p className="text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
+              Lowering payable will be saved as extra discount on the invoice.
+            </p>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
               Paid Amount
             </span>
             <input
               type="number"
               min={0}
+              max={totalPayable}
+              step="0.01"
               value={paidAmount}
-              onChange={(event) => onPaidAmountChange(Number(event.target.value || 0))}
+              onChange={(event) =>
+                onPaidAmountChange(Math.min(Number(event.target.value || 0), totalPayable))
+              }
               className="h-13 w-full rounded-[20px] border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 font-bold text-slate-800 dark:text-slate-200 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
             />
           </label>

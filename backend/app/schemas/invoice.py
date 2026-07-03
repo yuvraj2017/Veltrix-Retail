@@ -129,6 +129,7 @@ class InvoiceCreate(BaseModel):
     payment_status: str = Field(default="pending")
     payment_mode: Optional[str] = None
     paid_amount: Decimal = Field(default=0, ge=0)
+    total_payable_amount: Optional[Decimal] = Field(default=None, ge=0)
 
     total_tax_amount: Decimal = Field(default=0, ge=0)
 
@@ -213,6 +214,7 @@ class InvoiceUpdate(BaseModel):
     payment_status: Optional[str] = None
     payment_mode: Optional[str] = None
     paid_amount: Optional[Decimal] = Field(default=None, ge=0)
+    total_payable_amount: Optional[Decimal] = Field(default=None, ge=0)
 
     total_tax_amount: Optional[Decimal] = Field(default=None, ge=0)
 
@@ -280,6 +282,8 @@ class InvoiceResponse(BaseModel):
     subtotal_amount: Decimal
     total_discount_amount: Decimal
     total_tax_amount: Decimal
+    billed_amount: Decimal
+    extra_discount_amount: Decimal
     final_amount: Decimal
 
     paid_amount: Decimal
@@ -317,6 +321,8 @@ class InvoiceListResponse(BaseModel):
     subtotal_amount: Decimal
     total_discount_amount: Decimal
     total_tax_amount: Decimal
+    billed_amount: Decimal
+    extra_discount_amount: Decimal
     final_amount: Decimal
 
     paid_amount: Decimal

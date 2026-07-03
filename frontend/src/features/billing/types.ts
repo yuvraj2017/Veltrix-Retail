@@ -58,6 +58,7 @@ export type InvoiceCreatePayload = {
   payment_status: PaymentStatus
   payment_mode?: PaymentMode | null
   paid_amount: number
+  total_payable_amount?: number | null
   total_tax_amount: number
   invoice_status: InvoiceStatus
   notes?: string | null
@@ -107,6 +108,8 @@ export type Invoice = {
   subtotal_amount: string | number
   total_discount_amount: string | number
   total_tax_amount: string | number
+  billed_amount: string | number
+  extra_discount_amount: string | number
   final_amount: string | number
   paid_amount: string | number
   remaining_amount: string | number
@@ -136,6 +139,8 @@ export type InvoiceListItem = {
   subtotal_amount: string | number
   total_discount_amount: string | number
   total_tax_amount: string | number
+  billed_amount: string | number
+  extra_discount_amount: string | number
   final_amount: string | number
   paid_amount: string | number
   remaining_amount: string | number

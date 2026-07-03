@@ -54,6 +54,10 @@ export default function InvoicePreview({
   shopInfo,
 }: InvoicePreviewProps) {
   const logoUrl = resolveImageUrl(shopInfo.logoUrl)
+  const billedAmount = Number(invoice.billed_amount || invoice.final_amount || 0)
+  const extraDiscountAmount = Number(invoice.extra_discount_amount || 0)
+  const totalDiscountAmount = Number(invoice.total_discount_amount || 0)
+  const itemDiscountAmount = Math.max(totalDiscountAmount - extraDiscountAmount, 0)
 
   const customerAddress = [
     invoice.customer_address_snapshot,
@@ -254,10 +258,14 @@ export default function InvoicePreview({
             <div className="space-y-2 text-[14px]">
               <SummaryRow label="Sub Total:" value={money(invoice.subtotal_amount)} />
               <SummaryRow label="Tax:" value={money(invoice.total_tax_amount)} />
-              <SummaryRow
-                label="Discount:"
-                value={`-${money(invoice.total_discount_amount)}`}
-              />
+              {itemDiscountAmount > 0 && (
+                <SummaryRow label="Discount:" value={`-${money(itemDiscountAmount)}`} />
+              )}
+              {extraDiscountAmount > 0 && (
+                <SummaryRow label="Extra Discount:" value={`-${money(extraDiscountAmount)}`} />
+              )}
+              <SummaryRow label="Total Discount:" value={`-${money(totalDiscountAmount)}`} />
+              <SummaryRow label="Billed Amount:" value={money(billedAmount)} />
               <SummaryRow label="Paid:" value={money(invoice.paid_amount)} />
             </div>
 

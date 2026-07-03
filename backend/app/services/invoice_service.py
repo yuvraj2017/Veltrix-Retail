@@ -94,6 +94,105 @@ def _calculate_payment_status(final_amount: Decimal, paid_amount: Decimal) -> tu
     return remaining_amount, "pending"
 
 
+def _normalize_paid_amount(final_amount: Decimal, paid_amount: Decimal) -> Decimal:
+    final_amount = _money(final_amount)
+    paid_amount = _money(paid_amount)
+
+    if paid_amount < Decimal("0.00"):
+        return Decimal("0.00")
+
+    if paid_amount > final_amount:
+        return final_amount
+
+    return paid_amount
+
+
+def _resolve_invoice_amounts(
+    *,
+    subtotal_amount: Decimal,
+    item_discount_amount: Decimal,
+    total_tax_amount: Decimal,
+    requested_total_payable_amount: Decimal | None,
+    base_total_profit: Decimal,
+):
+    billed_amount = _money(subtotal_amount - item_discount_amount + total_tax_amount)
+
+    if requested_total_payable_amount is None:
+        final_amount = billed_amount
+    else:
+        final_amount = _money(requested_total_payable_amount)
+
+    if final_amount > billed_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Total payable cannot be greater than total billed amount",
+        )
+
+    extra_discount_amount = _money(billed_amount - final_amount)
+    total_discount_amount = _money(item_discount_amount + extra_discount_amount)
+    total_profit = _money(base_total_profit - extra_discount_amount)
+
+    return {
+        "billed_amount": billed_amount,
+        "extra_discount_amount": extra_discount_amount,
+        "total_discount_amount": total_discount_amount,
+        "final_amount": final_amount,
+        "total_profit": total_profit,
+    }
+
+
+def _adjust_customer_totals_after_invoice_edit(
+    *,
+    db: Session,
+    shop_id: int,
+    old_customer_id: int | None,
+    new_customer_id: int | None,
+    old_final_amount: Decimal,
+    new_final_amount: Decimal,
+):
+    if old_customer_id == new_customer_id:
+        if not new_customer_id:
+            return
+
+        customer = (
+            db.query(Customer)
+            .filter(Customer.id == new_customer_id, Customer.shop_id == shop_id)
+            .first()
+        )
+
+        if customer:
+            customer.total_spent = _money(
+                _to_decimal(customer.total_spent) - _money(old_final_amount) + _money(new_final_amount)
+            )
+        return
+
+    if old_customer_id:
+        old_customer = (
+            db.query(Customer)
+            .filter(Customer.id == old_customer_id, Customer.shop_id == shop_id)
+            .first()
+        )
+
+        if old_customer:
+            old_customer.total_orders = max(int(old_customer.total_orders or 0) - 1, 0)
+            old_customer.total_spent = _money(
+                _to_decimal(old_customer.total_spent) - _money(old_final_amount)
+            )
+
+    if new_customer_id:
+        new_customer = (
+            db.query(Customer)
+            .filter(Customer.id == new_customer_id, Customer.shop_id == shop_id)
+            .first()
+        )
+
+        if new_customer:
+            new_customer.total_orders = int(new_customer.total_orders or 0) + 1
+            new_customer.total_spent = _money(
+                _to_decimal(new_customer.total_spent) + _money(new_final_amount)
+            )
+
+
 def _resolve_invoice_item_pricing(
     *,
     mrp: Decimal,
@@ -415,9 +514,9 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
     prepared_items = []
 
     subtotal_amount = Decimal("0.00")
-    total_discount_amount = Decimal("0.00")
+    item_discount_amount = Decimal("0.00")
     total_buy_cost = Decimal("0.00")
-    total_profit = Decimal("0.00")
+    base_total_profit = Decimal("0.00")
 
     for item_payload in payload.items:
         product = get_product_for_invoice(item_payload.product_id, db, current_user)
@@ -454,9 +553,9 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
         )
 
         subtotal_amount += _money(mrp * requested_quantity)
-        total_discount_amount += pricing["total_discount_amount"]
+        item_discount_amount += pricing["total_discount_amount"]
         total_buy_cost += pricing["total_buy_cost"]
-        total_profit += pricing["total_profit"]
+        base_total_profit += pricing["total_profit"]
 
         prepared_items.append(
             {
@@ -473,11 +572,21 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
         )
 
     total_tax_amount = _money(payload.total_tax_amount)
-    final_amount = _money(subtotal_amount - total_discount_amount + total_tax_amount)
+    invoice_amounts = _resolve_invoice_amounts(
+        subtotal_amount=subtotal_amount,
+        item_discount_amount=item_discount_amount,
+        total_tax_amount=total_tax_amount,
+        requested_total_payable_amount=payload.total_payable_amount,
+        base_total_profit=base_total_profit,
+    )
 
-    remaining_amount, payment_status = _calculate_payment_status(
-        final_amount,
+    normalized_paid_amount = _normalize_paid_amount(
+        invoice_amounts["final_amount"],
         payload.paid_amount,
+    )
+    remaining_amount, payment_status = _calculate_payment_status(
+        invoice_amounts["final_amount"],
+        normalized_paid_amount,
     )
 
     if payload.payment_status:
@@ -503,13 +612,15 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
         customer_gst_number_snapshot=customer.gst_number,
         invoice_date=invoice_date_value,
         subtotal_amount=_money(subtotal_amount),
-        total_discount_amount=_money(total_discount_amount),
+        total_discount_amount=invoice_amounts["total_discount_amount"],
         total_tax_amount=total_tax_amount,
-        final_amount=final_amount,
-        paid_amount=_money(payload.paid_amount),
+        billed_amount=invoice_amounts["billed_amount"],
+        extra_discount_amount=invoice_amounts["extra_discount_amount"],
+        final_amount=invoice_amounts["final_amount"],
+        paid_amount=normalized_paid_amount,
         remaining_amount=remaining_amount,
         total_buy_cost=_money(total_buy_cost),
-        total_profit=_money(total_profit),
+        total_profit=invoice_amounts["total_profit"],
         payment_status=payment_status,
         payment_mode=payload.payment_mode,
         invoice_status=payload.invoice_status,
@@ -576,7 +687,9 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
         _set_product_stock(product, new_stock)
 
     customer.total_orders = int(customer.total_orders or 0) + 1
-    customer.total_spent = _money(_to_decimal(customer.total_spent) + final_amount)
+    customer.total_spent = _money(
+        _to_decimal(customer.total_spent) + invoice_amounts["final_amount"]
+    )
 
     try:
         db.commit()
@@ -661,6 +774,9 @@ def update_invoice(
     # FULL INVOICE EDIT FLOW
     # ---------------------------------------------------------
     if is_full_edit:
+        old_customer_id = invoice.customer_id
+        old_final_amount = _money(invoice.final_amount)
+
         if not data.get("customer"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -709,9 +825,9 @@ def update_invoice(
 
         prepared_items = []
         subtotal_amount = Decimal("0.00")
-        total_discount_amount = Decimal("0.00")
+        item_discount_amount = Decimal("0.00")
         total_buy_cost = Decimal("0.00")
-        total_profit = Decimal("0.00")
+        base_total_profit = Decimal("0.00")
 
         for item_payload in payload.items:
             product = get_product_for_invoice(item_payload.product_id, db, current_user)
@@ -748,9 +864,9 @@ def update_invoice(
             )
 
             subtotal_amount += _money(mrp * requested_quantity)
-            total_discount_amount += pricing["total_discount_amount"]
+            item_discount_amount += pricing["total_discount_amount"]
             total_buy_cost += pricing["total_buy_cost"]
-            total_profit += pricing["total_profit"]
+            base_total_profit += pricing["total_profit"]
 
             prepared_items.append(
                 {
@@ -767,12 +883,24 @@ def update_invoice(
             )
 
         total_tax_amount = _money(payload.total_tax_amount or 0)
-        final_amount = _money(subtotal_amount - total_discount_amount + total_tax_amount)
+        invoice_amounts = _resolve_invoice_amounts(
+            subtotal_amount=subtotal_amount,
+            item_discount_amount=item_discount_amount,
+            total_tax_amount=total_tax_amount,
+            requested_total_payable_amount=payload.total_payable_amount,
+            base_total_profit=base_total_profit,
+        )
 
-        paid_amount_input = payload.paid_amount if payload.paid_amount is not None else invoice.paid_amount
-        remaining_amount, calculated_payment_status = _calculate_payment_status(
-            final_amount,
+        paid_amount_input = (
+            payload.paid_amount if payload.paid_amount is not None else invoice.paid_amount
+        )
+        normalized_paid_amount = _normalize_paid_amount(
+            invoice_amounts["final_amount"],
             paid_amount_input,
+        )
+        remaining_amount, calculated_payment_status = _calculate_payment_status(
+            invoice_amounts["final_amount"],
+            normalized_paid_amount,
         )
 
         final_payment_status = payload.payment_status or calculated_payment_status
@@ -790,15 +918,17 @@ def update_invoice(
 
         invoice.invoice_date = invoice_date_value
         invoice.subtotal_amount = _money(subtotal_amount)
-        invoice.total_discount_amount = _money(total_discount_amount)
+        invoice.total_discount_amount = invoice_amounts["total_discount_amount"]
         invoice.total_tax_amount = total_tax_amount
-        invoice.final_amount = final_amount
+        invoice.billed_amount = invoice_amounts["billed_amount"]
+        invoice.extra_discount_amount = invoice_amounts["extra_discount_amount"]
+        invoice.final_amount = invoice_amounts["final_amount"]
 
-        invoice.paid_amount = _money(paid_amount_input)
+        invoice.paid_amount = normalized_paid_amount
         invoice.remaining_amount = remaining_amount
 
         invoice.total_buy_cost = _money(total_buy_cost)
-        invoice.total_profit = _money(total_profit)
+        invoice.total_profit = invoice_amounts["total_profit"]
 
         invoice.payment_status = final_payment_status
         invoice.payment_mode = payload.payment_mode
@@ -835,23 +965,36 @@ def update_invoice(
             analytics = ProductSalesAnalytics(
                 shop_id=current_user.shop_id,
                 invoice_id=invoice.id,
+                invoice_number=invoice.invoice_number,
+                invoice_date=invoice.invoice_date,
+                customer_id=customer.id,
+                customer_name=customer.full_name,
+                customer_phone=customer.phone,
+                product_code=prepared["product_code"],
                 product_id=prepared["product"].id,
-                product_name_snapshot=prepared["product_name_snapshot"],
-                category_snapshot=prepared["category_snapshot"],
-                unit_snapshot=prepared["unit_snapshot"],
-                quantity_sold=prepared["quantity"],
+                product_name=prepared["product_name_snapshot"],
+                category=prepared["category_snapshot"],
+                buy_price=prepared["buy_price"],
                 mrp=prepared["mrp"],
-                selling_price_per_unit=prepared["selling_price_per_unit"],
                 discount_percentage=prepared["discount_percentage"],
-                discount_amount_per_unit=prepared["discount_amount_per_unit"],
-                total_discount_amount=prepared["total_discount_amount"],
-                total_sales_amount=prepared["total_selling_price"],
+                discount_amount=prepared["total_discount_amount"],
+                selling_price_per_unit=prepared["selling_price_per_unit"],
+                quantity=prepared["quantity"],
+                total_selling_price=prepared["total_selling_price"],
                 total_buy_cost=prepared["total_buy_cost"],
                 total_profit=prepared["total_profit"],
-                sale_date=invoice.invoice_date,
                 payment_status=invoice.payment_status,
             )
             db.add(analytics)
+
+        _adjust_customer_totals_after_invoice_edit(
+            db=db,
+            shop_id=current_user.shop_id,
+            old_customer_id=old_customer_id,
+            new_customer_id=customer.id,
+            old_final_amount=old_final_amount,
+            new_final_amount=invoice_amounts["final_amount"],
+        )
 
         db.commit()
         db.refresh(invoice)
@@ -861,8 +1004,49 @@ def update_invoice(
     # ---------------------------------------------------------
     # SIMPLE STATUS / PAYMENT UPDATE FLOW
     # ---------------------------------------------------------
+    if "total_payable_amount" in data and data["total_payable_amount"] is not None:
+        old_final_amount = _money(invoice.final_amount)
+        billed_amount = _money(invoice.billed_amount or invoice.final_amount)
+        requested_total_payable_amount = _money(data["total_payable_amount"])
+
+        if requested_total_payable_amount > billed_amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Total payable cannot be greater than total billed amount",
+            )
+
+        base_item_discount_amount = _money(
+            _to_decimal(invoice.total_discount_amount) - _to_decimal(invoice.extra_discount_amount)
+        )
+        extra_discount_amount = _money(billed_amount - requested_total_payable_amount)
+
+        invoice.billed_amount = billed_amount
+        invoice.extra_discount_amount = extra_discount_amount
+        invoice.total_discount_amount = _money(base_item_discount_amount + extra_discount_amount)
+        invoice.final_amount = requested_total_payable_amount
+        invoice.total_profit = _money(
+            _to_decimal(invoice.total_profit) + invoice.final_amount - old_final_amount
+        )
+        invoice.paid_amount = _normalize_paid_amount(invoice.final_amount, invoice.paid_amount)
+
+        customer = None
+        if invoice.customer_id:
+            customer = (
+                db.query(Customer)
+                .filter(
+                    Customer.id == invoice.customer_id,
+                    Customer.shop_id == current_user.shop_id,
+                )
+                .first()
+            )
+
+        if customer:
+            customer.total_spent = _money(
+                _to_decimal(customer.total_spent) - old_final_amount + invoice.final_amount
+            )
+
     if "paid_amount" in data and data["paid_amount"] is not None:
-        invoice.paid_amount = _money(data["paid_amount"])
+        invoice.paid_amount = _normalize_paid_amount(invoice.final_amount, data["paid_amount"])
         invoice.remaining_amount, calculated_status = _calculate_payment_status(
             invoice.final_amount,
             invoice.paid_amount,
@@ -883,9 +1067,18 @@ def update_invoice(
     if "notes" in data:
         invoice.notes = data["notes"]
 
+    if "total_payable_amount" in data and data["total_payable_amount"] is not None and "paid_amount" not in data:
+        invoice.remaining_amount, calculated_status = _calculate_payment_status(
+            invoice.final_amount,
+            invoice.paid_amount,
+        )
+
+        if "payment_status" not in data or data.get("payment_status") is None:
+            invoice.payment_status = calculated_status
+
     for analytics in invoice.sales_analytics:
         analytics.payment_status = invoice.payment_status
-        analytics.sale_date = invoice.invoice_date
+        analytics.invoice_date = invoice.invoice_date
 
     db.commit()
     db.refresh(invoice)

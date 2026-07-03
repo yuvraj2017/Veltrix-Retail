@@ -40,6 +40,8 @@ class Invoice(Base):
     subtotal_amount = Column(Numeric(12, 2), nullable=False, default=0)
     total_discount_amount = Column(Numeric(12, 2), nullable=False, default=0)
     total_tax_amount = Column(Numeric(12, 2), nullable=False, default=0)
+    billed_amount = Column(Numeric(12, 2), nullable=False, default=0)
+    extra_discount_amount = Column(Numeric(12, 2), nullable=False, default=0)
     final_amount = Column(Numeric(12, 2), nullable=False, default=0)
 
     paid_amount = Column(Numeric(12, 2), nullable=False, default=0)

@@ -9,7 +9,7 @@ import {
   Check,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, type FieldErrors } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { createProduct } from '../features/products/api'
@@ -21,6 +21,42 @@ const MAX_IMAGES = 5
 type PreviewImage = {
   file: File
   url: string
+}
+
+const FORM_ID = 'add-product-form'
+
+const getFirstErrorMessage = (formErrors: FieldErrors<ProductFormValues>) => {
+  for (const value of Object.values(formErrors)) {
+    if (!value) continue
+
+    if ('message' in value && typeof value.message === 'string') {
+      return value.message
+    }
+  }
+
+  return 'Please fix the highlighted fields before saving.'
+}
+
+const getApiErrorMessage = (error: any) => {
+  const detail = error?.response?.data?.detail
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail
+  }
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const firstIssue = detail[0]
+
+    if (typeof firstIssue === 'string' && firstIssue.trim()) {
+      return firstIssue
+    }
+
+    if (firstIssue?.msg) {
+      return String(firstIssue.msg)
+    }
+  }
+
+  return error instanceof Error ? error.message : 'Failed to create product'
 }
 
 export default function AddProductPage() {
@@ -107,7 +143,7 @@ export default function AddProductPage() {
       formData.append('description', values.description || '')
       formData.append('buying_price', String(values.buying_price))
       formData.append('mrp', String(values.mrp))
-      formData.append('selling_price', String(values.selling_price))
+      formData.append('selling_price', String(values.selling_price || values.mrp))
       formData.append('stock_quantity', String(values.stock_quantity))
       formData.append('low_stock_threshold', String(values.low_stock_threshold))
       formData.append('unit', values.unit)
@@ -118,10 +154,14 @@ export default function AddProductPage() {
       await createProduct(formData)
       navigate('/products')
     } catch (error: any) {
-      setApiError(error?.response?.data?.detail || 'Failed to create product')
+      setApiError(getApiErrorMessage(error))
     } finally {
       setLoading(false)
     }
+  }
+
+  const onInvalid = (formErrors: FieldErrors<ProductFormValues>) => {
+    setApiError(getFirstErrorMessage(formErrors))
   }
 
   const imageCountText = useMemo(
@@ -169,8 +209,8 @@ export default function AddProductPage() {
 
             {/* Save button */}
             <button
-              type="button"
-              onClick={handleSubmit(onSubmit)}
+              type="submit"
+              form={FORM_ID}
               disabled={loading}
               className="group flex items-center justify-center gap-2.5 rounded-2xl bg-indigo-600 px-3 py-3 text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/40 transition-all duration-200 hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 dark:hover:shadow-indigo-900/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 xl:justify-start xl:px-4 xl:py-2.5"
             >
@@ -193,7 +233,11 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <form className="grid grid-cols-1 gap-5 xl:grid-cols-[1.9fr_0.9fr] xl:gap-6">
+        <form
+          id={FORM_ID}
+          onSubmit={handleSubmit(onSubmit, onInvalid)}
+          className="grid grid-cols-1 gap-5 xl:grid-cols-[1.9fr_0.9fr] xl:gap-6"
+        >
           <div className="flex flex-col gap-5">
 
             {/* Basic Info */}
@@ -391,6 +435,9 @@ export default function AddProductPage() {
                       placeholder="pcs"
                       className="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 px-4 py-3 text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 outline-none transition focus:border-indigo-400 dark:focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-700 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/30"
                     />
+                    {errors.unit && (
+                      <p className="mt-1 text-xs text-red-500 dark:text-red-400">{errors.unit.message}</p>
+                    )}
                   </div>
                 </div>
               </section>
