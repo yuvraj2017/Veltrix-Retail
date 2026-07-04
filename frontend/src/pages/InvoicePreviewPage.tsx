@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 
 import { AppShell } from '../components/layout/AppShell'
-import InvoicePreview from '../components/billing/InvoicePreview'
+import InvoicePreview from '../components/billing/InvoicePreviewDocument'
 import { billingApi } from '../features/billing/api'
 import type { Invoice } from '../features/billing/types'
 import { useAuth } from '../context/AuthContext'

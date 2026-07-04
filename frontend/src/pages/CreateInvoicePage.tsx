@@ -94,6 +94,7 @@ export default function CreateInvoicePage() {
 
   const [paidAmount, setPaidAmount] = useState(0)
   const [totalPayable, setTotalPayable] = useState(0)
+  const [isPayableManuallyEdited, setIsPayableManuallyEdited] = useState(false)
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>('')
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending')
@@ -127,8 +128,23 @@ export default function CreateInvoicePage() {
   }, [items])
 
   useEffect(() => {
-    setTotalPayable(totalBilledAmount)
-  }, [totalBilledAmount])
+    setTotalPayable((currentTotalPayable) => {
+      if (!isPayableManuallyEdited) {
+        return totalBilledAmount
+      }
+
+      return Math.min(currentTotalPayable, totalBilledAmount)
+    })
+  }, [isPayableManuallyEdited, totalBilledAmount])
+
+  useEffect(() => {
+    setPaidAmount((currentPaidAmount) => Math.min(currentPaidAmount, totalPayable))
+  }, [totalPayable])
+
+  const handleTotalPayableChange = (value: number) => {
+    setIsPayableManuallyEdited(Math.abs(totalBilledAmount - value) > 0.009)
+    setTotalPayable(value)
+  }
 
   const buildPayload = (): InvoiceCreatePayload => ({
     customer,
@@ -144,6 +160,7 @@ export default function CreateInvoicePage() {
     payment_status: paymentStatus,
     payment_mode: paymentMode || null,
     paid_amount: paidAmount,
+    total_payable_amount: totalPayable,
     total_tax_amount: totals.tax,
     invoice_status: 'saved',
     notes,
@@ -177,6 +194,7 @@ export default function CreateInvoicePage() {
       payment_status: parsed.payment_status,
       payment_mode: parsed.payment_mode ?? null,
       paid_amount: parsed.paid_amount,
+      total_payable_amount: parsed.total_payable_amount ?? null,
       total_tax_amount: parsed.total_tax_amount,
       invoice_status: parsed.invoice_status,
       notes: parsed.notes || null,
@@ -194,6 +212,12 @@ export default function CreateInvoicePage() {
 
       setCustomer(mapInvoiceToCustomer(data))
       setItems((data.items || []).map(mapInvoiceItemToLocalItem))
+
+      const billedAmount = Number(data.billed_amount || data.final_amount || 0)
+      const payableAmount = Number(data.final_amount || billedAmount)
+
+      setTotalPayable(payableAmount)
+      setIsPayableManuallyEdited(Math.abs(billedAmount - payableAmount) > 0.009)
       setPaidAmount(Number(data.paid_amount || 0))
       setPaymentMode((data.payment_mode as PaymentMode | null) || '')
       setPaymentStatus((data.payment_status as PaymentStatus) || 'pending')
@@ -366,7 +390,7 @@ export default function CreateInvoicePage() {
               items={items}
               totalBilledAmount={totalBilledAmount}
               totalPayable={totalPayable}
-              onTotalPayableChange={setTotalPayable}
+              onTotalPayableChange={handleTotalPayableChange}
               paidAmount={paidAmount}
               onPaidAmountChange={setPaidAmount}
               paymentMode={paymentMode}
