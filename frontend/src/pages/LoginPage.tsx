@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Globe, LockKeyhole, Mail, ArrowRight } from 'lucide-react'
+import { Globe, LockKeyhole, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '../lib/api'
 import { useForm } from 'react-hook-form'
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const { login } = useAuth()
   const [apiError, setApiError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
 
   const {
@@ -133,11 +134,20 @@ export default function LoginPage() {
 
 
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Enter password"
                   {...register('password')}
-                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fbff] py-4 pl-16 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fbff] py-4 pl-16 pr-16 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
                 />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition hover:text-indigo-500 group-focus-within:border-indigo-200 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-500"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
 
 
