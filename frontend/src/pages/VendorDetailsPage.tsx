@@ -221,6 +221,7 @@ export default function VendorDetailsPage() {
             isLoading={isLoading}
             onAddBill={() => navigate(`/vendors/${vendor.id}/bills/new`)}
             onAddPayment={(bill) => setSelectedBill(bill)}
+            onEditBill={(bill) => navigate(`/vendors/${vendor.id}/bills/${bill.id}/edit`)}
           />
         </div>
 

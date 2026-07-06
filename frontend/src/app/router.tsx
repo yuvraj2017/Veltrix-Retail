@@ -47,6 +47,7 @@ export const router = createBrowserRouter([
       { path: "/vendors/new", element: <AddVendorPage /> },
       { path: "/vendors/:vendorId", element: <VendorDetailsPage /> },
       { path: "/vendors/:vendorId/bills/new", element: <AddVendorBillPage /> },
+      { path: "/vendors/:vendorId/bills/:billId/edit", element: <AddVendorBillPage /> },
 
       { path: "/billing", element: <BillingPage /> },
       { path: "/billing/new", element: <CreateInvoicePage /> },

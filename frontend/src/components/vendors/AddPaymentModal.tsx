@@ -69,6 +69,19 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 px-4">
+      <style>{`
+        input[data-hide-number-spinner='true']::-webkit-inner-spin-button,
+        input[data-hide-number-spinner='true']::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+
+        input[data-hide-number-spinner='true'] {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+      `}</style>
+
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -132,6 +145,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
               <label className="text-[12px] text-gray-500 dark:text-gray-400 block mb-1.5">Amount (₹)</label>
               <input
                 type="number"
+                data-hide-number-spinner="true"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"

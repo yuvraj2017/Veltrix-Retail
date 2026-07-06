@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { CreditCard, Filter, Plus, ReceiptText } from "lucide-react";
+import { CreditCard, Filter, MoreVertical, Pencil, Plus, ReceiptText } from "lucide-react";
 import type { VendorBill } from "../../features/vendors/types";
 import VendorStatusBadge from "./VendorStatusBadge";
 
@@ -8,6 +10,7 @@ type VendorBillsTableProps = {
   isLoading: boolean;
   onAddBill: () => void;
   onAddPayment: (bill: VendorBill) => void;
+  onEditBill: (bill: VendorBill) => void;
 };
 
 const money = (value: string | number) => {
@@ -28,11 +31,148 @@ const formatDate = (date?: string | null) => {
   });
 };
 
+type DropdownPosition = { top: number; right: number; openUpward: boolean };
+
+function BillActionsDropdown({
+  position,
+  onEdit,
+  onPay,
+  onClose,
+}: {
+  position: DropdownPosition;
+  onEdit: () => void;
+  onPay: () => void;
+  onClose: () => void;
+}) {
+  const dropdownStyle: React.CSSProperties = position.openUpward
+    ? { position: "fixed", bottom: window.innerHeight - position.top + 8, right: window.innerWidth - position.right, zIndex: 99999 }
+    : { position: "fixed", top: position.top + 8, right: window.innerWidth - position.right, zIndex: 99999 };
+
+  const actions = [
+    { label: "Edit Bill", icon: Pencil, onClick: onEdit },
+    { label: "Add Payment", icon: CreditCard, onClick: onPay },
+  ];
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: position.openUpward ? 8 : -8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.18 }}
+      style={dropdownStyle}
+      className="w-[220px] overflow-hidden rounded-[24px] border border-slate-200/70 bg-white/95 shadow-[0_24px_70px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_70px_rgba(0,0,0,0.45)]"
+    >
+      <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/70">
+        <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+          Actions
+        </p>
+      </div>
+
+      <div className="space-y-1 p-2">
+        {actions.map((action) => {
+          const Icon = action.icon;
+
+          return (
+            <button
+              key={action.label}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+                action.onClick();
+              }}
+              className="group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-all duration-200 hover:bg-indigo-50 dark:hover:bg-indigo-950"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-all duration-200 group-hover:bg-indigo-100 group-hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:bg-indigo-900 dark:group-hover:text-indigo-400">
+                <Icon size={16} />
+              </div>
+              <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {action.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </motion.div>,
+    document.body,
+  );
+}
+
+function BillActions({
+  bill,
+  onEdit,
+  onPay,
+}: {
+  bill: VendorBill;
+  onEdit: (bill: VendorBill) => void;
+  onPay: (bill: VendorBill) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<DropdownPosition | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+  const handleOpen = (event: React.MouseEvent) => {
+    event.stopPropagation();
+
+    if (open) {
+      setOpen(false);
+      return;
+    }
+
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setPosition({ top: rect.bottom, right: rect.right, openUpward: spaceBelow < 220 });
+    }
+
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const close = () => setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("scroll", close, true);
+
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" onMouseDown={(event) => event.stopPropagation()}>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={handleOpen}
+        className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 ${
+          open
+            ? "border-indigo-200 bg-indigo-50 text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.18)] dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-400"
+            : "border-slate-200 bg-white text-slate-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-indigo-700 dark:hover:bg-indigo-950 dark:hover:text-indigo-400"
+        }`}
+      >
+        <MoreVertical size={17} className={`transition-transform duration-300 ${open ? "rotate-90" : ""}`} />
+      </button>
+
+      {open && position && (
+        <BillActionsDropdown
+          position={position}
+          onEdit={() => onEdit(bill)}
+          onPay={() => onPay(bill)}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function VendorBillsTable({
   bills,
   isLoading,
   onAddBill,
   onAddPayment,
+  onEditBill,
 }: VendorBillsTableProps) {
   return (
     <section className="overflow-hidden rounded-[24px] bg-white dark:bg-slate-900 shadow-[0_18px_50px_rgba(17,18,28,0.05)] dark:shadow-[0_18px_50px_rgba(0,0,0,0.25)] border border-transparent dark:border-slate-800">
@@ -63,7 +203,7 @@ export default function VendorBillsTable({
       </div>
 
       {/* Desktop column headers */}
-      <div className="hidden grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_0.9fr_0.8fr] px-6 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-[#303344] dark:text-slate-400 border-t border-[#f1f1f4] dark:border-slate-800 lg:grid">
+      <div className="hidden grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_0.9fr_1fr] px-6 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-[#303344] dark:text-slate-400 border-t border-[#f1f1f4] dark:border-slate-800 lg:grid">
         <div>Bill No.</div>
         <div>Date</div>
         <div>Due Date</div>
@@ -71,7 +211,7 @@ export default function VendorBillsTable({
         <div>Paid</div>
         <div>Balance</div>
         <div>Status</div>
-        <div className="text-right">Action</div>
+        <div className="text-right">Actions</div>
       </div>
 
       {/* Loading skeleton */}
@@ -120,7 +260,7 @@ export default function VendorBillsTable({
               }`}
             >
               {/* ── Desktop row (lg+) ── */}
-              <div className="hidden grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_0.9fr_0.8fr] items-center gap-4 border-t border-[#f1f1f4] dark:border-slate-800 px-6 py-5 text-sm lg:grid">
+              <div className="hidden grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_0.9fr_1fr] items-center gap-4 border-t border-[#f1f1f4] dark:border-slate-800 px-6 py-5 text-sm lg:grid">
                 <div className="font-black text-[#111216] dark:text-slate-100">
                   {bill.bill_number}
                 </div>
@@ -149,13 +289,11 @@ export default function VendorBillsTable({
                   <VendorStatusBadge status={bill.status} />
                 </div>
                 <div className="flex justify-end">
-                  <button
-                    onClick={() => onAddPayment(bill)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#f1f1f4] dark:bg-slate-800 px-3 py-2 text-xs font-black text-[#171821] dark:text-slate-300 transition hover:bg-[#e8e8ef] dark:hover:bg-slate-700"
-                  >
-                    <CreditCard size={15} />
-                    Pay
-                  </button>
+                  <BillActions
+                    bill={bill}
+                    onEdit={onEditBill}
+                    onPay={onAddPayment}
+                  />
                 </div>
               </div>
 
@@ -168,13 +306,11 @@ export default function VendorBillsTable({
                   </span>
                   <div className="flex items-center gap-2">
                     <VendorStatusBadge status={bill.status} />
-                    <button
-                      onClick={() => onAddPayment(bill)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#f1f1f4] dark:bg-slate-800 px-3 py-2 text-xs font-black text-[#171821] dark:text-slate-300 transition hover:bg-[#e8e8ef] dark:hover:bg-slate-700"
-                    >
-                      <CreditCard size={14} />
-                      Pay
-                    </button>
+                    <BillActions
+                      bill={bill}
+                      onEdit={onEditBill}
+                      onPay={onAddPayment}
+                    />
                   </div>
                 </div>
 
