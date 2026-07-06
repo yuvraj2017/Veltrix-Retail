@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowRight, CheckCircle2, ChevronDown, Clock3, Download,
-  Eye, FileText, MoreVertical, Pencil, Phone, Printer,
-  ReceiptText, Search, Share2, Sparkles,
+  Eye, FileText, Loader2, MoreVertical, Pencil, Phone, Printer,
+  ReceiptText, Search, Share2, Sparkles, Trash2,
 } from 'lucide-react'
 import type { InvoiceListItem, PaymentStatus } from '../../features/billing/types'
 
@@ -22,6 +22,8 @@ type InvoiceTableProps = {
   onPrint: (invoiceId: number) => void
   onDownload: (invoiceId: number) => void
   onShare: (invoiceId: number) => void
+  onDelete: (invoiceId: number) => void
+  deletingInvoiceId?: number | null
 }
 
 const money = (value: string | number) => {
@@ -172,7 +174,14 @@ function InvoiceActionsDropdown({
   onClose,
 }: {
   position: DropdownPosition
-  actions: { label: string; icon: React.ElementType; onClick: () => void }[]
+  actions: {
+    label: string
+    icon: React.ElementType
+    onClick: () => void
+    destructive?: boolean
+    disabled?: boolean
+    spinning?: boolean
+  }[]
   onClose: () => void
 }) {
   const dropdownStyle: React.CSSProperties = position.openUpward
@@ -185,28 +194,39 @@ function InvoiceActionsDropdown({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.18 }}
       style={dropdownStyle}
-      className="w-[250px] overflow-hidden rounded-[28px] border border-slate-200/70 dark:border-slate-700 bg-white/95 dark:bg-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.18)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+      className="w-[260px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[26px] border border-slate-200/70 dark:border-slate-700 bg-white/95 dark:bg-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.18)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
     >
-      <div className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/70 px-5 py-4">
+      <div className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/70 px-4 py-3">
         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
           Actions
         </p>
       </div>
 
-      <div className="space-y-1 p-2">
+      <div className="space-y-1 p-2.5">
         {actions.map((action) => {
           const Icon = action.icon
           return (
             <button
               key={action.label}
               type="button"
+              disabled={action.disabled}
               onClick={(e) => { e.stopPropagation(); onClose(); action.onClick() }}
-              className="group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-200 hover:bg-indigo-50 dark:hover:bg-indigo-950"
+              className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-all duration-200 ${
+                action.destructive
+                  ? 'hover:bg-red-50 dark:hover:bg-red-950/40'
+                  : 'hover:bg-indigo-50 dark:hover:bg-indigo-950'
+              } ${action.disabled ? 'cursor-not-allowed opacity-70' : ''}`}
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 transition-all duration-200 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                <Icon size={18} />
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${
+                action.destructive
+                  ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
+              }`}>
+                <Icon size={16} className={action.spinning ? 'animate-spin' : ''} />
               </div>
-              <span className="text-[15px] font-bold text-slate-700 dark:text-slate-300">
+              <span className={`text-[14px] font-bold ${
+                action.destructive ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'
+              }`}>
                 {action.label}
               </span>
             </button>
@@ -219,7 +239,7 @@ function InvoiceActionsDropdown({
 }
 
 function InvoiceActions({
-  invoiceId, onView, onEdit, onPrint, onDownload, onShare,
+  invoiceId, onView, onEdit, onPrint, onDownload, onShare, onDelete, deletingInvoiceId,
 }: {
   invoiceId: number
   onView: (id: number) => void
@@ -227,10 +247,13 @@ function InvoiceActions({
   onPrint: (id: number) => void
   onDownload: (id: number) => void
   onShare: (id: number) => void
+  onDelete: (id: number) => void
+  deletingInvoiceId?: number | null
 }) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<DropdownPosition | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const isDeleting = deletingInvoiceId === invoiceId
 
   const actions = [
     { label: 'View Invoice',  icon: Eye,     onClick: () => onView(invoiceId)     },
@@ -238,6 +261,14 @@ function InvoiceActions({
     { label: 'Print Invoice', icon: Printer, onClick: () => onPrint(invoiceId)    },
     { label: 'Download PDF',  icon: Download,onClick: () => onDownload(invoiceId) },
     { label: 'Share Invoice', icon: Share2,  onClick: () => onShare(invoiceId)    },
+    {
+      label: isDeleting ? 'Deleting...' : 'Delete Invoice',
+      icon: isDeleting ? Loader2 : Trash2,
+      onClick: () => onDelete(invoiceId),
+      destructive: true,
+      disabled: isDeleting,
+      spinning: isDeleting,
+    },
   ]
 
   const handleOpen = useCallback((e: React.MouseEvent) => {
@@ -246,7 +277,7 @@ function InvoiceActions({
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       const spaceBelow = window.innerHeight - rect.bottom
-      setPosition({ top: rect.bottom, right: rect.right, openUpward: spaceBelow < 370 })
+      setPosition({ top: rect.bottom, right: rect.right, openUpward: spaceBelow < 290 })
     }
     setOpen(true)
   }, [open])
@@ -287,7 +318,7 @@ function InvoiceActions({
 export default function InvoiceTable({
   invoices, totalInvoices, isLoading, search, onSearchChange,
   paymentStatus, onPaymentStatusChange, onView, onEdit, onCreate,
-  onPrint, onDownload, onShare,
+  onPrint, onDownload, onShare, onDelete, deletingInvoiceId,
 }: InvoiceTableProps) {
   return (
     <section className="overflow-hidden rounded-[34px] bg-white dark:bg-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.06)] dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)] border border-transparent dark:border-slate-800">
@@ -451,6 +482,8 @@ export default function InvoiceTable({
                   onPrint={onPrint}
                   onDownload={onDownload}
                   onShare={onShare}
+                  onDelete={onDelete}
+                  deletingInvoiceId={deletingInvoiceId}
                 />
               </div>
             </motion.div>

@@ -16,8 +16,8 @@ def _build_full_name(first_name: str, last_name: str | None = None) -> str:
     return " ".join(parts)
 
 
-def _normalize_phone(phone: str) -> str:
-    return phone.strip()
+def _normalize_phone(phone: str | None) -> str:
+    return (phone or "").strip()
 
 
 def search_customers(query: str, db: Session, current_user: User):
@@ -63,6 +63,9 @@ def get_customer(customer_id: int, db: Session, current_user: User):
 
 def get_customer_by_phone(phone: str, db: Session, current_user: User):
     normalized_phone = _normalize_phone(phone)
+
+    if not normalized_phone:
+        return None
 
     return (
         db.query(Customer)
@@ -125,7 +128,7 @@ def create_or_update_customer_from_invoice(payload, db: Session, current_user: U
     if payload.id:
         customer = get_customer(payload.id, db, current_user)
 
-    if not customer:
+    if not customer and normalized_phone:
         customer = get_customer_by_phone(normalized_phone, db, current_user)
 
     full_name = _build_full_name(payload.first_name, payload.last_name)

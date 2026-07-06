@@ -4,7 +4,10 @@ export const customerPayloadSchema = z.object({
   id: z.number().optional().nullable(),
   first_name: z.string().min(1, 'First name is required'),
   last_name: z.string().optional().nullable(),
-  phone: z.string().min(5, 'Phone number is required'),
+  phone: z.string().refine(
+    (value) => value.trim() === '' || value.trim().length >= 5,
+    'Phone number must be at least 5 characters',
+  ),
   email: z.string().email('Invalid email').optional().or(z.literal('')).nullable(),
   address: z.string().optional().nullable(),
   city: z.string().optional().nullable(),

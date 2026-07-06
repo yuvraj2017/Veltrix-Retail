@@ -17,7 +17,7 @@ class InvoiceCustomerPayload(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: Optional[str] = Field(default=None, max_length=100)
 
-    phone: str = Field(..., min_length=5, max_length=20)
+    phone: Optional[str] = Field(default=None, max_length=20)
     email: Optional[EmailStr] = None
 
     address: Optional[str] = None
@@ -32,6 +32,17 @@ class InvoiceCustomerPayload(BaseModel):
         if isinstance(value, str):
             value = value.strip()
             return value or None
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value):
+        if value is None:
+            return value
+
+        if len(value) < 5:
+            raise ValueError("phone must be at least 5 characters when provided")
+
         return value
 
 

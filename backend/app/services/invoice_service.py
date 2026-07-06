@@ -1108,8 +1108,14 @@ def delete_invoice(invoice_id: int, db: Session, current_user: User):
 def build_invoice_share_url(invoice_id: int, db: Session, current_user: User):
     invoice = get_invoice(invoice_id, db, current_user)
 
-    phone = invoice.customer_phone_snapshot
+    phone = invoice.customer_phone_snapshot or ""
     clean_phone = "".join(ch for ch in phone if ch.isdigit())
+
+    if not clean_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Customer phone number is not available for this invoice",
+        )
 
     message = (
         f"Hello {invoice.customer_name_snapshot}, "

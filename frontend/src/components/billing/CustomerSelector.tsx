@@ -226,10 +226,10 @@ export default function CustomerSelector({
           placeholder="Customer last name"
         />
         <Input
-          label="Phone Number"
+          label="Phone Number (Optional)"
           value={customer.phone}
           onChange={(value) => updateField('phone', value)}
-          placeholder="+91 98765 43210"
+          placeholder="Leave empty if not available"
         />
         <Input
           label="Email Address"
@@ -275,7 +275,7 @@ export default function CustomerSelector({
       <div className="mt-6 flex flex-col gap-3 lg:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
           <MapPin size={16} className="text-indigo-500 dark:text-indigo-400" />
-          Duplicate customer detection will happen using phone number.
+          Duplicate customer detection will happen using phone number when provided.
         </p>
 
         <button

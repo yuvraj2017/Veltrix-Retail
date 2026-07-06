@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   AlertCircle, Download, Filter, ReceiptText,
-  CheckCircle2, Clock3, Rocket, TrendingUp, Lightbulb
+  CheckCircle2, Clock3, Rocket, TrendingUp, Lightbulb, Trash2
 } from 'lucide-react'
 
 import { AppShell } from '../components/layout/AppShell'
@@ -18,6 +18,57 @@ const emptyInvoiceStats: InvoiceStats = {
   paid_amount: 0, paid_invoices: 0, pending_invoices: 0, partial_invoices: 0,
 }
 
+function DeleteInvoiceModal({
+  invoice,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  invoice: InvoiceListItem | null
+  isDeleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  if (!invoice) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm dark:bg-black/50">
+      <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl dark:bg-slate-900 dark:shadow-[0_24px_70px_rgba(0,0,0,0.5)]">
+        <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400">
+          <Trash2 size={24} />
+        </div>
+
+        <h3 className="mt-5 text-xl font-bold text-slate-900 dark:text-white">Delete invoice?</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
+          Invoice <span className="font-black text-slate-900 dark:text-white">#{invoice.invoice_number}</span> will be marked as cancelled and removed from the saved invoices list.
+        </p>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-500">
+          This action cannot be undone from this screen.
+        </p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isDeleting}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isDeleting ? 'Deleting...' : 'Delete Invoice'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BillingPage() {
   const navigate = useNavigate()
 
@@ -28,7 +79,11 @@ export default function BillingPage() {
   const [paymentStatus, setPaymentStatus] = useState<'all' | PaymentStatus>('all')
   const [isLoading, setIsLoading] = useState(true)
   const [isStatsLoading, setIsStatsLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [loadErrorMessage, setLoadErrorMessage] = useState('')
+  const [actionErrorMessage, setActionErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceListItem | null>(null)
+  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false)
 
   const paymentDistribution = useMemo(() => {
     const total = stats.paid_invoices + stats.pending_invoices + stats.partial_invoices
@@ -43,7 +98,7 @@ export default function BillingPage() {
   const loadInvoices = async () => {
     try {
       setIsLoading(true)
-      setErrorMessage('')
+      setLoadErrorMessage('')
       const data = await billingApi.getInvoices({
         search: search || undefined,
         payment_status: paymentStatus === 'all' ? undefined : paymentStatus,
@@ -54,7 +109,7 @@ export default function BillingPage() {
       setInvoices(data.items)
       setTotalInvoices(data.total)
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load invoices')
+      setLoadErrorMessage(error instanceof Error ? error.message : 'Unable to load invoices')
     } finally {
       setIsLoading(false)
     }
@@ -89,15 +144,58 @@ export default function BillingPage() {
   const handlePrint = (invoiceId: number) => navigate(`/billing/${invoiceId}/preview?print=true`)
   const handleShare = async (invoiceId: number) => {
     try {
+      setActionErrorMessage('')
       const data = await billingApi.shareInvoice(invoiceId)
       if (data.whatsapp_url) window.open(data.whatsapp_url, '_blank')
     } catch (error) {
       console.error('Failed to share invoice', error)
+      setActionErrorMessage(error instanceof Error ? error.message : 'Unable to share invoice')
+    }
+  }
+
+  const handleRequestDelete = (invoiceId: number) => {
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId) || null
+
+    if (!targetInvoice) return
+
+    setActionErrorMessage('')
+    setSuccessMessage('')
+    setInvoiceToDelete(targetInvoice)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!invoiceToDelete) return
+
+    try {
+      setIsDeletingInvoice(true)
+      setActionErrorMessage('')
+      setSuccessMessage('')
+
+      const { message } = await billingApi.deleteInvoice(invoiceToDelete.id)
+      const deletedInvoiceNumber = invoiceToDelete.invoice_number
+
+      setInvoiceToDelete(null)
+      setSuccessMessage(message || `Invoice #${deletedInvoiceNumber} deleted successfully`)
+      await refreshBillingPage()
+    } catch (error) {
+      setActionErrorMessage(error instanceof Error ? error.message : 'Unable to delete invoice')
+    } finally {
+      setIsDeletingInvoice(false)
     }
   }
 
   return (
     <AppShell>
+      <DeleteInvoiceModal
+        invoice={invoiceToDelete}
+        isDeleting={isDeletingInvoice}
+        onCancel={() => {
+          if (isDeletingInvoice) return
+          setInvoiceToDelete(null)
+        }}
+        onConfirm={handleConfirmDelete}
+      />
+
       <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -158,7 +256,7 @@ export default function BillingPage() {
           </div>
 
           {/* ── Error banner ── */}
-          {errorMessage && (
+          {loadErrorMessage && (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -167,7 +265,7 @@ export default function BillingPage() {
               <AlertCircle className="mt-0.5 shrink-0" size={20} />
               <div>
                 <p className="font-black">Unable to load billing data</p>
-                <p className="mt-1 text-sm leading-6">{errorMessage}</p>
+                <p className="mt-1 text-sm leading-6">{loadErrorMessage}</p>
                 <button
                   type="button"
                   onClick={refreshBillingPage}
@@ -175,6 +273,34 @@ export default function BillingPage() {
                 >
                   Try Again
                 </button>
+              </div>
+            </motion.div>
+          )}
+
+          {actionErrorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-start gap-3 rounded-[20px] border border-red-100 dark:border-red-900 bg-red-50/80 dark:bg-red-950/50 p-4 text-red-700 dark:text-red-400 shadow-[0_16px_36px_rgba(220,38,38,0.08)] sm:rounded-[24px] sm:p-5"
+            >
+              <AlertCircle className="mt-0.5 shrink-0" size={20} />
+              <div>
+                <p className="font-black">Unable to complete invoice action</p>
+                <p className="mt-1 text-sm leading-6">{actionErrorMessage}</p>
+              </div>
+            </motion.div>
+          )}
+
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-start gap-3 rounded-[20px] border border-emerald-100 dark:border-emerald-900 bg-emerald-50/80 dark:bg-emerald-950/50 p-4 text-emerald-700 dark:text-emerald-400 shadow-[0_16px_36px_rgba(16,185,129,0.08)] sm:rounded-[24px] sm:p-5"
+            >
+              <CheckCircle2 className="mt-0.5 shrink-0" size={20} />
+              <div>
+                <p className="font-black">Invoice deleted</p>
+                <p className="mt-1 text-sm leading-6">{successMessage}</p>
               </div>
             </motion.div>
           )}
@@ -198,6 +324,8 @@ export default function BillingPage() {
               onPrint={handlePrint}
               onDownload={handleDownload}
               onShare={handleShare}
+              onDelete={handleRequestDelete}
+              deletingInvoiceId={isDeletingInvoice ? invoiceToDelete?.id ?? null : null}
             />
           </div>
 
