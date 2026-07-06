@@ -16,6 +16,7 @@ import {
 
 import { AppShell } from '../components/layout/AppShell'
 import AddPaymentModal from '../components/vendors/AddPaymentModal'
+import BillPaymentHistoryModal from '../components/vendors/BillPaymentHistoryModal'
 import VendorBillsTable from '../components/vendors/VendorBillsTable'
 import { vendorsApi } from '../features/vendors/api'
 import type {
@@ -43,6 +44,7 @@ export default function VendorDetailsPage() {
   const [summary, setSummary] = useState<VendorSummary | null>(null)
   const [bills, setBills] = useState<VendorBill[]>([])
   const [selectedBill, setSelectedBill] = useState<VendorBill | null>(null)
+  const [historyBill, setHistoryBill] = useState<VendorBill | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const pendingBills = useMemo(() => {
@@ -222,6 +224,7 @@ export default function VendorDetailsPage() {
             onAddBill={() => navigate(`/vendors/${vendor.id}/bills/new`)}
             onAddPayment={(bill) => setSelectedBill(bill)}
             onEditBill={(bill) => navigate(`/vendors/${vendor.id}/bills/${bill.id}/edit`)}
+            onViewPaymentHistory={(bill) => setHistoryBill(bill)}
           />
         </div>
 
@@ -256,6 +259,11 @@ export default function VendorDetailsPage() {
           setSelectedBill(null)
           loadDetails()
         }}
+      />
+
+      <BillPaymentHistoryModal
+        bill={historyBill}
+        onClose={() => setHistoryBill(null)}
       />
     </AppShell>
   )

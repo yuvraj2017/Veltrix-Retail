@@ -53,6 +53,39 @@ def _calculate_bill_status(total_amount: Decimal, paid_amount: Decimal, due_date
     return remaining_amount, "pending"
 
 
+def _get_bill_payments_total(bill_id: int, db: Session) -> Decimal:
+    payments_total = (
+        db.query(func.coalesce(func.sum(VendorBillPayment.amount), 0))
+        .filter(VendorBillPayment.vendor_bill_id == bill_id)
+        .scalar()
+    )
+    return _to_decimal(payments_total)
+
+
+def _ensure_payment_history_backfilled(bill: VendorBill, db: Session):
+    existing_payments_count = (
+        db.query(func.count(VendorBillPayment.id))
+        .filter(VendorBillPayment.vendor_bill_id == bill.id)
+        .scalar()
+    )
+
+    if existing_payments_count or _to_decimal(bill.paid_amount) <= Decimal("0.00"):
+        return
+
+    db.add(
+        VendorBillPayment(
+            shop_id=bill.shop_id,
+            vendor_bill_id=bill.id,
+            payment_date=bill.bill_date,
+            amount=bill.paid_amount,
+            payment_mode=bill.payment_mode,
+            reference_number=bill.payment_reference,
+            notes="Backfilled from existing bill paid amount",
+        )
+    )
+    db.flush()
+
+
 def _ensure_vendor_belongs_to_shop(vendor: Vendor, shop_id: int):
     if not vendor or vendor.shop_id != shop_id:
         raise HTTPException(
@@ -236,6 +269,21 @@ def create_vendor_bill(vendor_id: int, payload: VendorBillCreate, db: Session, c
         notes=payload.notes,
     )
     db.add(bill)
+    db.flush()
+
+    if _to_decimal(payload.paid_amount) > Decimal("0.00"):
+        db.add(
+            VendorBillPayment(
+                shop_id=current_user.shop_id,
+                vendor_bill_id=bill.id,
+                payment_date=payload.bill_date,
+                amount=payload.paid_amount,
+                payment_mode=payload.payment_mode,
+                reference_number=payload.payment_reference,
+                notes="Initial payment recorded during bill creation",
+            )
+        )
+
     db.commit()
     db.refresh(bill)
     return bill
@@ -259,13 +307,9 @@ def update_vendor_bill(bill_id: int, payload: VendorBillUpdate, db: Session, cur
     for field, value in data.items():
         setattr(bill, field, value)
 
-    payments_total = (
-        db.query(func.coalesce(func.sum(VendorBillPayment.amount), 0))
-        .filter(VendorBillPayment.vendor_bill_id == bill.id)
-        .scalar()
-    )
+    _ensure_payment_history_backfilled(bill, db)
 
-    bill.paid_amount = _to_decimal(payments_total)
+    bill.paid_amount = _get_bill_payments_total(bill.id, db)
     bill.remaining_amount, bill.status = _calculate_bill_status(
         bill.total_amount,
         bill.paid_amount,
@@ -279,6 +323,8 @@ def update_vendor_bill(bill_id: int, payload: VendorBillUpdate, db: Session, cur
 
 def list_bill_payments(bill_id: int, db: Session, current_user: User):
     bill = get_vendor_bill(bill_id, db, current_user)
+    _ensure_payment_history_backfilled(bill, db)
+    db.commit()
 
     return (
         db.query(VendorBillPayment)
@@ -293,6 +339,7 @@ def list_bill_payments(bill_id: int, db: Session, current_user: User):
 
 def add_bill_payment(bill_id: int, payload: VendorBillPaymentCreate, db: Session, current_user: User):
     bill = get_vendor_bill(bill_id, db, current_user)
+    _ensure_payment_history_backfilled(bill, db)
 
     payment = VendorBillPayment(
         shop_id=current_user.shop_id,
@@ -306,13 +353,7 @@ def add_bill_payment(bill_id: int, payload: VendorBillPaymentCreate, db: Session
     db.add(payment)
     db.flush()
 
-    payments_total = (
-        db.query(func.coalesce(func.sum(VendorBillPayment.amount), 0))
-        .filter(VendorBillPayment.vendor_bill_id == bill.id)
-        .scalar()
-    )
-
-    bill.paid_amount = _to_decimal(payments_total)
+    bill.paid_amount = _get_bill_payments_total(bill.id, db)
     bill.remaining_amount, bill.status = _calculate_bill_status(
         bill.total_amount,
         bill.paid_amount,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { CreditCard, Filter, MoreVertical, Pencil, Plus, ReceiptText } from "lucide-react";
+import { CreditCard, Filter, History, MoreVertical, Pencil, Plus, ReceiptText } from "lucide-react";
 import type { VendorBill } from "../../features/vendors/types";
 import VendorStatusBadge from "./VendorStatusBadge";
 
@@ -11,6 +11,7 @@ type VendorBillsTableProps = {
   onAddBill: () => void;
   onAddPayment: (bill: VendorBill) => void;
   onEditBill: (bill: VendorBill) => void;
+  onViewPaymentHistory: (bill: VendorBill) => void;
 };
 
 const money = (value: string | number) => {
@@ -36,11 +37,13 @@ type DropdownPosition = { top: number; right: number; openUpward: boolean };
 function BillActionsDropdown({
   position,
   onEdit,
+  onHistory,
   onPay,
   onClose,
 }: {
   position: DropdownPosition;
   onEdit: () => void;
+  onHistory: () => void;
   onPay: () => void;
   onClose: () => void;
 }) {
@@ -50,6 +53,7 @@ function BillActionsDropdown({
 
   const actions = [
     { label: "Edit Bill", icon: Pencil, onClick: onEdit },
+    { label: "Payment History", icon: History, onClick: onHistory },
     { label: "Add Payment", icon: CreditCard, onClick: onPay },
   ];
 
@@ -100,10 +104,12 @@ function BillActionsDropdown({
 function BillActions({
   bill,
   onEdit,
+  onHistory,
   onPay,
 }: {
   bill: VendorBill;
   onEdit: (bill: VendorBill) => void;
+  onHistory: (bill: VendorBill) => void;
   onPay: (bill: VendorBill) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -159,6 +165,7 @@ function BillActions({
         <BillActionsDropdown
           position={position}
           onEdit={() => onEdit(bill)}
+          onHistory={() => onHistory(bill)}
           onPay={() => onPay(bill)}
           onClose={() => setOpen(false)}
         />
@@ -173,6 +180,7 @@ export default function VendorBillsTable({
   onAddBill,
   onAddPayment,
   onEditBill,
+  onViewPaymentHistory,
 }: VendorBillsTableProps) {
   return (
     <section className="overflow-hidden rounded-[24px] bg-white dark:bg-slate-900 shadow-[0_18px_50px_rgba(17,18,28,0.05)] dark:shadow-[0_18px_50px_rgba(0,0,0,0.25)] border border-transparent dark:border-slate-800">
@@ -292,6 +300,7 @@ export default function VendorBillsTable({
                   <BillActions
                     bill={bill}
                     onEdit={onEditBill}
+                    onHistory={onViewPaymentHistory}
                     onPay={onAddPayment}
                   />
                 </div>
@@ -309,6 +318,7 @@ export default function VendorBillsTable({
                     <BillActions
                       bill={bill}
                       onEdit={onEditBill}
+                      onHistory={onViewPaymentHistory}
                       onPay={onAddPayment}
                     />
                   </div>
