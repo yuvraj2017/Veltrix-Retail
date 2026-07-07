@@ -10,6 +10,7 @@ from app.models.customer import Customer
 from app.models.invoice import Invoice
 from app.models.invoice_item import InvoiceItem
 from app.models.product_sales_analytics import ProductSalesAnalytics
+from app.models.expense import Expense
 
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "Invoice",
     "InvoiceItem",
     "ProductSalesAnalytics",
+    "Expense",
 ]

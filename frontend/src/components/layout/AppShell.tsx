@@ -7,9 +7,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   return (
-    <div className="h-screen overflow-hidden bg-[#f7f8fc]">
+    <div className="h-screen overflow-hidden bg-[#f7f8fc] dark:bg-slate-950">
       <div className="flex h-full">
-        {/* Sidebar wrapper — width animates with the sidebar state */}
         <div
           className="h-full shrink-0 overflow-y-auto transition-all duration-300 ease-in-out"
           style={{ width: sidebarOpen ? '260px' : '72px' }}

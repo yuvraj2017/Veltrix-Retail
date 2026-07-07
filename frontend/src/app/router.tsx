@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router-dom";
 
 import BillingPage from "../pages/BillingPage";
 import DashboardPage from "../pages/DashboardPage";
+import ExpensesPage from "../pages/ExpensesPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import LoginPage from "../pages/LoginPage";
 import ProductsPage from "../pages/ProductsPage";
@@ -52,6 +53,8 @@ export const router = createBrowserRouter([
       { path: "/billing", element: <BillingPage /> },
       { path: "/billing/new", element: <CreateInvoicePage /> },
       { path: "/billing/:invoiceId/preview", element: <InvoicePreviewPage /> },
+
+      { path: "/expenses", element: <ExpensesPage /> },
 
       { path: "/customers", element: <CustomersPage /> },
       { path: "/customers/:customerId", element: <CustomerDetailsPage /> },

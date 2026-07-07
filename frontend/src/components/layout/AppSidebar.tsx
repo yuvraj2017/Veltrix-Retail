@@ -8,6 +8,7 @@ import {
   PlusCircle,
   ChevronLeft,
   ChevronRight,
+  Wallet,
 } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
@@ -18,6 +19,7 @@ const navItems = [
   { name: 'Products', to: '/products', icon: Package },
   { name: 'Vendors', to: '/vendors', icon: Handshake },
   { name: 'Billing', to: '/billing', icon: ReceiptText },
+  { name: 'Expenses', to: '/expenses', icon: Wallet },
   { name: 'Reports', to: '/reports', icon: BarChart3 },
   { name: 'Settings', to: '/settings', icon: Settings },
 ]
@@ -65,8 +67,6 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
 
   return (
     <aside className="relative flex h-full overflow-hidden flex-col bg-[#f3f5f9] dark:bg-slate-900">
-
-      {/* Toggle Button */}
       <button
         onClick={onToggle}
         className="absolute right-1 top-6 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors duration-200"
@@ -75,7 +75,6 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         {isOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
       </button>
 
-      {/* Header */}
       <div className={`flex items-start gap-3 py-6 ${isOpen ? 'px-5' : 'justify-center px-3'}`}>
         {shopLogoUrl ? (
           <img
@@ -103,7 +102,6 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className={`mt-4 space-y-2 ${isOpen ? 'px-5' : 'px-2'}`}>
         {navItems.map((item) => {
           const Icon = item.icon
@@ -135,7 +133,6 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         })}
       </nav>
 
-      {/* Bottom */}
       <div className={`mt-auto space-y-4 pb-6 ${isOpen ? 'px-5' : 'px-2'}`}>
         <Link
           to="/billing"
