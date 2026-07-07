@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Globe, LockKeyhole, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '../lib/api'
+import { getApiErrorMessage } from '../lib/api-error'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { LoginHero } from '../components/auth/LoginHero'
@@ -47,7 +48,7 @@ export default function LoginPage() {
       navigate('/dashboard')
     } catch (error: any) {
       console.error('login failed', error)
-      setApiError(error?.response?.data?.detail || 'Login failed')
+      setApiError(getApiErrorMessage(error, 'Login failed. Please try again.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -256,4 +257,3 @@ export default function LoginPage() {
     </div>
   )
 }
-
