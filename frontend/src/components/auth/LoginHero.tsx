@@ -494,7 +494,7 @@ export function LoginHero() {
               fontWeight:700, lineHeight:1.15, letterSpacing:'-0.03em', color:'#fff', margin:0,
               fontFamily:FONT_STACK,
             }}>
-              Run billing, stock, and store performance from one command center.
+              Run billing, stock, and store's performance from one command center.
             </h1>
 
             <p style={{
