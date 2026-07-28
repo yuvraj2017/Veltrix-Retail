@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { ProductStats } from '../components/products/ProductStats'
 import { ProductTable } from '../components/products/ProductTable'
 import { EditProductModal } from '../components/products/EditProductModal'
-import { AppShell } from '../components/layout/AppShell'
 import {
   deleteProduct,
   getProducts,
@@ -157,7 +156,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       {/* Responsive container: full width on mobile, capped on large screens */}
       <div className="mx-auto w-full max-w-[1600px] px-4 mt-2 sm:px-6 lg:px-8">
 
@@ -205,6 +204,6 @@ export default function ProductsPage() {
           loading={editLoading}
         />
       </div>
-    </AppShell>
+    </>
   )
 }

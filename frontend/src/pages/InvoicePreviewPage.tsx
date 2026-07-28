@@ -13,7 +13,6 @@ import {
   Share2,
 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import InvoicePreview from '../components/billing/InvoicePreviewDocument'
 import { billingApi } from '../features/billing/api'
 import type { Invoice } from '../features/billing/types'
@@ -113,19 +112,16 @@ export default function InvoicePreviewPage() {
 
   if (isLoading) {
     return (
-      <AppShell>
         <div className="mx-auto max-w-[1200px]">
           <div className="flex min-h-[520px] items-center justify-center rounded-[34px] bg-white/80 dark:bg-slate-800/80">
             <Loader2 size={34} className="animate-spin text-indigo-600 dark:text-indigo-400" />
           </div>
         </div>
-      </AppShell>
     )
   }
 
   if (!invoice || errorMessage) {
     return (
-      <AppShell>
         <div className="mx-auto max-w-[760px] rounded-[34px] bg-white/80 dark:bg-slate-800/80 p-10 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)] dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
           <h1 className="text-2xl font-black text-slate-950 dark:text-white">
             Invoice not found
@@ -139,12 +135,11 @@ export default function InvoicePreviewPage() {
             Back to Billing
           </button>
         </div>
-      </AppShell>
     )
   }
 
   return (
-    <AppShell>
+    <>
       <style>
         {`
           .invoice-a4 {
@@ -343,7 +338,7 @@ export default function InvoicePreviewPage() {
           </aside>
         </div>
       </div>
-    </AppShell>
+    </>
   )
 }
 
@@ -388,3 +383,8 @@ function SideAction({
     </button>
   )
 }
+
+
+
+
+

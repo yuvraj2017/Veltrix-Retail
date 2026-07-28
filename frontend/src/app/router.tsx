@@ -23,6 +23,7 @@ import InvoicePreviewPage from "../pages/InvoicePreviewPage";
 import { CustomersPage } from "../pages/CustomersPage";
 import { CustomerDetailsPage } from "../pages/CustomerDetailsPage";
 
+import { ProtectedLayout } from "../routes/ProtectedLayout";
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 import { PublicOnlyRoute } from "../routes/PublicOnlyRoute";
 
@@ -39,29 +40,34 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      { path: "/dashboard", element: <DashboardPage /> },
+      {
+        element: <ProtectedLayout />,
+        children: [
+          { path: "/dashboard", element: <DashboardPage /> },
 
-      { path: "/products", element: <ProductsPage /> },
-      { path: "/products/new", element: <AddProductPage /> },
+          { path: "/products", element: <ProductsPage /> },
+          { path: "/products/new", element: <AddProductPage /> },
 
-      { path: "/vendors", element: <VendorsPage /> },
-      { path: "/vendors/new", element: <AddVendorPage /> },
-      { path: "/vendors/:vendorId", element: <VendorDetailsPage /> },
-      { path: "/vendors/:vendorId/bills/new", element: <AddVendorBillPage /> },
-      { path: "/vendors/:vendorId/bills/:billId/edit", element: <AddVendorBillPage /> },
+          { path: "/vendors", element: <VendorsPage /> },
+          { path: "/vendors/new", element: <AddVendorPage /> },
+          { path: "/vendors/:vendorId", element: <VendorDetailsPage /> },
+          { path: "/vendors/:vendorId/bills/new", element: <AddVendorBillPage /> },
+          { path: "/vendors/:vendorId/bills/:billId/edit", element: <AddVendorBillPage /> },
 
-      { path: "/billing", element: <BillingPage /> },
-      { path: "/billing/new", element: <CreateInvoicePage /> },
-      { path: "/billing/:invoiceId/preview", element: <InvoicePreviewPage /> },
+          { path: "/billing", element: <BillingPage /> },
+          { path: "/billing/new", element: <CreateInvoicePage /> },
+          { path: "/billing/:invoiceId/preview", element: <InvoicePreviewPage /> },
 
-      { path: "/expenses", element: <ExpensesPage /> },
+          { path: "/expenses", element: <ExpensesPage /> },
 
-      { path: "/customers", element: <CustomersPage /> },
-      { path: "/customers/:customerId", element: <CustomerDetailsPage /> },
+          { path: "/customers", element: <CustomersPage /> },
+          { path: "/customers/:customerId", element: <CustomerDetailsPage /> },
 
-      { path: "/reports", element: <ReportsPage /> },
-      { path: "/settings", element: <SettingsPage /> },
-      { path: "/profile", element: <ProfilePage /> },
+          { path: "/reports", element: <ReportsPage /> },
+          { path: "/settings", element: <SettingsPage /> },
+          { path: "/profile", element: <ProfilePage /> },
+        ],
+      },
     ],
   },
 ]);

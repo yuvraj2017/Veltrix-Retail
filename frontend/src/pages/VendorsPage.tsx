@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { AlertCircle, ArrowUpRight, Building2 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import VendorStats from '../components/vendors/VendorStats'
 import VendorTable from '../components/vendors/VendorTable'
 import { vendorsApi } from '../features/vendors/api'
 import type { Vendor, VendorStatsResponse } from '../features/vendors/types'
+import { getCachedResource, setCachedResource } from '../lib/resourceCache'
 
 const emptyVendorStats: VendorStatsResponse = {
   total_vendors: 0,
@@ -24,15 +24,25 @@ const emptyVendorStats: VendorStatsResponse = {
   due_soon_bills: 0,
 }
 
+const VENDORS_CACHE_KEY = 'vendors:list'
+const VENDOR_STATS_CACHE_KEY = 'vendors:stats'
+const VENDORS_CACHE_TTL_MS = 2 * 60 * 1000
+
 export default function VendorsPage() {
   const navigate = useNavigate()
 
-  const [vendors, setVendors] = useState<Vendor[]>([])
-  const [stats, setStats] = useState<VendorStatsResponse>(emptyVendorStats)
+  const cachedVendors = getCachedResource<Vendor[]>(VENDORS_CACHE_KEY, VENDORS_CACHE_TTL_MS)
+  const cachedStats = getCachedResource<VendorStatsResponse>(
+    VENDOR_STATS_CACHE_KEY,
+    VENDORS_CACHE_TTL_MS,
+  )
+
+  const [vendors, setVendors] = useState<Vendor[]>(cachedVendors || [])
+  const [stats, setStats] = useState<VendorStatsResponse>(cachedStats || emptyVendorStats)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [isLoading, setIsLoading] = useState(true)
-  const [isStatsLoading, setIsStatsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(!cachedVendors)
+  const [isStatsLoading, setIsStatsLoading] = useState(!cachedStats)
   const [errorMessage, setErrorMessage] = useState('')
 
   const filteredVendors = useMemo(() => {
@@ -41,11 +51,20 @@ export default function VendorsPage() {
       const matchesSearch =
         !query ||
         [
-          vendor.vendor_name, vendor.company_name, vendor.email,
-          vendor.phone, vendor.alternate_phone, vendor.city,
-          vendor.state, vendor.country, vendor.payment_terms,
-          vendor.tax_number, vendor.address_line_1, vendor.address_line_2,
-          vendor.postal_code, vendor.notes,
+          vendor.vendor_name,
+          vendor.company_name,
+          vendor.email,
+          vendor.phone,
+          vendor.alternate_phone,
+          vendor.city,
+          vendor.state,
+          vendor.country,
+          vendor.payment_terms,
+          vendor.tax_number,
+          vendor.address_line_1,
+          vendor.address_line_2,
+          vendor.postal_code,
+          vendor.notes,
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query))
@@ -59,12 +78,14 @@ export default function VendorsPage() {
     })
   }, [vendors, searchTerm, statusFilter])
 
-  const loadVendors = async () => {
+  const loadVendors = async (showLoader = false) => {
     try {
-      setIsLoading(true)
+      if (showLoader || !cachedVendors) {
+        setIsLoading(true)
+      }
       setErrorMessage('')
       const data = await vendorsApi.getVendors()
-      setVendors(data)
+      setVendors(setCachedResource(VENDORS_CACHE_KEY, data))
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load vendors')
     } finally {
@@ -72,11 +93,13 @@ export default function VendorsPage() {
     }
   }
 
-  const loadVendorStats = async () => {
+  const loadVendorStats = async (showLoader = false) => {
     try {
-      setIsStatsLoading(true)
+      if (showLoader || !cachedStats) {
+        setIsStatsLoading(true)
+      }
       const data = await vendorsApi.getVendorStats()
-      setStats(data)
+      setStats(setCachedResource(VENDOR_STATS_CACHE_KEY, data))
     } catch (error) {
       console.error('Failed to load vendor stats', error)
       setStats(emptyVendorStats)
@@ -85,131 +108,123 @@ export default function VendorsPage() {
     }
   }
 
-  const refreshVendorsPage = async () => {
-    await Promise.all([loadVendors(), loadVendorStats()])
+  const refreshVendorsPage = async (showLoader = true) => {
+    await Promise.all([loadVendors(showLoader), loadVendorStats(showLoader)])
   }
 
   useEffect(() => {
-    refreshVendorsPage()
+    void refreshVendorsPage(false)
   }, [])
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-[1600px]">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
-        >
-          {/* ── Page header ── */}
-          <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              {/* Pill badge */}
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 dark:border-indigo-900 bg-white/70 dark:bg-slate-800/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 dark:text-indigo-400 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl">
-                <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-pulse" />
-                Supply Chain Partners
-              </div>
-
-              <h1 className="text-[42px] font-black tracking-[-0.04em] text-slate-950 dark:text-slate-100 md:text-[56px]">
-                Vendor Directory
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600 dark:text-slate-400">
-                Manage supply partners, payable records, purchase bills, and
-                vendor relationships from one calm operational workspace.
-              </p>
+    <div className="mx-auto max-w-[1600px]">
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+      >
+        <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-600 shadow-[0_12px_30px_rgba(99,102,241,0.08)] backdrop-blur-xl dark:border-indigo-900 dark:bg-slate-800/70 dark:text-indigo-400">
+              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-indigo-500" />
+              Supply Chain Partners
             </div>
+
+            <h1 className="text-[42px] font-black tracking-[-0.04em] text-slate-950 dark:text-slate-100 md:text-[56px]">
+              Vendor Directory
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-[18px] leading-8 text-slate-600 dark:text-slate-400">
+              Manage supply partners, payable records, purchase bills, and vendor relationships
+              from one calm operational workspace.
+            </p>
           </div>
+        </div>
 
-          {/* ── Error banner ── */}
-          {errorMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-start gap-3 rounded-[24px] border border-red-100 dark:border-red-900 bg-red-50/80 dark:bg-red-950/50 p-5 text-red-700 dark:text-red-400 shadow-[0_16px_36px_rgba(220,38,38,0.08)]"
-            >
-              <AlertCircle className="mt-0.5 shrink-0" size={20} />
-              <div>
-                <p className="font-black">Unable to load vendors</p>
-                <p className="mt-1 text-sm leading-6">{errorMessage}</p>
-                <button
-                  type="button"
-                  onClick={refreshVendorsPage}
-                  className="mt-3 rounded-xl bg-red-600 dark:bg-red-700 px-4 py-2 text-sm font-black text-white transition hover:bg-red-700 dark:hover:bg-red-600"
-                >
-                  Try Again
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Stats ── */}
-          <VendorStats
-            activeVendors={isStatsLoading ? 0 : Number(stats.active_vendors || 0)}
-            totalBillsAmount={isStatsLoading ? 0 : Number(stats.total_bill_amount || 0)}
-            pendingBills={isStatsLoading ? 0 : Number(stats.pending_bills || 0)}
-          />
-
-          {/* ── Table ── */}
-          <div className="mt-8">
-            <VendorTable
-              vendors={filteredVendors.slice(0, 8)}
-              totalVendors={filteredVendors.length}
-              isLoading={isLoading}
-              search={searchTerm}
-              onSearchChange={setSearchTerm}
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              onVendorClick={(vendorId) => navigate(`/vendors/${vendorId}`)}
-              onAddVendor={() => navigate('/vendors/new')}
-            />
-          </div>
-
-          {/* ── CTA banner — intentionally stays dark in both modes ── */}
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
+        {errorMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.2 }}
-            className="relative mt-8 overflow-hidden rounded-[34px] bg-gradient-to-br from-[#1a087a] via-[#2910a8] to-[#4f46e5] px-8 py-9 text-white shadow-[0_30px_80px_rgba(49,46,129,0.28)] md:px-10"
+            className="mb-6 flex items-start gap-3 rounded-[24px] border border-red-100 bg-red-50/80 p-5 text-red-700 shadow-[0_16px_36px_rgba(220,38,38,0.08)] dark:border-red-900 dark:bg-red-950/50 dark:text-red-400"
           >
-            <div className="relative z-10 grid gap-8 lg:grid-cols-[1fr_330px] lg:items-center">
-              <div>
-                <div className="mb-4 inline-flex rounded-full bg-white/8 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-white/80">
-                  Payables Automation
-                </div>
-                <h2 className="text-[28px] font-black tracking-[-0.04em] md:text-[36px]">
-                  Automate your vendor bills.
-                </h2>
-                <p className="mt-3 max-w-2xl text-[16px] leading-8 text-white/75">
-                  Connect vendor profiles with purchase bills, due reminders,
-                  and payment tracking to reduce manual follow-ups.
-                </p>
-              </div>
-
+            <AlertCircle className="mt-0.5 shrink-0" size={20} />
+            <div>
+              <p className="font-black">Unable to load vendors</p>
+              <p className="mt-1 text-sm leading-6">{errorMessage}</p>
               <button
                 type="button"
-                onClick={() => navigate('/vendors/new')}
-                className="group inline-flex h-14 items-center justify-center gap-3 rounded-[20px] bg-white px-6 text-sm font-black text-indigo-700 shadow-[0_18px_40px_rgba(255,255,255,0.12)] transition-all duration-300 hover:-translate-y-[1px]"
+                onClick={() => void refreshVendorsPage(true)}
+                className="mt-3 rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white transition hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
               >
-                Get Started
-                <ArrowUpRight
-                  size={18}
-                  className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                />
+                Try Again
               </button>
             </div>
+          </motion.div>
+        )}
 
-            <motion.div
-              animate={{ y: [0, -12, 0], rotate: [0, 5, 0] }}
-              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute right-16 top-1/2 h-44 w-44 -translate-y-1/2 rounded-full bg-white/18"
-            />
-            <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-violet-300/20 blur-3xl" />
-            <div className="absolute -bottom-24 left-20 h-72 w-72 rounded-full bg-indigo-300/20 blur-3xl" />
-            <Building2 size={160} className="absolute bottom-4 right-10 text-white/5" />
-          </motion.section>
-        </motion.div>
-      </div>
-    </AppShell>
+        <VendorStats
+          activeVendors={isStatsLoading ? 0 : Number(stats.active_vendors || 0)}
+          totalBillsAmount={isStatsLoading ? 0 : Number(stats.total_bill_amount || 0)}
+          pendingBills={isStatsLoading ? 0 : Number(stats.pending_bills || 0)}
+        />
+
+        <div className="mt-8">
+          <VendorTable
+            vendors={filteredVendors.slice(0, 8)}
+            totalVendors={filteredVendors.length}
+            isLoading={isLoading}
+            search={searchTerm}
+            onSearchChange={setSearchTerm}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            onVendorClick={(vendorId) => navigate(`/vendors/${vendorId}`)}
+            onAddVendor={() => navigate('/vendors/new')}
+          />
+        </div>
+
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.2 }}
+          className="relative mt-8 overflow-hidden rounded-[34px] bg-gradient-to-br from-[#1a087a] via-[#2910a8] to-[#4f46e5] px-8 py-9 text-white shadow-[0_30px_80px_rgba(49,46,129,0.28)] md:px-10"
+        >
+          <div className="relative z-10 grid gap-8 lg:grid-cols-[1fr_330px] lg:items-center">
+            <div>
+              <div className="mb-4 inline-flex rounded-full bg-white/8 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-white/80">
+                Payables Automation
+              </div>
+              <h2 className="text-[28px] font-black tracking-[-0.04em] md:text-[36px]">
+                Automate your vendor bills.
+              </h2>
+              <p className="mt-3 max-w-2xl text-[16px] leading-8 text-white/75">
+                Connect vendor profiles with purchase bills, due reminders, and payment tracking to
+                reduce manual follow-ups.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate('/vendors/new')}
+              className="group inline-flex h-14 items-center justify-center gap-3 rounded-[20px] bg-white px-6 text-sm font-black text-indigo-700 shadow-[0_18px_40px_rgba(255,255,255,0.12)] transition-all duration-300 hover:-translate-y-[1px]"
+            >
+              Get Started
+              <ArrowUpRight
+                size={18}
+                className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+              />
+            </button>
+          </div>
+
+          <motion.div
+            animate={{ y: [0, -12, 0], rotate: [0, 5, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+            className="absolute right-16 top-1/2 h-44 w-44 -translate-y-1/2 rounded-full bg-white/18"
+          />
+          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-violet-300/20 blur-3xl" />
+          <div className="absolute -bottom-24 left-20 h-72 w-72 rounded-full bg-indigo-300/20 blur-3xl" />
+          <Building2 size={160} className="absolute bottom-4 right-10 text-white/5" />
+        </motion.section>
+      </motion.div>
+    </div>
   )
 }

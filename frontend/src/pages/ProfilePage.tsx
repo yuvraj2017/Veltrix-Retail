@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { AppShell } from '../components/layout/AppShell'
 import { useAuth } from '../context/AuthContext'
 import { changeMyPassword, getMyProfile, updateMyProfile } from '../features/profile/api'
 import {
@@ -283,14 +282,12 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <AppShell>
         <div className="p-8 text-lg text-slate-600 dark:text-slate-400">Loading profile...</div>
-      </AppShell>
     )
   }
 
   return (
-    <AppShell>
+    <>
       <LogoutConfirmModal
         open={showLogoutModal}
         onCancel={() => setShowLogoutModal(false)}
@@ -703,6 +700,8 @@ export default function ProfilePage() {
           </button>
         </div>
       </div>
-    </AppShell>
+    </>
   )
 }
+
+

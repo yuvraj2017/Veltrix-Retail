@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 
 import { CustomerFormModal } from '../components/customers/CustomerFormModal'
-import { AppShell } from '../components/layout/AppShell'
 import {
   createCustomer,
   getCustomerById,
@@ -247,7 +246,7 @@ export function CustomersPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="mx-auto w-full max-w-[1600px] space-y-8 px-1 py-2 sm:px-2">
         <section className="relative overflow-hidden rounded-[2.25rem] border border-indigo-100/70 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.96),_transparent_30%),linear-gradient(135deg,_#eef2ff_0%,_#dbeafe_42%,_#c7d2fe_100%)] px-6 py-8 text-slate-950 shadow-[0_24px_70px_rgba(99,102,241,0.16)] dark:border-indigo-900/60 dark:bg-[radial-gradient(circle_at_top_left,_rgba(129,140,248,0.24),_transparent_28%),linear-gradient(135deg,_#172554_0%,_#312e81_54%,_#1d4ed8_100%)] dark:text-white sm:px-8 lg:px-10">
           <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-indigo-200/60 blur-3xl dark:bg-white/10" />
@@ -623,9 +622,10 @@ export function CustomersPage() {
         }}
         onSubmit={handleFormSubmit}
       />
-    </AppShell>
+    </>
   )
 }
+
 function HeroMetric({
   label,
   value,
@@ -1002,6 +1002,12 @@ function MobileStateCard({ message }: { message: string }) {
     </div>
   )
 }
+
+
+
+
+
+
 
 
 

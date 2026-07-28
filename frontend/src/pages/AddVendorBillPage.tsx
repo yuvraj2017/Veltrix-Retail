@@ -20,7 +20,6 @@ import {
   Sparkles,
 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import { vendorsApi } from '../features/vendors/api'
 import { vendorBillSchema } from '../features/vendors/schemas'
 import type { Vendor, VendorBill } from '../features/vendors/types'
@@ -195,18 +194,16 @@ export default function AddVendorBillPage() {
 
   if (isLoadingBill) {
     return (
-      <AppShell>
         <div className="mx-auto max-w-[1200px]">
           <div className="flex min-h-[520px] items-center justify-center rounded-[34px] bg-white/80 dark:bg-slate-800/80">
             <Loader2 size={34} className="animate-spin text-indigo-600 dark:text-indigo-400" />
           </div>
         </div>
-      </AppShell>
     )
   }
 
   return (
-    <AppShell>
+    <>
       <style>{`
         input[data-hide-number-spinner='true']::-webkit-inner-spin-button,
         input[data-hide-number-spinner='true']::-webkit-outer-spin-button {
@@ -491,7 +488,7 @@ export default function AddVendorBillPage() {
           </aside>
         </form>
       </div>
-    </AppShell>
+    </>
   )
 }
 
@@ -732,3 +729,8 @@ function Input({
     </label>
   )
 }
+
+
+
+
+

@@ -13,7 +13,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { ExpenseFormModal } from '../components/expenses/ExpenseFormModal'
 import { ExpenseSelect } from '../components/expenses/ExpenseSelect'
 import { ExpensesTable } from '../components/expenses/ExpensesTable'
-import { AppShell } from '../components/layout/AppShell'
 import { createExpense, deleteExpense, getExpenseAnalytics, getExpenses, updateExpense } from '../features/expenses/api'
 import { expenseCategories, paymentModes, type ExpenseFormValues } from '../features/expenses/schemas'
 import type { Expense, ExpenseAnalytics, ExpensePayload, ExpenseRange } from '../features/expenses/types'
@@ -220,7 +219,7 @@ export default function ExpensesPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="mx-auto w-full max-w-[1600px] px-4 pb-10 pt-2 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -582,6 +581,6 @@ export default function ExpensesPage() {
         onClose={handleCloseModal}
         onSubmit={handleSaveExpense}
       />
-    </AppShell>
+    </>
   )
 }

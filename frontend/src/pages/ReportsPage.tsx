@@ -11,7 +11,6 @@ import {
   Wallet,
 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import {
   getCashflowReport,
   getCategoryPerformanceReport,
@@ -294,7 +293,6 @@ export default function ReportsPage() {
   )
 
   return (
-    <AppShell>
       <div className="mx-auto w-full max-w-[1600px] space-y-8 px-1 py-2 sm:px-2">
         <section className="relative overflow-hidden rounded-[2.25rem] border border-indigo-100/80 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.98),_transparent_32%),linear-gradient(135deg,_#eef2ff_0%,_#dbeafe_40%,_#c7d2fe_100%)] px-6 py-8 text-slate-950 shadow-[0_24px_70px_rgba(99,102,241,0.16)] dark:border-indigo-900/60 dark:bg-[radial-gradient(circle_at_top_left,_rgba(129,140,248,0.24),_transparent_28%),linear-gradient(135deg,_#172554_0%,_#312e81_54%,_#1d4ed8_100%)] dark:text-white sm:px-8 lg:px-10">
           <div className="absolute right-0 top-0 h-52 w-52 rounded-full bg-white/50 blur-3xl dark:bg-white/10" />
@@ -424,7 +422,6 @@ export default function ReportsPage() {
           onPeriodChange={applyPeriod(setPaymentPeriod)}
         />
       </div>
-    </AppShell>
   )
 }
 
@@ -1132,3 +1129,4 @@ function DataTile({
     </div>
   )
 }
+

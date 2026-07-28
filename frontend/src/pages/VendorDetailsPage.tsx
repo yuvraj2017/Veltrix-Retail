@@ -14,7 +14,6 @@ import {
   Truck,
 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import AddPaymentModal from '../components/vendors/AddPaymentModal'
 import BillPaymentHistoryModal from '../components/vendors/BillPaymentHistoryModal'
 import VendorBillsTable from '../components/vendors/VendorBillsTable'
@@ -75,7 +74,6 @@ export default function VendorDetailsPage() {
 
   if (!vendor && isLoading) {
     return (
-      <AppShell>
         <div className="mx-auto max-w-[1600px] space-y-5">
           <div className="h-32 animate-pulse rounded-[34px] bg-white/70 dark:bg-slate-800/70" />
           <div className="grid gap-4 lg:grid-cols-3">
@@ -85,13 +83,11 @@ export default function VendorDetailsPage() {
           </div>
           <div className="h-96 animate-pulse rounded-[34px] bg-white/70 dark:bg-slate-800/70" />
         </div>
-      </AppShell>
     )
   }
 
   if (!vendor) {
     return (
-      <AppShell>
         <div className="mx-auto max-w-[760px] rounded-[34px] bg-white/80 p-10 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)]
           dark:bg-slate-900/80 dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
           <h1 className="text-2xl font-black text-slate-950 dark:text-white">Vendor not found</h1>
@@ -103,12 +99,11 @@ export default function VendorDetailsPage() {
             Back to Vendors
           </button>
         </div>
-      </AppShell>
     )
   }
 
   return (
-    <AppShell>
+    <>
       <div className="mx-auto mt-2 max-w-[1600px]">
 
         {/* Back button */}
@@ -265,7 +260,7 @@ export default function VendorDetailsPage() {
         bill={historyBill}
         onClose={() => setHistoryBill(null)}
       />
-    </AppShell>
+    </>
   )
 }
 
@@ -303,3 +298,11 @@ function InfoCard({
     </motion.div>
   )
 }
+
+
+
+
+
+
+
+

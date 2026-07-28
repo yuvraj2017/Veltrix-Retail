@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import CustomerSelector from '../components/billing/CustomerSelector'
 import InvoiceItemsTable from '../components/billing/InvoiceItemsTable'
 import InvoiceSummaryCard from '../components/billing/InvoiceSummaryCard'
@@ -292,18 +291,16 @@ export default function CreateInvoicePage() {
 
   if (isLoadingInvoice) {
     return (
-      <AppShell>
         <div className="mx-auto max-w-[1200px]">
           <div className="flex min-h-[520px] items-center justify-center rounded-[34px] bg-white/80 dark:bg-slate-800/80">
             <Loader2 size={34} className="animate-spin text-indigo-600 dark:text-indigo-400" />
           </div>
         </div>
-      </AppShell>
     )
   }
 
   return (
-    <AppShell>
+    <>
       <style>{`
         input[type='number']::-webkit-inner-spin-button,
         input[type='number']::-webkit-outer-spin-button {
@@ -412,7 +409,7 @@ export default function CreateInvoicePage() {
           </div>
         </motion.div>
       </div>
-    </AppShell>
+    </>
   )
 }
 
@@ -449,3 +446,8 @@ function Step({
     </div>
   )
 }
+
+
+
+
+

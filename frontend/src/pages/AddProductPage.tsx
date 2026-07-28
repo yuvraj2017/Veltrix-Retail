@@ -11,7 +11,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm, type FieldErrors } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
-import { AppShell } from '../components/layout/AppShell'
 import { createProduct } from '../features/products/api'
 import { productSchema, type ProductFormValues } from '../features/products/schemas'
 
@@ -170,7 +169,6 @@ export default function AddProductPage() {
   )
 
   return (
-    <AppShell>
       <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
 
         {/* Page header */}
@@ -542,6 +540,6 @@ export default function AddProductPage() {
           </div>
         </form>
       </div>
-    </AppShell>
   )
 }
+

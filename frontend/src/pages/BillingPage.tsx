@@ -6,7 +6,6 @@ import {
   CheckCircle2, Clock3, Rocket, TrendingUp, Lightbulb, Trash2
 } from 'lucide-react'
 
-import { AppShell } from '../components/layout/AppShell'
 import BillingStats from '../components/billing/BillingStats'
 import InvoiceTable from '../components/billing/InvoiceTable'
 import { billingApi } from '../features/billing/api'
@@ -185,7 +184,7 @@ export default function BillingPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <DeleteInvoiceModal
         invoice={invoiceToDelete}
         isDeleting={isDeletingInvoice}
@@ -539,6 +538,6 @@ export default function BillingPage() {
           </div>
         </motion.div>
       </div>
-    </AppShell>
+    </>
   )
 }

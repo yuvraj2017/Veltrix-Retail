@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
-import { AppShell } from '../components/layout/AppShell'
 import { vendorsApi } from '../features/vendors/api'
 import { vendorSchema } from '../features/vendors/schemas'
 import type { VendorCreatePayload } from '../features/vendors/types'
@@ -182,7 +181,6 @@ export default function AddVendorPage() {
   }
 
   return (
-    <AppShell>
       <div className="mx-auto max-w-[1600px] px-4 mt-2 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -511,7 +509,6 @@ export default function AddVendorPage() {
           </form>
         </motion.div>
       </div>
-    </AppShell>
   )
 }
 

@@ -12,7 +12,6 @@ import {
 } from 'lucide-react'
 
 import { CustomerFormModal } from '../components/customers/CustomerFormModal'
-import { AppShell } from '../components/layout/AppShell'
 import { getCustomerAnalytics, updateCustomer } from '../features/customers/api'
 import type {
   CustomerAnalyticsDetail,
@@ -121,28 +120,24 @@ export function CustomerDetailsPage() {
 
   if (isLoading) {
     return (
-      <AppShell>
         <div className="rounded-[2rem] border border-white/60 bg-white px-6 py-16 text-center text-sm font-bold text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
           Loading customer details...
         </div>
-      </AppShell>
     )
   }
 
   if (!customer) {
     return (
-      <AppShell>
         <div className="rounded-[2rem] border border-red-100 bg-red-50 px-6 py-16 text-center text-sm font-bold text-red-600 shadow-sm dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
           {errorMessage || 'Customer not found.'}
         </div>
-      </AppShell>
     )
   }
 
   const spendMax = Math.max(...customer.spend_trend.map((point) => Number(point.total_spend || 0)), 1)
 
   return (
-    <AppShell>
+    <>
       <div className="mx-auto w-full max-w-[1600px] space-y-8 px-1 py-2 sm:px-2">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link
@@ -404,7 +399,7 @@ export function CustomerDetailsPage() {
         onClose={() => setFormOpen(false)}
         onSubmit={handleUpdateCustomer}
       />
-    </AppShell>
+    </>
   )
 }
 
@@ -493,4 +488,12 @@ function MobileStateCard({ message }: { message: string }) {
     </div>
   )
 }
+
+
+
+
+
+
+
+
 
