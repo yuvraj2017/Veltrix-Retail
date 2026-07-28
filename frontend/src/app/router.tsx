@@ -20,8 +20,8 @@ import AddVendorBillPage from "../pages/AddVendorBillPage";
 import CreateInvoicePage from "../pages/CreateInvoicePage";
 import InvoicePreviewPage from "../pages/InvoicePreviewPage";
 
-import { CustomersPage } from "../pages/customers/CustomersPage";
-import { CustomerDetailsPage } from "../pages/customers/CustomerDetailsPage";
+import { CustomersPage } from "../pages/CustomersPage";
+import { CustomerDetailsPage } from "../pages/CustomerDetailsPage";
 
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 import { PublicOnlyRoute } from "../routes/PublicOnlyRoute";

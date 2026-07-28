@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Package,
   ReceiptText,
+  Users,
   Settings,
   PlusCircle,
   ChevronLeft,
@@ -19,6 +20,7 @@ const navItems = [
   { name: 'Products', to: '/products', icon: Package },
   { name: 'Vendors', to: '/vendors', icon: Handshake },
   { name: 'Billing', to: '/billing', icon: ReceiptText },
+  { name: 'Customers', to: '/customers', icon: Users },
   { name: 'Expenses', to: '/expenses', icon: Wallet },
   { name: 'Reports', to: '/reports', icon: BarChart3 },
   { name: 'Settings', to: '/settings', icon: Settings },
@@ -187,3 +189,5 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
     </aside>
   )
 }
+
+
