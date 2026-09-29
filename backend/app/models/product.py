@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -7,6 +7,12 @@ from app.models.base import IDMixin, TimestampMixin
 
 class Product(Base, IDMixin, TimestampMixin):
     __tablename__ = "products"
+
+    # list_products filters on shop_id and orders by created_at DESC.
+    __table_args__ = (
+        Index("ix_products_shop_id_created_at", "shop_id", "created_at"),
+        CheckConstraint("stock_quantity >= 0", name="ck_products_stock_quantity_non_negative"),
+    )
 
     shop_id = Column(ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
 

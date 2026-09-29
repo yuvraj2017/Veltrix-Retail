@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../context/AuthContext'
 import { changeMyPassword, getMyProfile, updateMyProfile } from '../features/profile/api'
+import { useToast } from '../components/ui/ToastProvider'
 import {
   changePasswordSchema,
   profileSchema,
@@ -123,14 +124,12 @@ function LogoutConfirmModal({
 
 export default function ProfilePage() {
   const { logout, refreshMe } = useAuth()
+  const { showToast } = useToast()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [profileError, setProfileError] = useState('')
-  const [profileSuccess, setProfileSuccess] = useState('')
-  const [passwordError, setPasswordError] = useState('')
-  const [passwordSuccess, setPasswordSuccess] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
 
@@ -209,7 +208,6 @@ export default function ProfilePage() {
 
   const handleEditClick = () => {
     setProfileError('')
-    setProfileSuccess('')
     setIsEditing(true)
   }
 
@@ -226,13 +224,11 @@ export default function ProfilePage() {
       two_factor_enabled: Boolean(profile.two_factor_enabled),
     })
     setProfileError('')
-    setProfileSuccess('')
     setIsEditing(false)
   }
 
   const onSubmitProfile = async (values: ProfileFormValues) => {
     setProfileError('')
-    setProfileSuccess('')
     setSavingProfile(true)
     try {
       const composedFullName = `${values.first_name || ''} ${values.last_name || ''}`.trim()
@@ -247,30 +243,44 @@ export default function ProfilePage() {
         two_factor_enabled: values.two_factor_enabled,
       })
       setProfile(updated)
-      setProfileSuccess('Profile updated successfully')
+      showToast({
+        title: 'Profile updated',
+        message: 'Profile updated successfully.',
+        variant: 'success',
+      })
       setIsEditing(false)
       await refreshMe()
       await loadProfile()
     } catch (error: any) {
-      setProfileError(error?.response?.data?.detail || 'Failed to update profile')
+      showToast({
+        title: 'Failed to update profile',
+        message: error?.response?.data?.detail || 'Failed to update profile',
+        variant: 'error',
+      })
     } finally {
       setSavingProfile(false)
     }
   }
 
   const onSubmitPassword = async (values: ChangePasswordFormValues) => {
-    setPasswordError('')
-    setPasswordSuccess('')
     setSavingPassword(true)
     try {
       await changeMyPassword({
         current_password: values.current_password,
         new_password: values.new_password,
       })
-      setPasswordSuccess('Password changed successfully')
+      showToast({
+        title: 'Password updated',
+        message: 'Password changed successfully.',
+        variant: 'success',
+      })
       passwordForm.reset()
     } catch (error: any) {
-      setPasswordError(error?.response?.data?.detail || 'Failed to change password')
+      showToast({
+        title: 'Failed to change password',
+        message: error?.response?.data?.detail || 'Failed to change password',
+        variant: 'error',
+      })
     } finally {
       setSavingPassword(false)
     }
@@ -311,6 +321,7 @@ export default function ProfilePage() {
                   src={profileImage}
                   alt={displayFullName}
                   className="h-20 w-20 sm:h-28 sm:w-28 rounded-[24px] sm:rounded-[28px] object-cover shadow-sm"
+                  decoding="async"
                 />
               ) : (
                 <div className="flex h-20 w-20 sm:h-28 sm:w-28 items-center justify-center rounded-[24px] sm:rounded-[28px] bg-indigo-50 text-indigo-600 shadow-sm
@@ -458,9 +469,6 @@ export default function ProfilePage() {
               {profileError && (
                 <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-400">{profileError}</div>
               )}
-              {profileSuccess && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">{profileSuccess}</div>
-              )}
             </form>
           </div>
 
@@ -591,13 +599,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {passwordError && (
-                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-400">{passwordError}</div>
-              )}
-              {passwordSuccess && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">{passwordSuccess}</div>
-              )}
-
               <button
                 type="submit"
                 disabled={savingPassword}
@@ -703,5 +704,4 @@ export default function ProfilePage() {
     </>
   )
 }
-
 

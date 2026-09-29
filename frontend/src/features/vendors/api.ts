@@ -1,3 +1,4 @@
+import { authenticatedFetch as fetch } from '../../lib/authenticated-fetch';
 import type {
   Vendor,
   VendorBill,
@@ -14,27 +15,7 @@ import type {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-const getToken = () => {
-  return (
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("authToken")
-  );
-};
-
-const buildHeaders = (): HeadersInit => {
-  const token = getToken();
-
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
-};
+const buildHeaders = (): HeadersInit => ({ "Content-Type": "application/json" });
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
   if (!response.ok) {

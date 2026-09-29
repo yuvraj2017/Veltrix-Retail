@@ -21,12 +21,15 @@ function getInitial(name?: string | null) {
 export function AppHeader() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, shop } = useAuth();
+  const { user, shop, isSuperAdmin } = useAuth();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const shopName = shop?.name || user?.shop_name || "Veltrix Retail";
+  // Administrators are labelled by their role, not by a shop they do not own.
+  const shopName = isSuperAdmin
+    ? "Platform Admin"
+    : shop?.name || user?.shop_name || "Veltrix Retail";
   const logoUrl =
     resolveImageUrl(shop?.logo_url) ||
     resolveImageUrl(user?.shop_logo_url) ||
@@ -35,6 +38,8 @@ export function AppHeader() {
   const userLabel = user?.full_name || user?.role || "Store Admin";
 
   const searchPlaceholder = useMemo(() => {
+    if (location.pathname.startsWith("/admin"))
+      return "Search shop owners from the Users page...";
     if (location.pathname.startsWith("/vendors"))
       return "Search vendors, bills or payments...";
     if (location.pathname.startsWith("/products"))
@@ -61,6 +66,7 @@ export function AppHeader() {
         src={logoUrl}
         alt={shopName}
         className={`${cls} rounded-full border border-slate-200 dark:border-slate-600 object-cover shadow-sm`}
+        decoding="async"
       />
     ) : (
       <div

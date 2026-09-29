@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  ArrowLeft,
+  AlertCircle,
   ArrowRight,
   Building2,
   Check,
   CheckCircle2,
   ChevronDown,
+  Loader2,
   Mail,
   MapPin,
   MessageCircle,
@@ -17,7 +18,22 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { BrandLogo } from '../components/auth/BrandLogo'
+import {
+  ALERT_CLASS,
+  CARD_ACCENT,
+  CARD_CLASS,
+  ERROR_TEXT,
+  FADE_RULE,
+  fieldClass,
+  ICON_CLASS,
+  ICON_CLASS_TOP,
+  LABEL_CLASS,
+  LINK_CLASS,
+  PRIMARY_BUTTON,
+  PRIMARY_SHEEN,
+} from '../components/auth/formStyles'
 import { PasswordInput } from '../components/auth/PasswordInput'
 import { RegisterHero } from '../components/auth/RegisterHero'
 import { registerShop } from '../features/auth/api'
@@ -37,8 +53,16 @@ const categories = [
 ]
 
 
-const inputClass =
-  'w-full rounded-xl border border-slate-200 bg-white/80 py-3 pl-14 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100'
+/**
+ * Every text input on this form. `compact` because eleven fields at the login
+ * screen's density would not fit a laptop viewport.
+ */
+const inputClass = fieldClass({ density: 'compact', extra: 'pr-4' })
+
+/** Same shell, flagged red — swapped in when the field has a validation error. */
+const inputErrorClass = fieldClass({ density: 'compact', error: true, extra: 'pr-4' })
+
+const shellClass = (hasError: boolean) => (hasError ? inputErrorClass : inputClass)
 
 
 type InputShellProps = {
@@ -49,17 +73,29 @@ type InputShellProps = {
 }
 
 
+/**
+ * Label + leading icon + inline error, wrapped around a caller-supplied input.
+ *
+ * The icon renders AFTER the input even though it paints on the left: it is
+ * tinted by `peer-focus:`, which compiles to a sibling selector and so cannot
+ * look backwards to an earlier element.
+ */
 function InputShell({ label, icon, error, children }: InputShellProps) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-slate-700">{label}</label>
+    <div>
+      <label className={`mb-1.5 block ${LABEL_CLASS}`}>{label}</label>
+
       <div className="relative">
-        <div className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/60 bg-white/80 text-slate-400 shadow-sm backdrop-blur-sm">
-          {icon}
-        </div>
         {children}
+        <span className={`${ICON_CLASS} flex`}>{icon}</span>
       </div>
-      {error?.message && <p className="text-xs text-red-500">{error.message}</p>}
+
+      {error?.message && (
+        <p className={ERROR_TEXT}>
+          <AlertCircle size={13} className="shrink-0" aria-hidden />
+          {error.message}
+        </p>
+      )}
     </div>
   )
 }
@@ -96,32 +132,40 @@ function CategoryDropdown({ value, onChange, error }: CategoryDropdownProps) {
 
 
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-slate-700">Category</label>
+    <div>
+      <label className={`mb-1.5 block ${LABEL_CLASS}`}>Category</label>
+
       <div ref={containerRef} className="relative">
+        {/* A <button>, so it never matches `:focus` while the menu is open —
+            hence `active` rather than relying on the focus variants. */}
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className={`group w-full rounded-xl border bg-white/80 py-3 pl-14 pr-10 text-left text-sm text-slate-900 outline-none transition-all duration-300 ${
-            open
-              ? 'border-indigo-400 bg-white ring-4 ring-indigo-100'
-              : 'border-slate-200 hover:border-slate-300'
-          }`}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className={fieldClass({
+            active: open,
+            error: Boolean(error),
+            density: 'compact',
+            extra: 'pr-10 text-left',
+          })}
         >
-          <div className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/60 bg-white/80 text-slate-400 shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:text-indigo-500">
-            <Building2 size={15} />
-          </div>
           <span className={value ? 'text-slate-900' : 'text-slate-400'}>
             {value || 'Select category'}
           </span>
-          <div
-            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-all duration-300 ${
-              open ? 'rotate-180 text-indigo-500' : ''
-            }`}
-          >
-            <ChevronDown size={15} />
-          </div>
         </button>
+
+        {/* Both decorations sit after the button so `peer-focus:` can tint the
+            leading icon; the chevron turns on `open` instead. */}
+        <Building2 size={16} className={ICON_CLASS} aria-hidden />
+
+        <ChevronDown
+          size={16}
+          aria-hidden
+          className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-transform duration-200 ${
+            open ? 'rotate-180 text-indigo-500' : ''
+          }`}
+        />
 
 
         {open && (
@@ -157,16 +201,23 @@ function CategoryDropdown({ value, onChange, error }: CategoryDropdownProps) {
           </div>
         )}
       </div>
-      {error?.message && <p className="text-xs text-red-500">{error.message}</p>}
+      {error?.message && (
+        <p className={ERROR_TEXT}>
+          <AlertCircle size={13} className="shrink-0" aria-hidden />
+          {error.message}
+        </p>
+      )}
     </div>
   )
 }
 
 
 export default function RegisterPage() {
-  const navigate = useNavigate()
   const [apiError, setApiError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  /** Set once registration succeeds. The account is `pending` at this point,
+   *  so the form is replaced by an explanation rather than a redirect. */
+  const [submittedEmail, setSubmittedEmail] = useState('')
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [whatsappNumber, setWhatsappNumber] = useState('')
@@ -234,13 +285,15 @@ export default function RegisterPage() {
       formData.append('whatsapp_number', whatsappNumber)
       formData.append('shop_address', shopAddress)
       if (selectedLogo) formData.append('logo', selectedLogo)
-      await registerShop(formData)
+      const response = await registerShop(formData)
       reset({ shop_name: '', owner_name: '', email: '', category: '', phone: '', password: '', confirm_password: '' })
       setSelectedLogo(null)
       setPreviewUrl('')
       setWhatsappNumber('')
       setShopAddress('')
-      navigate('/')
+      // No token is issued for a pending account, so there is nothing to log
+      // in with. Show what happens next instead of redirecting.
+      setSubmittedEmail(response.email || values.email)
     } catch (error: any) {
       setApiError(error?.response?.data?.detail || 'Registration failed')
     } finally {
@@ -248,6 +301,93 @@ export default function RegisterPage() {
     }
   }
 
+
+  /**
+   * Post-registration state.
+   *
+   * The account is created in `pending` and issued no token, so there is
+   * nothing to sign in with yet. This replaces the form rather than
+   * redirecting to /login, where the person would otherwise be met by a
+   * refusal they had no way to anticipate.
+   */
+  if (submittedEmail) {
+    return (
+      <div className="min-h-screen overflow-hidden bg-white lg:grid lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="">
+          <RegisterHero />
+        </div>
+
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#fbfcff] px-4 py-8 sm:px-6 lg:px-10">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse 70% 45% at 100% 0%, rgba(99,102,241,0.07) 0%, transparent 70%),' +
+                'radial-gradient(ellipse 60% 40% at 0% 100%, rgba(139,92,246,0.05) 0%, transparent 70%)',
+            }}
+          />
+
+          <div className="relative z-10 w-full max-w-[520px] text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-emerald-50 text-emerald-600">
+              <svg
+                width="30"
+                height="30"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+
+            <h1 className="mt-6 text-[30px] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-[36px]">
+              Registration received
+            </h1>
+
+            <p className="mt-3 text-[15px] leading-7 text-slate-600">
+              Thanks for signing up. Your account for{' '}
+              <span className="font-bold text-slate-900">{submittedEmail}</span> is
+              awaiting approval from an administrator.
+            </p>
+
+            <div className="mt-6 rounded-[1.5rem] border border-amber-100 bg-amber-50 px-5 py-4 text-left">
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-700">
+                What happens next
+              </p>
+              <p className="mt-2 text-sm leading-6 text-amber-800">
+                You will not be able to sign in until your registration has been
+                reviewed. Once it is approved you can sign in with the email and
+                password you just chose.
+              </p>
+            </div>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Link
+                to="/"
+                className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-700"
+              >
+                Go to sign in
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setSubmittedEmail('')}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Register another shop
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     // Outer layout: single column on mobile, two-column on lg+
@@ -258,49 +398,55 @@ export default function RegisterPage() {
       </div>
 
 
-      {/* Form panel */}
-      <div className="relative flex min-h-screen items-start justify-center overflow-hidden bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.10),transparent_22%),linear-gradient(180deg,#ffffff_0%,#f8faff_100%)] px-4 py-6 sm:px-6 sm:py-8 lg:items-center lg:px-10 lg:py-10">
-        {/* Decorative blobs */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute right-[-70px] top-12 h-48 w-48 rounded-full bg-violet-200/20 blur-3xl" />
-          <div className="absolute bottom-8 left-8 h-36 w-36 rounded-full bg-indigo-200/20 blur-3xl" />
-        </div>
-
+      {/* Form panel — same surface and wash as the login and recovery screens */}
+      <div className="relative flex min-h-screen items-start justify-center overflow-hidden bg-[#fbfcff] px-4 py-8 sm:px-6 sm:py-10 lg:items-center lg:px-10 lg:py-10">
+        {/* barely-there wash so the white panel is not clinical */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse 70% 45% at 100% 0%, rgba(99,102,241,0.07) 0%, transparent 70%),' +
+              'radial-gradient(ellipse 60% 40% at 0% 100%, rgba(139,92,246,0.05) 0%, transparent 70%)',
+          }}
+        />
 
         <div className="relative z-10 w-full max-w-[560px]">
+          {/* ══ LOGO PLACEHOLDER — the brand mark above the card ════════════
+              Same treatment as the login and recovery screens: tone="bare"
+              means no tile, so the artwork sits on the page background.
 
+              Smaller here (h-16 w-40) than on those two — this form is eleven
+              fields long, so the mark takes less of the vertical budget.
 
-          {/* ── Header ── */}
-          <div className="mb-5 flex flex-col gap-3 xs:flex-row xs:items-start xs:justify-between sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="mb-2.5 inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-[11px] font-semibold text-indigo-600 shadow-sm">
-                <ShieldCheck size={12} />
-                Create Your Retail Workspace
-              </div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">
-                Launch your StoreMitraa account
+              The PNG/SVG file path is set by BRAND.logoSrc in
+              ../components/auth/authContent.ts — change it THERE, not here. */}
+          <BrandLogo tone="bare" fill className="mx-auto mb-6 h-16 w-40" />
+
+          <div className={CARD_CLASS}>
+            <div aria-hidden className={CARD_ACCENT} />
+
+            {/* ── Header ──
+                The old "Back to Login" pill is gone: the footer link at the
+                bottom of this card already goes there, and two routes to the
+                same place read as indecision. */}
+            <header className="mb-6 text-center">
+              <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-[11px] font-semibold text-indigo-600">
+                <ShieldCheck size={12} aria-hidden />
+                Create your retail workspace
+              </span>
+
+              <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.03em] text-slate-900 sm:text-[30px]">
+                Launch your Purple account
               </h1>
-              <p className="mt-1.5 max-w-md text-xs leading-5 text-slate-500 sm:leading-6">
-                Set up your store profile, upload your brand identity, and get
-                ready to manage products, billing, and operations from one
-                modern retail workspace.
+              <p className="mx-auto mt-2 max-w-[44ch] text-sm leading-relaxed text-slate-500">
+                Set up your store profile, add your brand, and start managing products,
+                billing and operations from one workspace.
               </p>
-            </div>
+            </header>
 
-
-            <Link
-              to="/"
-              className="inline-flex shrink-0 self-start items-center gap-1.5 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-xs font-semibold text-slate-700 shadow-[0_6px_20px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600 sm:px-4 sm:py-2.5"
-            >
-              <ArrowLeft size={14} />
-              <span className="hidden xs:inline sm:inline">Back to Login</span>
-              <span className="xs:hidden sm:hidden">Login</span>
-            </Link>
-          </div>
-
-
-          {/* ── Form ── */}
-          <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="space-y-3 sm:space-y-3.5">
+            {/* ── Form ── */}
+            <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="space-y-3.5">
             {/* Honeypot fields */}
             <input type="text" name="fake_username" autoComplete="username" className="hidden" tabIndex={-1} />
             <input type="password" name="fake_password" autoComplete="new-password" className="hidden" tabIndex={-1} />
@@ -314,7 +460,7 @@ export default function RegisterPage() {
                   placeholder="Your shop name"
                   autoComplete="off"
                   {...register('shop_name')}
-                  className={inputClass}
+                  className={shellClass(Boolean(errors.shop_name))}
                 />
               </InputShell>
               <InputShell label="Owner Name" icon={<User2 size={15} />} error={errors.owner_name}>
@@ -323,7 +469,7 @@ export default function RegisterPage() {
                   placeholder="Owner full name"
                   autoComplete="off"
                   {...register('owner_name')}
-                  className={inputClass}
+                  className={shellClass(Boolean(errors.owner_name))}
                 />
               </InputShell>
             </div>
@@ -336,7 +482,7 @@ export default function RegisterPage() {
                 placeholder="you@shop.com"
                 autoComplete="off"
                 {...register('email')}
-                className={inputClass}
+                className={shellClass(Boolean(errors.email))}
               />
             </InputShell>
 
@@ -360,7 +506,7 @@ export default function RegisterPage() {
                   placeholder="9876543210"
                   autoComplete="off"
                   {...register('phone')}
-                  className={inputClass}
+                  className={shellClass(Boolean(errors.phone))}
                 />
               </InputShell>
             </div>
@@ -368,14 +514,15 @@ export default function RegisterPage() {
 
             {/* WhatsApp + Address */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3.5">
-              {/* WhatsApp */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">WhatsApp Number</label>
+              {/* WhatsApp — optional, so no validation and no error slot */}
+              <div>
+                <label htmlFor="reg-whatsapp" className={`mb-1.5 block ${LABEL_CLASS}`}>
+                  WhatsApp Number
+                </label>
+
                 <div className="relative">
-                  <div className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/60 bg-white/80 text-slate-400 shadow-sm backdrop-blur-sm">
-                    <MessageCircle size={15} />
-                  </div>
                   <input
+                    id="reg-whatsapp"
                     type="text"
                     value={whatsappNumber}
                     onChange={(e) => setWhatsappNumber(e.target.value)}
@@ -383,33 +530,42 @@ export default function RegisterPage() {
                     autoComplete="off"
                     className={inputClass}
                   />
+                  <MessageCircle size={16} className={ICON_CLASS} aria-hidden />
                 </div>
               </div>
 
 
               {/* Address */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Shop Address</label>
+              <div>
+                <label htmlFor="reg-address" className={`mb-1.5 block ${LABEL_CLASS}`}>
+                  Shop Address
+                </label>
+
                 <div className="relative">
-                  <div className="pointer-events-none absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/80 text-slate-400 shadow-sm backdrop-blur-sm">
-                    <MapPin size={15} />
-                  </div>
                   <textarea
+                    id="reg-address"
                     value={shopAddress}
                     onChange={(e) => setShopAddress(e.target.value)}
                     placeholder="Enter full shop address"
                     rows={1}
-                    className="w-full resize-none rounded-xl border border-slate-200 bg-white/80 py-3 pl-14 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                    className={fieldClass({ density: 'compact', extra: 'resize-none pr-4' })}
                   />
+                  {/* Pinned near the top, not centred — a textarea grows. */}
+                  <MapPin size={16} className={ICON_CLASS_TOP} aria-hidden />
                 </div>
               </div>
             </div>
 
 
-            {/* Logo upload */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Shop Logo</label>
-              <label className="group block cursor-pointer overflow-hidden rounded-2xl border border-dashed border-indigo-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.92)_0%,rgba(245,247,255,0.88)_100%)] p-3.5 shadow-[0_12px_36px_rgba(79,70,229,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-[0_18px_44px_rgba(79,70,229,0.10)] sm:p-4">
+            {/* Logo upload — a dashed version of the field surface, so the drop
+                zone reads as part of the same form rather than a widget bolted
+                on. The caption is a <span>: the real <label> is the one below,
+                which wraps the file input, and a second <label> labelling
+                nothing would just confuse a screen reader. */}
+            <div>
+              <span className={`mb-1.5 block ${LABEL_CLASS}`}>Shop Logo</span>
+
+              <label className="group block cursor-pointer rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 transition duration-200 hover:border-indigo-300 hover:bg-indigo-50/40 sm:p-4">
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/jpg,image/webp"
@@ -420,15 +576,15 @@ export default function RegisterPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   {/* Left: icon + text */}
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100 transition duration-300 group-hover:scale-105 group-hover:rotate-3 sm:h-12 sm:w-12">
-                      <UploadCloud size={20} />
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200 transition duration-200 group-hover:ring-indigo-200 sm:h-12 sm:w-12">
+                      <UploadCloud size={20} aria-hidden />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900">Upload your shop logo</p>
                       <p className="mt-0.5 text-xs leading-5 text-slate-500">
                         PNG, JPG, JPEG or WEBP.{' '}
                         <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 transition group-hover:bg-indigo-100">
-                          <CheckCircle2 size={11} />
+                          <CheckCircle2 size={11} aria-hidden />
                           Click to browse
                         </span>
                       </p>
@@ -443,6 +599,7 @@ export default function RegisterPage() {
                         src={previewUrl}
                         alt="Logo Preview"
                         className="h-10 w-10 rounded-lg object-cover ring-1 ring-slate-200 sm:h-12 sm:w-12"
+                        decoding="async"
                       />
                       <div className="min-w-0">
                         <p className="max-w-[160px] truncate text-xs font-semibold text-slate-900 sm:max-w-[120px]">
@@ -476,45 +633,46 @@ export default function RegisterPage() {
             </div>
 
 
-            {/* API error */}
+            {/* API error — role="alert" so it is announced on arrival */}
             {apiError && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-xs text-red-600">
-                {apiError}
+              <div role="alert" className={ALERT_CLASS}>
+                <AlertCircle size={16} className="mt-px shrink-0" aria-hidden />
+                <span className="min-w-0 break-words">{apiError}</span>
               </div>
             )}
 
-
             {/* Submit */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-violet-600 to-indigo-700 px-5 py-3.5 text-sm font-semibold text-white shadow-[0_14px_36px_rgba(79,70,229,0.26)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(79,70,229,0.32)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_34%)]" />
-              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-              <span className="relative flex items-center justify-center gap-2">
-                <span>{isSubmitting ? 'Creating account…' : 'Create Shop Account'}</span>
-                {!isSubmitting && (
+            <button type="submit" disabled={isSubmitting} className={`${PRIMARY_BUTTON} mt-1`}>
+              <span aria-hidden className={PRIMARY_SHEEN} />
+
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={17} className="animate-spin" aria-hidden />
+                  Creating account…
+                </>
+              ) : (
+                <>
+                  Create shop account
                   <ArrowRight
-                    size={16}
-                    className="transition-transform duration-300 group-hover:translate-x-1"
+                    size={17}
+                    className="transition-transform duration-200 group-hover:translate-x-0.5"
+                    aria-hidden
                   />
-                )}
-              </span>
+                </>
+              )}
             </button>
+          </form>
 
+            {/* ── Way back ─────────────────────────────────────────── */}
+            <div aria-hidden className={`mt-7 ${FADE_RULE}`} />
 
-            {/* Sign-in link */}
-            <div className="rounded-xl border border-slate-200 bg-white/75 px-4 py-3 text-center text-xs text-slate-500 shadow-sm">
+            <p className="pt-5 text-center text-sm text-slate-500">
               Already have an account?{' '}
-              <Link
-                to="/"
-                className="font-semibold text-indigo-600 transition hover:text-indigo-700"
-              >
+              <Link to="/" className={LINK_CLASS}>
                 Sign in
               </Link>
-            </div>
-          </form>
+            </p>
+          </div>
         </div>
       </div>
     </div>

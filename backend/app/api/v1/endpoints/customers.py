@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.customer import (
     CustomerAnalyticsDetailResponse,
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/customers", tags=["Customers"])
 def search_existing_customers(
     query: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return search_customers(query, db, current_user)
 
@@ -46,7 +46,7 @@ def get_customer_directory(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=12, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return list_customers(
         db=db,
@@ -62,7 +62,7 @@ def get_customer_directory(
 @router.get("/summary", response_model=CustomerSummaryResponse)
 def get_customer_summary_endpoint(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_customer_summary(db, current_user)
 
@@ -71,7 +71,7 @@ def get_customer_summary_endpoint(
 def get_customer_charts_endpoint(
     months: int = Query(default=6, ge=1, le=12),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_customer_charts(db, current_user, month_count=months)
 
@@ -79,7 +79,7 @@ def get_customer_charts_endpoint(
 @router.get("/insights", response_model=CustomerInsightResponse)
 def get_customer_insights_endpoint(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_customer_insights(db, current_user)
 
@@ -88,7 +88,7 @@ def get_customer_insights_endpoint(
 def add_customer(
     payload: CustomerCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return create_customer(payload, db, current_user)
 
@@ -97,7 +97,7 @@ def add_customer(
 def get_single_customer_analytics(
     customer_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_customer_analytics(customer_id, db, current_user)
 
@@ -106,7 +106,7 @@ def get_single_customer_analytics(
 def get_single_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_customer(customer_id, db, current_user)
 
@@ -116,6 +116,6 @@ def edit_customer(
     customer_id: int,
     payload: CustomerUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return update_customer(customer_id, payload, db, current_user)

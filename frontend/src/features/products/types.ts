@@ -41,7 +41,17 @@ export type Product = {
 export type ProductListResponse = {
   items: Product[]
   total: number
+  page: number
+  page_size: number
 }
+
+export type ProductSort =
+  | 'date_desc'
+  | 'date_asc'
+  | 'name_asc'
+  | 'name_desc'
+  | 'stock_asc'
+  | 'stock_desc'
 
 export type ProductStats = {
   total_items: number

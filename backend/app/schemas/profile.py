@@ -4,7 +4,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 class ProfileResponse(BaseModel):
     id: int
-    shop_id: int
+    # None for a super admin, who operates the platform and owns no shop.
+    shop_id: int | None = None
     full_name: str
     first_name: str | None = None
     last_name: str | None = None

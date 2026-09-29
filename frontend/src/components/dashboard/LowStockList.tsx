@@ -29,6 +29,7 @@ function ProductImage({ image, name }: { image?: string | null; name: string }) 
       src={imageUrl}
       alt={name}
       loading="lazy"
+      decoding="async"
       onError={() => setHasError(true)}
       className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 rounded-xl sm:rounded-2xl bg-[#eef1f6] dark:bg-slate-700 object-cover"
     />

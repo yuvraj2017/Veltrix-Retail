@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -7,6 +7,16 @@ from app.core.database import Base
 
 class ProductSalesAnalytics(Base):
     __tablename__ = "product_sales_analytics"
+
+    # Category-performance and product reports all filter on
+    # (shop_id, invoice_date BETWEEN ...) before grouping.
+    __table_args__ = (
+        Index(
+            "ix_product_sales_analytics_shop_id_invoice_date",
+            "shop_id",
+            "invoice_date",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 

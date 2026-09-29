@@ -177,6 +177,10 @@ def create_expense(payload: ExpenseCreate, current_user: User, db: Session):
     return expense
 
 
+DEFAULT_EXPENSE_PAGE_SIZE = 50
+MAX_EXPENSE_PAGE_SIZE = 200
+
+
 def list_expenses(
     current_user: User,
     db: Session,
@@ -184,6 +188,8 @@ def list_expenses(
     search: str | None = None,
     category: str | None = None,
     payment_mode: str | None = None,
+    page: int = 1,
+    page_size: int = DEFAULT_EXPENSE_PAGE_SIZE,
 ):
     query = _apply_expense_filters(
         db.query(Expense),
@@ -195,9 +201,27 @@ def list_expenses(
     )
 
     total = query.count()
-    items = query.order_by(Expense.expense_date.desc(), Expense.created_at.desc()).all()
 
-    return {"items": items, "total": total}
+    page = max(page, 1)
+    page_size = max(min(page_size, MAX_EXPENSE_PAGE_SIZE), 1)
+
+    items = (
+        query.order_by(
+            Expense.expense_date.desc(),
+            Expense.created_at.desc(),
+            Expense.id.desc(),  # tiebreak keeps paging stable
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 def get_expense(expense_id: int, current_user: User, db: Session):

@@ -76,64 +76,58 @@ def get_dashboard_overview(db: Session, current_user: User) -> DashboardOverview
     # -----------------------------
     # SALES / REVENUE / PROFIT
     # -----------------------------
-    today_sales = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-        .filter(
-            Invoice.shop_id == shop_id,
-            Invoice.invoice_date == today,
+    # One pass over this shop's invoices produces every scalar figure below.
+    # Postgres FILTER clauses let each SUM apply its own date predicate, which
+    # replaces what used to be seven separate round trips.
+    #
+    # Note: no invoice_status filter here, matching the previous behaviour --
+    # the dashboard intentionally counts every invoice, including cancelled
+    # ones. (get_invoice_stats excludes cancelled; the two differ on purpose.)
+    totals_row = (
+        db.query(
+            func.coalesce(
+                func.sum(Invoice.final_amount).filter(Invoice.invoice_date == today), 0
+            ).label("today_sales"),
+            func.coalesce(
+                func.sum(Invoice.final_amount).filter(
+                    Invoice.invoice_date >= last_7_start,
+                    Invoice.invoice_date <= today,
+                ),
+                0,
+            ).label("weekly_sales"),
+            func.coalesce(
+                func.sum(Invoice.final_amount).filter(
+                    Invoice.invoice_date >= previous_7_start,
+                    Invoice.invoice_date <= previous_7_end,
+                ),
+                0,
+            ).label("previous_week_sales"),
+            func.coalesce(func.sum(Invoice.final_amount), 0).label("total_revenue"),
+            func.coalesce(func.sum(Invoice.total_profit), 0).label("total_profit"),
+            func.coalesce(
+                func.sum(Invoice.final_amount).filter(
+                    Invoice.invoice_date < last_7_start
+                ),
+                0,
+            ).label("previous_total_revenue"),
+            func.coalesce(
+                func.sum(Invoice.total_profit).filter(
+                    Invoice.invoice_date < last_7_start
+                ),
+                0,
+            ).label("previous_total_profit"),
         )
-        .scalar()
-    )
-
-    weekly_sales = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-        .filter(
-            Invoice.shop_id == shop_id,
-            Invoice.invoice_date >= last_7_start,
-            Invoice.invoice_date <= today,
-        )
-        .scalar()
-    )
-
-    previous_week_sales = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-        .filter(
-            Invoice.shop_id == shop_id,
-            Invoice.invoice_date >= previous_7_start,
-            Invoice.invoice_date <= previous_7_end,
-        )
-        .scalar()
-    )
-
-    total_revenue = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
         .filter(Invoice.shop_id == shop_id)
-        .scalar()
+        .one()
     )
 
-    total_profit = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.total_profit), 0))
-        .filter(Invoice.shop_id == shop_id)
-        .scalar()
-    )
-
-    previous_total_revenue = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-        .filter(
-            Invoice.shop_id == shop_id,
-            Invoice.invoice_date < last_7_start,
-        )
-        .scalar()
-    )
-
-    previous_total_profit = _to_decimal(
-        db.query(func.coalesce(func.sum(Invoice.total_profit), 0))
-        .filter(
-            Invoice.shop_id == shop_id,
-            Invoice.invoice_date < last_7_start,
-        )
-        .scalar()
-    )
+    today_sales = _to_decimal(totals_row.today_sales)
+    weekly_sales = _to_decimal(totals_row.weekly_sales)
+    previous_week_sales = _to_decimal(totals_row.previous_week_sales)
+    total_revenue = _to_decimal(totals_row.total_revenue)
+    total_profit = _to_decimal(totals_row.total_profit)
+    previous_total_revenue = _to_decimal(totals_row.previous_total_revenue)
+    previous_total_profit = _to_decimal(totals_row.previous_total_profit)
 
     today_change, today_positive = _format_change(today_sales, previous_week_sales / Decimal("7") if previous_week_sales > 0 else Decimal("0"))
     weekly_change, weekly_positive = _format_change(weekly_sales, previous_week_sales)
@@ -143,8 +137,17 @@ def get_dashboard_overview(db: Session, current_user: User) -> DashboardOverview
     # -----------------------------
     # LOW STOCK
     # -----------------------------
-    low_stock_products = (
-        db.query(Product)
+    # COUNT(*) OVER () is evaluated before LIMIT, so the same query yields both
+    # the top 5 rows and the total number of low-stock products.
+    low_stock_rows = (
+        db.query(
+            Product.id,
+            Product.name,
+            Product.sku,
+            Product.stock_quantity,
+            Product.main_image_url,
+            func.count().over().label("total_count"),
+        )
         .filter(
             Product.shop_id == shop_id,
             Product.is_active == True,  # noqa: E712
@@ -155,15 +158,7 @@ def get_dashboard_overview(db: Session, current_user: User) -> DashboardOverview
         .all()
     )
 
-    low_stock_count = (
-        db.query(func.count(Product.id))
-        .filter(
-            Product.shop_id == shop_id,
-            Product.is_active == True,  # noqa: E712
-            Product.stock_quantity <= Product.low_stock_threshold,
-        )
-        .scalar()
-    ) or 0
+    low_stock_count = low_stock_rows[0].total_count if low_stock_rows else 0
 
     # -----------------------------
     # SALES TRENDS - LAST 7 DAYS
@@ -198,38 +193,39 @@ def get_dashboard_overview(db: Session, current_user: User) -> DashboardOverview
     # -----------------------------
     # REVENUE VS PROFIT - QUARTERS + YTD
     # -----------------------------
+    # A single GROUP BY over the calendar year replaces eight separate
+    # per-quarter aggregate queries. Quarters with no invoices are filled with
+    # zeros so the response always carries Q1-Q4 plus YTD, as before.
     year_start = date(today.year, 1, 1)
-    quarter_ranges = [
-        ("Q1", date(today.year, 1, 1), date(today.year, 3, 31)),
-        ("Q2", date(today.year, 4, 1), date(today.year, 6, 30)),
-        ("Q3", date(today.year, 7, 1), date(today.year, 9, 30)),
-        ("Q4", date(today.year, 10, 1), date(today.year, 12, 31)),
-    ]
+    year_end = date(today.year, 12, 31)
+
+    quarter_rows = (
+        db.query(
+            func.extract("quarter", Invoice.invoice_date).label("quarter"),
+            func.coalesce(func.sum(Invoice.final_amount), 0).label("revenue"),
+            func.coalesce(func.sum(Invoice.total_profit), 0).label("profit"),
+        )
+        .filter(
+            Invoice.shop_id == shop_id,
+            Invoice.invoice_date >= year_start,
+            Invoice.invoice_date <= year_end,
+        )
+        .group_by(func.extract("quarter", Invoice.invoice_date))
+        .all()
+    )
+
+    quarter_totals = {
+        int(row.quarter): (_to_decimal(row.revenue), _to_decimal(row.profit))
+        for row in quarter_rows
+    }
 
     revenue_profit_points: list[RevenueProfitPoint] = []
-
     ytd_revenue = Decimal("0.00")
     ytd_profit = Decimal("0.00")
 
-    for label, start_date, end_date in quarter_ranges:
-        revenue = _to_decimal(
-            db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-            .filter(
-                Invoice.shop_id == shop_id,
-                Invoice.invoice_date >= start_date,
-                Invoice.invoice_date <= end_date,
-            )
-            .scalar()
-        )
-
-        profit = _to_decimal(
-            db.query(func.coalesce(func.sum(Invoice.total_profit), 0))
-            .filter(
-                Invoice.shop_id == shop_id,
-                Invoice.invoice_date >= start_date,
-                Invoice.invoice_date <= end_date,
-            )
-            .scalar()
+    for quarter_number in (1, 2, 3, 4):
+        revenue, profit = quarter_totals.get(
+            quarter_number, (Decimal("0.00"), Decimal("0.00"))
         )
 
         ytd_revenue += revenue
@@ -237,7 +233,7 @@ def get_dashboard_overview(db: Session, current_user: User) -> DashboardOverview
 
         revenue_profit_points.append(
             RevenueProfitPoint(
-                label=label,
+                label=f"Q{quarter_number}",
                 revenue=float(revenue),
                 profit=float(profit),
             )
@@ -283,7 +279,7 @@ def get_dashboard_overview(db: Session, current_user: User) -> DashboardOverview
             left=int(product.stock_quantity or 0),
             image=product.main_image_url,
         )
-        for product in low_stock_products
+        for product in low_stock_rows
     ]
 
     # -----------------------------

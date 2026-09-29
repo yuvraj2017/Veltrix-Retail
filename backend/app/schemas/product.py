@@ -94,6 +94,8 @@ class ProductResponse(BaseModel):
 class ProductListResponse(BaseModel):
     items: list[ProductResponse]
     total: int
+    page: int = 1
+    page_size: int = 50
 
 
 class ProductStatsResponse(BaseModel):

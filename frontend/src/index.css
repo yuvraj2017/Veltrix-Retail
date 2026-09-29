@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -76,6 +75,64 @@ select {
   background: transparent;
 }
 
+@keyframes toast-pop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -18px, 0) scale(0.96);
+  }
+  70% {
+    opacity: 1;
+    transform: translate3d(0, 3px, 0) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes toast-ping {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.28;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.5;
+  }
+}
+
+@keyframes toast-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.toast-pop {
+  animation: toast-pop 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+.toast-ping {
+  animation: toast-ping 1.25s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.toast-progress {
+  animation: toast-progress var(--toast-duration, 4500ms) linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-pop,
+  .toast-ping,
+  .toast-progress {
+    animation: none !important;
+  }
+}
+
 /* modal specific polish */
 .modal-scroll {
   padding-right: 6px;
@@ -108,4 +165,141 @@ select {
     rgba(79, 70, 229, 0.45)
   );
   border: 2px solid rgba(255, 255, 255, 0.82);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Auth screens — motion primitives
+
+   Only `opacity` and `transform` are animated so every one of these
+   runs on the compositor: no layout, no paint, no jank on the LCP
+   route. Durations are short and staggered via inline `animationDelay`
+   at the call site. The reduced-motion guard at the bottom is a hard
+   WCAG 2.3.3 requirement, not a nicety.
+   ────────────────────────────────────────────────────────────── */
+
+@keyframes auth-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes auth-grow {
+  from {
+    transform: scaleY(0.04);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes auth-sheen {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(220%);
+  }
+}
+
+.auth-pulse {
+  animation: auth-pulse 2.4s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.auth-rise {
+  animation: auth-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-grow {
+  transform-origin: bottom center;
+  animation: auth-grow 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-pulse,
+  .auth-rise,
+  .auth-grow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+
+/* Slow ambient drift on the hero aurora layer. Transform-only, so it stays
+   on the compositor; the layer is promoted once and never repainted. */
+@keyframes auth-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(1.5%, -2%, 0) scale(1.08);
+  }
+}
+
+/* Fires once when a server-side login error appears. Short and low amplitude:
+   enough to draw the eye back to the form, not enough to feel punitive. */
+@keyframes auth-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(-5px, 0, 0);
+  }
+  40% {
+    transform: translate3d(4px, 0, 0);
+  }
+  60% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  80% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+.auth-drift {
+  animation: auth-drift 22s ease-in-out infinite;
+  will-change: transform;
+}
+
+.auth-shake {
+  animation: auth-shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-drift,
+  .auth-shake {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* Chrome paints autofilled inputs with a hard yellow that ignores every
+   background rule. The inset shadow is the only way to override it, and the
+   absurd transition delay stops it flashing back on focus. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: #0f172a;
+  transition: background-color 100000s ease-in-out 0s;
 }

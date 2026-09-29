@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { LowStockList } from '../components/dashboard/LowStockList'
 import { RecentBillsTable } from '../components/dashboard/RecentBillsTable'
 import { RevenueProfitCard } from '../components/dashboard/RevenueProfitCard'
@@ -6,7 +6,7 @@ import { SalesChartCard } from '../components/dashboard/SalesChartCard'
 import { StatCard } from '../components/dashboard/StatCard'
 import { getDashboardOverview } from '../features/dashboard/api'
 import type { DashboardOverview } from '../features/dashboard/types'
-import { getCachedResource, setCachedResource } from '../lib/resourceCache'
+import { getApiErrorMessage } from '../lib/api-error'
 
 const emptyDashboard: DashboardOverview = {
   greeting_name: 'Merchant',
@@ -18,38 +18,21 @@ const emptyDashboard: DashboardOverview = {
   low_stock_products: [],
 }
 
-const DASHBOARD_CACHE_KEY = 'dashboard:overview'
-const DASHBOARD_CACHE_TTL_MS = 2 * 60 * 1000
-
 export default function DashboardPage() {
-  const cachedDashboard = getCachedResource<DashboardOverview>(
-    DASHBOARD_CACHE_KEY,
-    DASHBOARD_CACHE_TTL_MS,
-  )
+  // Replaces the bespoke TTL map in lib/resourceCache. React Query gives the
+  // same instant-render-from-cache behaviour plus background revalidation,
+  // request dedup, and shared invalidation with the rest of the app.
+  const dashboardQuery = useQuery({
+    queryKey: ['dashboard', 'overview'],
+    queryFn: getDashboardOverview,
+    staleTime: 2 * 60 * 1000, // matches the previous 2 minute TTL
+  })
 
-  const [dashboard, setDashboard] = useState<DashboardOverview>(cachedDashboard || emptyDashboard)
-  const [loading, setLoading] = useState(!cachedDashboard)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        if (!cachedDashboard) {
-          setLoading(true)
-        }
-        setError('')
-        const data = await getDashboardOverview()
-        setDashboard(setCachedResource(DASHBOARD_CACHE_KEY, data))
-      } catch (err: any) {
-        console.error('Failed to load dashboard overview', err)
-        setError(err?.response?.data?.detail || 'Failed to load dashboard data')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void loadDashboard()
-  }, [])
+  const dashboard: DashboardOverview = dashboardQuery.data ?? emptyDashboard
+  const loading = dashboardQuery.isPending
+  const error = dashboardQuery.error
+    ? getApiErrorMessage(dashboardQuery.error, 'Failed to load dashboard data')
+    : ''
 
   return (
     <section className="dark:bg-slate-900">

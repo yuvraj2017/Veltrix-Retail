@@ -96,6 +96,7 @@ export default function InvoicePreview({
                   src={logoUrl}
                   alt={shopInfo.name}
                   className="h-20 w-auto max-w-[200px] object-contain"
+                  decoding="async"
                 />
               ) : (
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 via-violet-600 to-indigo-700 text-2xl font-black text-white shadow-[0_14px_32px_rgba(79,70,229,0.24)]">

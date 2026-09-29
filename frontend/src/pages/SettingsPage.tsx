@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useToast } from '../components/ui/ToastProvider'
 import { changeMyPassword, getMyProfile, updateMyProfile } from '../features/profile/api'
 import type { Profile } from '../features/profile/types'
 import { getShopSettings, updateShopSettings } from '../features/settings/api'
@@ -232,6 +233,7 @@ function Banner({ state }: { state: BannerState }) {
 export default function SettingsPage() {
   const { user, refreshMe } = useAuth()
   const { darkMode, setDarkMode } = useTheme()
+  const { showToast } = useToast()
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -266,9 +268,6 @@ export default function SettingsPage() {
   })
 
   const [storeBanner, setStoreBanner] = useState<BannerState>({ error: '', success: '' })
-  const [accountBanner, setAccountBanner] = useState<BannerState>({ error: '', success: '' })
-  const [workspaceBanner, setWorkspaceBanner] = useState<BannerState>({ error: '', success: '' })
-  const [securityBanner, setSecurityBanner] = useState<BannerState>({ error: '', success: '' })
 
   const [savingStore, setSavingStore] = useState(false)
   const [savingAccount, setSavingAccount] = useState(false)
@@ -352,10 +351,18 @@ export default function SettingsPage() {
         logo_url: shopForm.logo_url || null,
       })
       setShop(updated)
-      setStoreBanner({ error: '', success: 'Store identity updated successfully' })
+      showToast({
+        title: 'Store updated',
+        message: 'Store identity updated successfully.',
+        variant: 'success',
+      })
       await refreshMe()
     } catch (error) {
-      setStoreBanner({ error: getApiErrorMessage(error, 'Unable to update store settings'), success: '' })
+      showToast({
+        title: 'Unable to update store',
+        message: getApiErrorMessage(error, 'Unable to update store settings'),
+        variant: 'error',
+      })
     } finally {
       setSavingStore(false)
     }
@@ -366,7 +373,6 @@ export default function SettingsPage() {
 
     try {
       setSavingAccount(true)
-      setAccountBanner({ error: '', success: '' })
 
       const nameParts = splitFullName(accountForm.full_name)
       const updated = await updateMyProfile({
@@ -381,10 +387,18 @@ export default function SettingsPage() {
       })
 
       setProfile(updated)
-      setAccountBanner({ error: '', success: 'Account preferences updated successfully' })
+      showToast({
+        title: 'Account updated',
+        message: 'Account preferences updated successfully.',
+        variant: 'success',
+      })
       await refreshMe()
     } catch (error) {
-      setAccountBanner({ error: getApiErrorMessage(error, 'Unable to update account preferences'), success: '' })
+      showToast({
+        title: 'Unable to update account',
+        message: getApiErrorMessage(error, 'Unable to update account preferences'),
+        variant: 'error',
+      })
     } finally {
       setSavingAccount(false)
     }
@@ -393,10 +407,13 @@ export default function SettingsPage() {
   const handleSaveWorkspace = async () => {
     try {
       setSavingWorkspace(true)
-      setWorkspaceBanner({ error: '', success: '' })
       saveWorkspacePreferences(workspacePreferences)
       saveNotificationPreferences(notificationPreferences)
-      setWorkspaceBanner({ error: '', success: 'Workspace preferences saved for this browser' })
+      showToast({
+        title: 'Workspace saved',
+        message: 'Workspace preferences saved for this browser.',
+        variant: 'success',
+      })
     } finally {
       setSavingWorkspace(false)
     }
@@ -404,26 +421,41 @@ export default function SettingsPage() {
 
   const handleChangePassword = async () => {
     if (passwordForm.new_password.trim().length < 6) {
-      setSecurityBanner({ error: 'New password must be at least 6 characters long', success: '' })
+      showToast({
+        title: 'Password is too short',
+        message: 'New password must be at least 6 characters long.',
+        variant: 'error',
+      })
       return
     }
 
     if (passwordForm.new_password !== passwordForm.confirm_password) {
-      setSecurityBanner({ error: 'New password and confirm password must match', success: '' })
+      showToast({
+        title: 'Passwords do not match',
+        message: 'New password and confirm password must match.',
+        variant: 'error',
+      })
       return
     }
 
     try {
       setSavingPassword(true)
-      setSecurityBanner({ error: '', success: '' })
       await changeMyPassword({
         current_password: passwordForm.current_password,
         new_password: passwordForm.new_password,
       })
       setPasswordForm({ current_password: '', new_password: '', confirm_password: '' })
-      setSecurityBanner({ error: '', success: 'Password updated successfully' })
+      showToast({
+        title: 'Password updated',
+        message: 'Password updated successfully.',
+        variant: 'success',
+      })
     } catch (error) {
-      setSecurityBanner({ error: getApiErrorMessage(error, 'Unable to update password'), success: '' })
+      showToast({
+        title: 'Unable to update password',
+        message: getApiErrorMessage(error, 'Unable to update password'),
+        variant: 'error',
+      })
     } finally {
       setSavingPassword(false)
     }
@@ -536,7 +568,6 @@ export default function SettingsPage() {
                 checked={accountForm.two_factor_enabled}
                 onChange={(checked) => setAccountForm((current) => ({ ...current, two_factor_enabled: checked }))}
               />
-              <Banner state={accountBanner} />
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -590,7 +621,6 @@ export default function SettingsPage() {
                   { value: 'reset-each-visit', label: 'Reset to default each visit' },
                 ]}
               />
-              <Banner state={workspaceBanner} />
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -658,7 +688,6 @@ export default function SettingsPage() {
                 <InputField label="New Password" type="password" value={passwordForm.new_password} onChange={(value) => setPasswordForm((current) => ({ ...current, new_password: value }))} />
                 <InputField label="Confirm Password" type="password" value={passwordForm.confirm_password} onChange={(value) => setPasswordForm((current) => ({ ...current, confirm_password: value }))} />
               </div>
-              <Banner state={securityBanner} />
               <div className="flex justify-end">
                 <button
                   type="button"

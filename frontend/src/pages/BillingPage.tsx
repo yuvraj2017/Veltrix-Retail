@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -8,6 +9,7 @@ import {
 
 import BillingStats from '../components/billing/BillingStats'
 import InvoiceTable from '../components/billing/InvoiceTable'
+import { useToast } from '../components/ui/ToastProvider'
 import { billingApi } from '../features/billing/api'
 import type { InvoiceListItem, InvoiceStats, PaymentStatus } from '../features/billing/types'
 
@@ -70,19 +72,54 @@ function DeleteInvoiceModal({
 
 export default function BillingPage() {
   const navigate = useNavigate()
+  const { showToast } = useToast()
 
-  const [stats, setStats] = useState<InvoiceStats>(emptyInvoiceStats)
-  const [invoices, setInvoices] = useState<InvoiceListItem[]>([])
-  const [totalInvoices, setTotalInvoices] = useState(0)
+  const queryClient = useQueryClient()
+
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [paymentStatus, setPaymentStatus] = useState<'all' | PaymentStatus>('all')
-  const [isLoading, setIsLoading] = useState(true)
-  const [isStatsLoading, setIsStatsLoading] = useState(true)
-  const [loadErrorMessage, setLoadErrorMessage] = useState('')
-  const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceListItem | null>(null)
   const [isDeletingInvoice, setIsDeletingInvoice] = useState(false)
+
+  // Debounce feeds the query key rather than the request, so keystrokes do not
+  // create a cache entry per intermediate string.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const invoicesQuery = useQuery({
+    queryKey: ['invoices', 'list', debouncedSearch, paymentStatus],
+    queryFn: () =>
+      billingApi.getInvoices({
+        search: debouncedSearch || undefined,
+        payment_status: paymentStatus === 'all' ? undefined : paymentStatus,
+        invoice_status: 'saved',
+        page: 1,
+        page_size: 20,
+      }),
+  })
+
+  const statsQuery = useQuery({
+    queryKey: ['invoices', 'stats'],
+    queryFn: billingApi.getInvoiceStats,
+  })
+
+  const invoices: InvoiceListItem[] = invoicesQuery.data?.items ?? []
+  const totalInvoices = invoicesQuery.data?.total ?? 0
+  const isLoading = invoicesQuery.isPending
+  // Stats are supporting detail; a failure shows zeros rather than an error.
+  const stats: InvoiceStats = statsQuery.data ?? emptyInvoiceStats
+  const isStatsLoading = statsQuery.isPending
+
+  // Derived from the query rather than held in state, so it clears itself on a
+  // successful refetch without any manual reset.
+  const loadErrorMessage = invoicesQuery.error
+    ? invoicesQuery.error instanceof Error
+      ? invoicesQuery.error.message
+      : 'Unable to load invoices'
+    : ''
 
   const paymentDistribution = useMemo(() => {
     const total = stats.paid_invoices + stats.pending_invoices + stats.partial_invoices
@@ -94,48 +131,9 @@ export default function BillingPage() {
     ]
   }, [stats])
 
-  const loadInvoices = async () => {
-    try {
-      setIsLoading(true)
-      setLoadErrorMessage('')
-      const data = await billingApi.getInvoices({
-        search: search || undefined,
-        payment_status: paymentStatus === 'all' ? undefined : paymentStatus,
-        invoice_status: 'saved',
-        page: 1,
-        page_size: 20,
-      })
-      setInvoices(data.items)
-      setTotalInvoices(data.total)
-    } catch (error) {
-      setLoadErrorMessage(error instanceof Error ? error.message : 'Unable to load invoices')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadStats = async () => {
-    try {
-      setIsStatsLoading(true)
-      const data = await billingApi.getInvoiceStats()
-      setStats(data)
-    } catch (error) {
-      console.error('Failed to load invoice stats', error)
-      setStats(emptyInvoiceStats)
-    } finally {
-      setIsStatsLoading(false)
-    }
-  }
-
   const refreshBillingPage = async () => {
-    await Promise.all([loadInvoices(), loadStats()])
+    await queryClient.invalidateQueries({ queryKey: ['invoices'] })
   }
-
-  useEffect(() => { loadStats() }, [])
-  useEffect(() => {
-    const timer = setTimeout(() => loadInvoices(), 250)
-    return () => clearTimeout(timer)
-  }, [search, paymentStatus])
 
   const handleDownload = (invoiceId: number) => {
     window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'}/api/v1/invoices/${invoiceId}/download`, '_blank')
@@ -143,12 +141,15 @@ export default function BillingPage() {
   const handlePrint = (invoiceId: number) => navigate(`/billing/${invoiceId}/preview?print=true`)
   const handleShare = async (invoiceId: number) => {
     try {
-      setActionErrorMessage('')
       const data = await billingApi.shareInvoice(invoiceId)
       if (data.whatsapp_url) window.open(data.whatsapp_url, '_blank')
     } catch (error) {
       console.error('Failed to share invoice', error)
-      setActionErrorMessage(error instanceof Error ? error.message : 'Unable to share invoice')
+      showToast({
+        title: 'Unable to share invoice',
+        message: error instanceof Error ? error.message : 'Unable to share invoice',
+        variant: 'error',
+      })
     }
   }
 
@@ -157,8 +158,6 @@ export default function BillingPage() {
 
     if (!targetInvoice) return
 
-    setActionErrorMessage('')
-    setSuccessMessage('')
     setInvoiceToDelete(targetInvoice)
   }
 
@@ -167,17 +166,23 @@ export default function BillingPage() {
 
     try {
       setIsDeletingInvoice(true)
-      setActionErrorMessage('')
-      setSuccessMessage('')
 
       const { message } = await billingApi.deleteInvoice(invoiceToDelete.id)
       const deletedInvoiceNumber = invoiceToDelete.invoice_number
 
       setInvoiceToDelete(null)
-      setSuccessMessage(message || `Invoice #${deletedInvoiceNumber} deleted successfully`)
+      showToast({
+        title: 'Invoice deleted',
+        message: message || `Invoice #${deletedInvoiceNumber} deleted successfully`,
+        variant: 'success',
+      })
       await refreshBillingPage()
     } catch (error) {
-      setActionErrorMessage(error instanceof Error ? error.message : 'Unable to delete invoice')
+      showToast({
+        title: 'Unable to delete invoice',
+        message: error instanceof Error ? error.message : 'Unable to delete invoice',
+        variant: 'error',
+      })
     } finally {
       setIsDeletingInvoice(false)
     }
@@ -272,34 +277,6 @@ export default function BillingPage() {
                 >
                   Try Again
                 </button>
-              </div>
-            </motion.div>
-          )}
-
-          {actionErrorMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-start gap-3 rounded-[20px] border border-red-100 dark:border-red-900 bg-red-50/80 dark:bg-red-950/50 p-4 text-red-700 dark:text-red-400 shadow-[0_16px_36px_rgba(220,38,38,0.08)] sm:rounded-[24px] sm:p-5"
-            >
-              <AlertCircle className="mt-0.5 shrink-0" size={20} />
-              <div>
-                <p className="font-black">Unable to complete invoice action</p>
-                <p className="mt-1 text-sm leading-6">{actionErrorMessage}</p>
-              </div>
-            </motion.div>
-          )}
-
-          {successMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-start gap-3 rounded-[20px] border border-emerald-100 dark:border-emerald-900 bg-emerald-50/80 dark:bg-emerald-950/50 p-4 text-emerald-700 dark:text-emerald-400 shadow-[0_16px_36px_rgba(16,185,129,0.08)] sm:rounded-[24px] sm:p-5"
-            >
-              <CheckCircle2 className="mt-0.5 shrink-0" size={20} />
-              <div>
-                <p className="font-black">Invoice deleted</p>
-                <p className="mt-1 text-sm leading-6">{successMessage}</p>
               </div>
             </motion.div>
           )}

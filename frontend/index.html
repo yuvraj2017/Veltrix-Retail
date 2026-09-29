@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Store Mitraa</title>
+    <title>Purple Retail</title>
+
+    <!--
+      Fonts are linked here rather than @import-ed from index.css. An @import
+      inside the stylesheet serialises the requests (HTML -> CSS -> Google CSS
+      -> font files) and blocks first paint on the whole chain; a <link> in the
+      document head lets the browser start the font fetch immediately.
+
+      Only Poppins is loaded. Inter was previously downloaded at five weights
+      but sits *after* Poppins in the font-family stack, so it never actually
+      rendered. It stays in the CSS stack as a named fallback at no cost.
+
+      Weight 900 is included because font-black is the most used weight in the
+      app; without it the browser was synthesising a faux bold from 800.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap"
+    />
   </head>
   <body>
     <div id="root"></div>

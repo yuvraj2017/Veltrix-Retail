@@ -1,12 +1,18 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
+import { queryClient } from '../lib/queryClient'
+import { clearTabSession, getTabToken, getTabUser, saveTabSession } from '../lib/tab-session'
 
 type AuthUser = {
   id: number
   email: string
   full_name: string
   role: string
-  shop_id: number
+  /** Account lifecycle state. Only "active" reaches protected routes;
+   *  the backend enforces that independently on every request. */
+  status: string
+  /** Null for a super admin, who operates the platform and owns no shop. */
+  shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
 }
@@ -31,7 +37,8 @@ type LoginPayload = {
   email: string
   full_name: string
   role: string
-  shop_id: number
+  status: string
+  shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
 }
@@ -42,6 +49,10 @@ type AuthContextType = {
   token: string | null
   loading: boolean
   isAuthenticated: boolean
+  /** Convenience flag for conditional navigation and the admin route
+   *  guard. Presentational only -- every admin API call is authorised
+   *  server-side regardless of what this says. */
+  isSuperAdmin: boolean
   login: (payload: LoginPayload) => void
   logout: () => void
   refreshMe: () => Promise<void>
@@ -49,17 +60,11 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const TOKEN_KEY = 'access_token'
-const USER_KEY = 'auth_user'
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(localStorage.getItem(TOKEN_KEY))
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const raw = localStorage.getItem(USER_KEY)
-    return raw ? JSON.parse(raw) : null
-  })
+  const [token, setToken] = useState<string | null>(getTabToken)
+  const [user, setUser] = useState<AuthUser | null>(() => getTabUser<AuthUser>())
   const [shop, setShop] = useState<ShopInfo | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(() => !!getTabToken() && !getTabUser<AuthUser>())
 
   const login = (payload: LoginPayload) => {
     const authUser: AuthUser = {
@@ -67,42 +72,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: payload.email,
       full_name: payload.full_name,
       role: payload.role,
+      status: payload.status,
       shop_id: payload.shop_id,
       shop_name: payload.shop_name || null,
       shop_logo_url: payload.shop_logo_url || null,
     }
 
-    localStorage.setItem(TOKEN_KEY, payload.access_token)
-    localStorage.setItem(USER_KEY, JSON.stringify(authUser))
+    saveTabSession(payload.access_token, authUser)
+    queryClient.clear()
 
     setToken(payload.access_token)
     setUser(authUser)
+    setLoading(false)
 
-    setShop((prev) => ({
-      id: payload.shop_id,
-      name: payload.shop_name || prev?.name,
-      logo_url: payload.shop_logo_url || prev?.logo_url || null,
-      email: prev?.email || null,
-      phone: prev?.phone || null,
-      whatsapp_number: prev?.whatsapp_number || null,
-      address: prev?.address || null,
-      city: prev?.city || null,
-      state: prev?.state || null,
-      pincode: prev?.pincode || null,
-    }))
+    // A super admin has no shop; leaving `shop` null is what lets the shell
+    // fall back to the platform brand instead of inventing a shop name.
+    if (payload.shop_id == null) {
+      setShop(null)
+      return
+    }
+
+    setShop({
+      id: payload.shop_id as number,
+      name: payload.shop_name || undefined,
+      logo_url: payload.shop_logo_url || null,
+    })
   }
 
   const logout = () => {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    clearTabSession()
+    queryClient.clear()
     setToken(null)
     setUser(null)
     setShop(null)
     window.location.href = '/'
   }
 
-  const refreshMe = async () => {
-    const savedToken = localStorage.getItem(TOKEN_KEY)
+  const refreshMe = useCallback(async () => {
+    const savedToken = getTabToken()
     if (!savedToken) return
 
     try {
@@ -115,19 +122,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       const me = meRes.data
+      if (getTabToken() !== savedToken) return
 
       const authUser: AuthUser = {
         id: me.user_id ?? me.id,
         email: me.email,
         full_name: me.full_name,
         role: me.role,
+        status: me.status,
         shop_id: me.shop_id,
         shop_name: me.shop_name || null,
         shop_logo_url: me.shop_logo_url || null,
       }
 
-      localStorage.setItem(USER_KEY, JSON.stringify(authUser))
+      saveTabSession(savedToken, authUser)
       setUser(authUser)
+
+      // No shop id means no shop to fetch -- requesting /shops/null would
+      // just 403 and fall into the catch below for no reason.
+      if (me.shop_id == null) {
+        setShop(null)
+        return
+      }
 
       try {
         const shopRes = await api.get(`/api/v1/shops/${me.shop_id}`, {
@@ -137,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
 
         const shopData = shopRes.data
+        if (getTabToken() !== savedToken) return
 
         setShop({
           id: shopData.id,
@@ -151,6 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           pincode: shopData.pincode || null,
         })
       } catch {
+        if (getTabToken() !== savedToken) return
         setShop({
           id: me.shop_id,
           name: me.shop_name || null,
@@ -164,23 +182,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           pincode: null,
         })
       }
-    } catch (error) {
-      console.error('refreshMe failed', error)
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(USER_KEY)
-      setToken(null)
-      setUser(null)
-      setShop(null)
+    } catch {
+      if (!getTabToken()) {
+        setToken(null)
+        setUser(null)
+        setShop(null)
+      }
     } finally {
-      setLoading(false)
+      if (!getTabToken() || getTabToken() === savedToken) setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (token && !user) {
       refreshMe()
     }
-  }, [token])
+  }, [token, refreshMe])
 
   const value = useMemo(
     () => ({
@@ -189,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       token,
       loading,
       isAuthenticated: !!token && !!user,
+      isSuperAdmin: user?.role === 'super_admin',
       login,
       logout,
       refreshMe,

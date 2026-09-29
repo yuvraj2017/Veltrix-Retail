@@ -18,6 +18,7 @@ from app.schemas.vendor import (
     VendorSummaryResponse,
     VendorUpdate,
 )
+from app.services.entitlement_service import ensure_can_create
 
 
 VALID_BILL_STATUSES = {"pending", "partial", "completed", "overdue"}
@@ -112,6 +113,8 @@ def list_vendors(db: Session, current_user: User):
 
 
 def create_vendor(payload: VendorCreate, db: Session, current_user: User):
+    ensure_can_create(current_user.shop_id, "vendors", db)
+
     vendor = Vendor(
         shop_id=current_user.shop_id,
         vendor_name=payload.vendor_name,

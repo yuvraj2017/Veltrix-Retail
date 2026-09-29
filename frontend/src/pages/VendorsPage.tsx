@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { AlertCircle, ArrowUpRight, Building2 } from 'lucide-react'
@@ -7,7 +8,6 @@ import VendorStats from '../components/vendors/VendorStats'
 import VendorTable from '../components/vendors/VendorTable'
 import { vendorsApi } from '../features/vendors/api'
 import type { Vendor, VendorStatsResponse } from '../features/vendors/types'
-import { getCachedResource, setCachedResource } from '../lib/resourceCache'
 
 const emptyVendorStats: VendorStatsResponse = {
   total_vendors: 0,
@@ -24,26 +24,38 @@ const emptyVendorStats: VendorStatsResponse = {
   due_soon_bills: 0,
 }
 
-const VENDORS_CACHE_KEY = 'vendors:list'
-const VENDOR_STATS_CACHE_KEY = 'vendors:stats'
-const VENDORS_CACHE_TTL_MS = 2 * 60 * 1000
+const VENDORS_STALE_MS = 2 * 60 * 1000
 
 export default function VendorsPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
-  const cachedVendors = getCachedResource<Vendor[]>(VENDORS_CACHE_KEY, VENDORS_CACHE_TTL_MS)
-  const cachedStats = getCachedResource<VendorStatsResponse>(
-    VENDOR_STATS_CACHE_KEY,
-    VENDORS_CACHE_TTL_MS,
-  )
+  const vendorsQuery = useQuery({
+    queryKey: ['vendors', 'list'],
+    queryFn: vendorsApi.getVendors,
+    staleTime: VENDORS_STALE_MS,
+  })
 
-  const [vendors, setVendors] = useState<Vendor[]>(cachedVendors || [])
-  const [stats, setStats] = useState<VendorStatsResponse>(cachedStats || emptyVendorStats)
+  const statsQuery = useQuery({
+    queryKey: ['vendors', 'stats'],
+    queryFn: vendorsApi.getVendorStats,
+    staleTime: VENDORS_STALE_MS,
+  })
+
+  const vendors: Vendor[] = vendorsQuery.data ?? []
+  // Stats are decorative here, so a failure falls back to zeros rather than
+  // blocking the page -- matching the previous behaviour.
+  const stats: VendorStatsResponse = statsQuery.data ?? emptyVendorStats
+  const isLoading = vendorsQuery.isPending
+  const isStatsLoading = statsQuery.isPending
+  const errorMessage = vendorsQuery.error
+    ? vendorsQuery.error instanceof Error
+      ? vendorsQuery.error.message
+      : 'Unable to load vendors'
+    : ''
+
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [isLoading, setIsLoading] = useState(!cachedVendors)
-  const [isStatsLoading, setIsStatsLoading] = useState(!cachedStats)
-  const [errorMessage, setErrorMessage] = useState('')
 
   const filteredVendors = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
@@ -78,43 +90,10 @@ export default function VendorsPage() {
     })
   }, [vendors, searchTerm, statusFilter])
 
-  const loadVendors = async (showLoader = false) => {
-    try {
-      if (showLoader || !cachedVendors) {
-        setIsLoading(true)
-      }
-      setErrorMessage('')
-      const data = await vendorsApi.getVendors()
-      setVendors(setCachedResource(VENDORS_CACHE_KEY, data))
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load vendors')
-    } finally {
-      setIsLoading(false)
-    }
+  // Invalidating the 'vendors' key refetches both the list and the stats.
+  const refreshVendorsPage = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['vendors'] })
   }
-
-  const loadVendorStats = async (showLoader = false) => {
-    try {
-      if (showLoader || !cachedStats) {
-        setIsStatsLoading(true)
-      }
-      const data = await vendorsApi.getVendorStats()
-      setStats(setCachedResource(VENDOR_STATS_CACHE_KEY, data))
-    } catch (error) {
-      console.error('Failed to load vendor stats', error)
-      setStats(emptyVendorStats)
-    } finally {
-      setIsStatsLoading(false)
-    }
-  }
-
-  const refreshVendorsPage = async (showLoader = true) => {
-    await Promise.all([loadVendors(showLoader), loadVendorStats(showLoader)])
-  }
-
-  useEffect(() => {
-    void refreshVendorsPage(false)
-  }, [])
 
   return (
     <div className="mx-auto max-w-[1600px]">
@@ -153,7 +132,7 @@ export default function VendorsPage() {
               <p className="mt-1 text-sm leading-6">{errorMessage}</p>
               <button
                 type="button"
-                onClick={() => void refreshVendorsPage(true)}
+                onClick={() => void refreshVendorsPage()}
                 className="mt-3 rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white transition hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
               >
                 Try Again

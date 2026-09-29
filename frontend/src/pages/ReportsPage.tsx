@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -25,7 +26,6 @@ import type {
   CustomerInsightsReport,
   PaymentInsightsReport,
   ReportPeriod,
-  ReportSummary,
   SalesProfitReport,
 } from '../features/reports/types'
 import { loadActiveReportsPeriod, saveActiveReportsPeriod } from '../features/settings/storage'
@@ -66,204 +66,83 @@ function formatPercent(value: number) {
 }
 
 export default function ReportsPage() {
-  const [refreshKey, setRefreshKey] = useState(0)
+  const queryClient = useQueryClient()
 
-  const [summary, setSummary] = useState<ReportSummary | null>(null)
-  const [summaryLoading, setSummaryLoading] = useState(true)
-  const [summaryError, setSummaryError] = useState('')
+  // Refresh invalidates every report query at once. Anything currently on
+  // screen keeps rendering while the refetch runs in the background.
+  const handleRefresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['reports'] })
+  }
 
   const [salesPeriod, setSalesPeriod] = useState<ReportPeriod>(() => loadActiveReportsPeriod() as ReportPeriod)
-  const [salesReport, setSalesReport] = useState<SalesProfitReport | null>(null)
-  const [salesLoading, setSalesLoading] = useState(true)
-  const [salesError, setSalesError] = useState('')
-
   const [cashflowPeriod, setCashflowPeriod] = useState<ReportPeriod>(() => loadActiveReportsPeriod() as ReportPeriod)
-  const [cashflowReport, setCashflowReport] = useState<CashflowReport | null>(null)
-  const [cashflowLoading, setCashflowLoading] = useState(true)
-  const [cashflowError, setCashflowError] = useState('')
-
   const [categoryPeriod, setCategoryPeriod] = useState<ReportPeriod>(() => loadActiveReportsPeriod() as ReportPeriod)
-  const [categoryReport, setCategoryReport] = useState<CategoryPerformanceReport | null>(null)
-  const [categoryLoading, setCategoryLoading] = useState(true)
-  const [categoryError, setCategoryError] = useState('')
-
   const [customerPeriod, setCustomerPeriod] = useState<ReportPeriod>(() => loadActiveReportsPeriod() as ReportPeriod)
-  const [customerReport, setCustomerReport] = useState<CustomerInsightsReport | null>(null)
-  const [customerLoading, setCustomerLoading] = useState(true)
-  const [customerError, setCustomerError] = useState('')
-
   const [paymentPeriod, setPaymentPeriod] = useState<ReportPeriod>(() => loadActiveReportsPeriod() as ReportPeriod)
-  const [paymentReport, setPaymentReport] = useState<PaymentInsightsReport | null>(null)
-  const [paymentLoading, setPaymentLoading] = useState(true)
-  const [paymentError, setPaymentError] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
+  // Each report is its own cache entry keyed by period. Switching to a period
+  // that was already viewed renders instantly from cache instead of refetching,
+  // and returning to this page at all no longer re-runs six requests.
+  const summaryQuery = useQuery({
+    queryKey: ['reports', 'summary'],
+    queryFn: getReportSummary,
+  })
+  const salesQuery = useQuery({
+    queryKey: ['reports', 'sales-profit', salesPeriod],
+    queryFn: () => getSalesProfitReport(salesPeriod),
+  })
+  const cashflowQuery = useQuery({
+    queryKey: ['reports', 'cashflow', cashflowPeriod],
+    queryFn: () => getCashflowReport(cashflowPeriod),
+  })
+  const categoryQuery = useQuery({
+    queryKey: ['reports', 'category-performance', categoryPeriod],
+    queryFn: () => getCategoryPerformanceReport(categoryPeriod),
+  })
+  const customerQuery = useQuery({
+    queryKey: ['reports', 'customer-insights', customerPeriod],
+    queryFn: () => getCustomerInsightsReport(customerPeriod),
+  })
+  const paymentQuery = useQuery({
+    queryKey: ['reports', 'payment-insights', paymentPeriod],
+    queryFn: () => getPaymentInsightsReport(paymentPeriod),
+  })
 
-    const loadSummary = async () => {
-      try {
-        setSummaryLoading(true)
-        setSummaryError('')
-        const data = await getReportSummary()
-        if (!cancelled) {
-          setSummary(data)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSummaryError(getApiErrorMessage(error, 'Unable to load report summary'))
-        }
-      } finally {
-        if (!cancelled) {
-          setSummaryLoading(false)
-        }
-      }
-    }
+  const summary = summaryQuery.data ?? null
+  const summaryLoading = summaryQuery.isPending
+  const summaryError = summaryQuery.error
+    ? getApiErrorMessage(summaryQuery.error, 'Unable to load report summary')
+    : ''
 
-    loadSummary()
-    return () => {
-      cancelled = true
-    }
-  }, [refreshKey])
+  const salesReport = salesQuery.data ?? null
+  const salesLoading = salesQuery.isPending
+  const salesError = salesQuery.error
+    ? getApiErrorMessage(salesQuery.error, 'Unable to load sales performance report')
+    : ''
 
-  useEffect(() => {
-    let cancelled = false
+  const cashflowReport = cashflowQuery.data ?? null
+  const cashflowLoading = cashflowQuery.isPending
+  const cashflowError = cashflowQuery.error
+    ? getApiErrorMessage(cashflowQuery.error, 'Unable to load cashflow report')
+    : ''
 
-    const loadSales = async () => {
-      try {
-        setSalesLoading(true)
-        setSalesError('')
-        const data = await getSalesProfitReport(salesPeriod)
-        if (!cancelled) {
-          setSalesReport(data)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSalesError(getApiErrorMessage(error, 'Unable to load sales performance report'))
-        }
-      } finally {
-        if (!cancelled) {
-          setSalesLoading(false)
-        }
-      }
-    }
+  const categoryReport = categoryQuery.data ?? null
+  const categoryLoading = categoryQuery.isPending
+  const categoryError = categoryQuery.error
+    ? getApiErrorMessage(categoryQuery.error, 'Unable to load category performance report')
+    : ''
 
-    loadSales()
-    return () => {
-      cancelled = true
-    }
-  }, [salesPeriod, refreshKey])
+  const customerReport = customerQuery.data ?? null
+  const customerLoading = customerQuery.isPending
+  const customerError = customerQuery.error
+    ? getApiErrorMessage(customerQuery.error, 'Unable to load customer movement report')
+    : ''
 
-  useEffect(() => {
-    let cancelled = false
-
-    const loadCashflow = async () => {
-      try {
-        setCashflowLoading(true)
-        setCashflowError('')
-        const data = await getCashflowReport(cashflowPeriod)
-        if (!cancelled) {
-          setCashflowReport(data)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setCashflowError(getApiErrorMessage(error, 'Unable to load cashflow report'))
-        }
-      } finally {
-        if (!cancelled) {
-          setCashflowLoading(false)
-        }
-      }
-    }
-
-    loadCashflow()
-    return () => {
-      cancelled = true
-    }
-  }, [cashflowPeriod, refreshKey])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadCategory = async () => {
-      try {
-        setCategoryLoading(true)
-        setCategoryError('')
-        const data = await getCategoryPerformanceReport(categoryPeriod)
-        if (!cancelled) {
-          setCategoryReport(data)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setCategoryError(getApiErrorMessage(error, 'Unable to load category performance report'))
-        }
-      } finally {
-        if (!cancelled) {
-          setCategoryLoading(false)
-        }
-      }
-    }
-
-    loadCategory()
-    return () => {
-      cancelled = true
-    }
-  }, [categoryPeriod, refreshKey])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadCustomer = async () => {
-      try {
-        setCustomerLoading(true)
-        setCustomerError('')
-        const data = await getCustomerInsightsReport(customerPeriod)
-        if (!cancelled) {
-          setCustomerReport(data)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setCustomerError(getApiErrorMessage(error, 'Unable to load customer movement report'))
-        }
-      } finally {
-        if (!cancelled) {
-          setCustomerLoading(false)
-        }
-      }
-    }
-
-    loadCustomer()
-    return () => {
-      cancelled = true
-    }
-  }, [customerPeriod, refreshKey])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadPayment = async () => {
-      try {
-        setPaymentLoading(true)
-        setPaymentError('')
-        const data = await getPaymentInsightsReport(paymentPeriod)
-        if (!cancelled) {
-          setPaymentReport(data)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setPaymentError(getApiErrorMessage(error, 'Unable to load payment health report'))
-        }
-      } finally {
-        if (!cancelled) {
-          setPaymentLoading(false)
-        }
-      }
-    }
-
-    loadPayment()
-    return () => {
-      cancelled = true
-    }
-  }, [paymentPeriod, refreshKey])
+  const paymentReport = paymentQuery.data ?? null
+  const paymentLoading = paymentQuery.isPending
+  const paymentError = paymentQuery.error
+    ? getApiErrorMessage(paymentQuery.error, 'Unable to load payment health report')
+    : ''
 
   const applyPeriod = (setter: React.Dispatch<React.SetStateAction<ReportPeriod>>) =>
     (period: ReportPeriod) => {
@@ -315,7 +194,7 @@ export default function ReportsPage() {
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setRefreshKey((current) => current + 1)}
+                  onClick={handleRefresh}
                   className="inline-flex h-12 items-center gap-2 rounded-[1.2rem] border border-indigo-200 bg-white/88 px-4 text-sm font-bold text-slate-700 shadow-[0_12px_24px_rgba(99,102,241,0.10)] transition hover:-translate-y-[1px] hover:border-indigo-300 hover:text-indigo-700 dark:border-white/15 dark:bg-white/10 dark:text-white"
                 >
                   <RefreshCcw size={16} />

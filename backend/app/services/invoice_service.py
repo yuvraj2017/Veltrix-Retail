@@ -1,19 +1,25 @@
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
+from collections import defaultdict
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, extract, func, or_
+from sqlalchemy import func, or_
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.customer import Customer
 from app.models.invoice import Invoice
 from app.models.invoice_item import InvoiceItem
+from app.models.invoice_sequence import InvoiceSequence
 from app.models.product import Product
 from app.models.product_sales_analytics import ProductSalesAnalytics
 from app.models.user import User
 from app.schemas.invoice import InvoiceCreate, InvoiceUpdate
-from app.services.billing_service import get_product_for_invoice
+from app.models.business_audit_log import BusinessAuditAction
+from app.services.business_audit_service import record_business_audit
 from app.services.customer_service import create_or_update_customer_from_invoice
+from app.services.entitlement_service import ensure_can_create
 
 
 def _to_decimal(value) -> Decimal:
@@ -28,6 +34,24 @@ def _to_decimal(value) -> Decimal:
 
 def _money(value) -> Decimal:
     return _to_decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _invoice_audit_snapshot(invoice: Invoice, *, item_count: int | None = None) -> dict:
+    if item_count is None:
+        item_count = len(getattr(invoice, "items", []) or [])
+
+    return {
+        "invoice_number": invoice.invoice_number,
+        "customer_id": invoice.customer_id,
+        "invoice_status": invoice.invoice_status,
+        "payment_status": invoice.payment_status,
+        "payment_mode": invoice.payment_mode,
+        "invoice_date": invoice.invoice_date,
+        "final_amount": _money(invoice.final_amount),
+        "paid_amount": _money(invoice.paid_amount),
+        "remaining_amount": _money(invoice.remaining_amount),
+        "item_count": item_count,
+    }
 
 
 def _get_product_code(product: Product) -> str:
@@ -65,12 +89,112 @@ def _get_product_stock(product: Product) -> Decimal:
 
 
 def _set_product_stock(product: Product, new_stock: Decimal):
+    if new_stock < Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Insufficient stock for {product.name}. Available: {_get_product_stock(product)}",
+        )
+
     current_type_value = getattr(product, "stock_quantity", None)
 
     if isinstance(current_type_value, int):
         product.stock_quantity = int(new_stock)
     else:
         product.stock_quantity = new_stock
+
+
+def _validate_stock_quantity(product: Product, requested_quantity: Decimal):
+    if requested_quantity <= Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Quantity must be greater than zero for {product.name}",
+        )
+
+    if requested_quantity != requested_quantity.to_integral_value():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Fractional stock quantity is not supported for {product.name}. "
+                "Enter a whole-number quantity."
+            ),
+        )
+
+
+def _lock_products_for_invoice(
+    db: Session,
+    shop_id: int,
+    product_ids: list[int],
+    *,
+    require_all: bool = True,
+) -> dict[int, Product]:
+    unique_product_ids = sorted({product_id for product_id in product_ids if product_id})
+    if not unique_product_ids:
+        return {}
+
+    products = (
+        db.query(Product)
+        .filter(
+            Product.shop_id == shop_id,
+            Product.id.in_(unique_product_ids),
+        )
+        .order_by(Product.id.asc())
+        .with_for_update()
+        .all()
+    )
+    products_by_id = {product.id: product for product in products}
+
+    if require_all:
+        missing_ids = [product_id for product_id in unique_product_ids if product_id not in products_by_id]
+        if missing_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found",
+            )
+
+    return products_by_id
+
+
+def _aggregate_requested_quantities(items, products_by_id: dict[int, Product]) -> dict[int, Decimal]:
+    requested_by_product: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+
+    for item_payload in items:
+        product = products_by_id.get(item_payload.product_id)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found",
+            )
+
+        requested_quantity = _to_decimal(item_payload.quantity)
+        _validate_stock_quantity(product, requested_quantity)
+        requested_by_product[product.id] += requested_quantity
+
+    return dict(requested_by_product)
+
+
+def _validate_available_stock(
+    *,
+    products_by_id: dict[int, Product],
+    requested_by_product: dict[int, Decimal],
+    restored_by_product: dict[int, Decimal] | None = None,
+):
+    restored_by_product = restored_by_product or {}
+
+    for product_id, requested_quantity in requested_by_product.items():
+        product = products_by_id[product_id]
+        available_stock = _get_product_stock(product) + restored_by_product.get(
+            product_id,
+            Decimal("0.00"),
+        )
+
+        if requested_quantity > available_stock:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Insufficient stock for {product.name}. "
+                    f"Available: {available_stock}, requested: {requested_quantity}"
+                ),
+            )
 
 
 def _calculate_payment_status(final_amount: Decimal, paid_amount: Decimal) -> tuple[Decimal, str]:
@@ -271,27 +395,88 @@ def _resolve_invoice_item_pricing(
     }
 
 
-def _generate_invoice_number(db: Session, shop_id: int, invoice_date: date) -> str:
+def _format_invoice_number(invoice_date: date, sequence_number: int) -> str:
     """
     Format: INV-20260512-001
     Sequence is per shop and per date.
     """
 
     date_part = invoice_date.strftime("%Y%m%d")
-    prefix = f"INV-{date_part}-"
+    return f"INV-{date_part}-{sequence_number:03d}"
 
-    count_for_day = (
-        db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.shop_id == shop_id,
-            Invoice.invoice_number.ilike(f"{prefix}%"),
+
+def _allocate_invoice_sequence(db: Session, shop_id: int, invoice_date: date) -> int:
+    bind = db.get_bind()
+
+    if bind.dialect.name == "postgresql":
+        statement = (
+            postgresql_insert(InvoiceSequence)
+            .values(
+                shop_id=shop_id,
+                sequence_date=invoice_date,
+                last_number=1,
+            )
+            .on_conflict_do_update(
+                index_elements=[
+                    InvoiceSequence.shop_id,
+                    InvoiceSequence.sequence_date,
+                ],
+                set_={
+                    "last_number": InvoiceSequence.last_number + 1,
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(InvoiceSequence.last_number)
         )
-        .scalar()
+        return int(db.execute(statement).scalar_one())
+
+    sequence = (
+        db.query(InvoiceSequence)
+        .filter(
+            InvoiceSequence.shop_id == shop_id,
+            InvoiceSequence.sequence_date == invoice_date,
+        )
+        .with_for_update()
+        .one_or_none()
     )
 
-    next_number = int(count_for_day or 0) + 1
+    if sequence:
+        sequence.last_number = int(sequence.last_number or 0) + 1
+        db.flush()
+        return int(sequence.last_number)
 
-    return f"{prefix}{next_number:03d}"
+    try:
+        with db.begin_nested():
+            sequence = InvoiceSequence(
+                shop_id=shop_id,
+                sequence_date=invoice_date,
+                last_number=1,
+            )
+            db.add(sequence)
+            db.flush()
+            return int(sequence.last_number)
+    except IntegrityError:
+        sequence = (
+            db.query(InvoiceSequence)
+            .filter(
+                InvoiceSequence.shop_id == shop_id,
+                InvoiceSequence.sequence_date == invoice_date,
+            )
+            .with_for_update()
+            .one()
+        )
+        sequence.last_number = int(sequence.last_number or 0) + 1
+        db.flush()
+        return int(sequence.last_number)
+
+
+def _generate_invoice_number(db: Session, shop_id: int, invoice_date: date) -> str:
+    sequence_number = _allocate_invoice_sequence(db, shop_id, invoice_date)
+    return _format_invoice_number(invoice_date, sequence_number)
+
+
+def _is_invoice_number_integrity_error(exc: IntegrityError) -> bool:
+    return "uq_invoices_shop_invoice_number" in str(exc.orig)
 
 
 def _ensure_invoice_belongs_to_shop(invoice: Invoice | None, shop_id: int):
@@ -394,122 +579,97 @@ def get_invoice_preview(invoice_id: int, db: Session, current_user: User):
 def get_invoice_stats(db: Session, current_user: User):
     today = date.today()
 
-    total_invoices = (
-        db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.shop_id == current_user.shop_id,
-            Invoice.invoice_status != "cancelled",
-        )
-        .scalar()
-        or 0
-    )
+    # Month bounds as a half-open date range. The previous implementation used
+    # extract('year'/'month', invoice_date), which wraps the column in a
+    # function call and makes the predicate non-sargable -- Postgres cannot use
+    # any index on invoice_date and must scan every row. A plain range
+    # comparison keeps the (shop_id, invoice_date) index usable.
+    month_start = today.replace(day=1)
+    if month_start.month == 12:
+        next_month_start = date(month_start.year + 1, 1, 1)
+    else:
+        next_month_start = date(month_start.year, month_start.month + 1, 1)
 
-    totals = (
+    # Every figure below shares the same base predicate (this shop, excluding
+    # cancelled invoices), so FILTER clauses collapse what were seven separate
+    # round trips into a single pass.
+    row = (
         db.query(
-            func.coalesce(func.sum(Invoice.final_amount), 0),
-            func.coalesce(func.sum(Invoice.total_discount_amount), 0),
-            func.coalesce(func.sum(Invoice.total_profit), 0),
-            func.coalesce(func.sum(Invoice.paid_amount), 0),
-            func.coalesce(func.sum(Invoice.remaining_amount), 0),
+            func.count(Invoice.id).label("total_invoices"),
+            func.coalesce(func.sum(Invoice.final_amount), 0).label("total_sales_amount"),
+            func.coalesce(func.sum(Invoice.total_discount_amount), 0).label("total_discount_given"),
+            func.coalesce(func.sum(Invoice.total_profit), 0).label("total_profit"),
+            func.coalesce(func.sum(Invoice.paid_amount), 0).label("paid_amount"),
+            func.coalesce(func.sum(Invoice.remaining_amount), 0).label("pending_amount"),
+            func.coalesce(
+                func.sum(Invoice.final_amount).filter(Invoice.invoice_date == today), 0
+            ).label("today_sales"),
+            func.coalesce(
+                func.sum(Invoice.final_amount).filter(
+                    Invoice.invoice_date >= month_start,
+                    Invoice.invoice_date < next_month_start,
+                ),
+                0,
+            ).label("monthly_sales"),
+            func.coalesce(
+                func.count(Invoice.id).filter(Invoice.payment_status == "paid"), 0
+            ).label("paid_invoices"),
+            func.coalesce(
+                func.count(Invoice.id).filter(Invoice.payment_status == "pending"), 0
+            ).label("pending_invoices"),
+            func.coalesce(
+                func.count(Invoice.id).filter(Invoice.payment_status == "partial"), 0
+            ).label("partial_invoices"),
         )
         .filter(
             Invoice.shop_id == current_user.shop_id,
             Invoice.invoice_status != "cancelled",
         )
-        .first()
-    )
-
-    total_sales_amount = _money(totals[0])
-    total_discount_given = _money(totals[1])
-    total_profit = _money(totals[2])
-    paid_amount = _money(totals[3])
-    pending_amount = _money(totals[4])
-
-    today_sales = (
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-        .filter(
-            Invoice.shop_id == current_user.shop_id,
-            Invoice.invoice_status != "cancelled",
-            Invoice.invoice_date == today,
-        )
-        .scalar()
-        or 0
-    )
-
-    monthly_sales = (
-        db.query(func.coalesce(func.sum(Invoice.final_amount), 0))
-        .filter(
-            Invoice.shop_id == current_user.shop_id,
-            Invoice.invoice_status != "cancelled",
-            extract("year", Invoice.invoice_date) == today.year,
-            extract("month", Invoice.invoice_date) == today.month,
-        )
-        .scalar()
-        or 0
-    )
-
-    paid_invoices = (
-        db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.shop_id == current_user.shop_id,
-            Invoice.invoice_status != "cancelled",
-            Invoice.payment_status == "paid",
-        )
-        .scalar()
-        or 0
-    )
-
-    pending_invoices = (
-        db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.shop_id == current_user.shop_id,
-            Invoice.invoice_status != "cancelled",
-            Invoice.payment_status == "pending",
-        )
-        .scalar()
-        or 0
-    )
-
-    partial_invoices = (
-        db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.shop_id == current_user.shop_id,
-            Invoice.invoice_status != "cancelled",
-            Invoice.payment_status == "partial",
-        )
-        .scalar()
-        or 0
+        .one()
     )
 
     return {
-        "total_invoices": total_invoices,
-        "total_sales_amount": total_sales_amount,
-        "total_discount_given": total_discount_given,
-        "total_profit": total_profit,
-        "today_sales": _money(today_sales),
-        "monthly_sales": _money(monthly_sales),
-        "pending_amount": pending_amount,
-        "paid_amount": paid_amount,
-        "paid_invoices": paid_invoices,
-        "pending_invoices": pending_invoices,
-        "partial_invoices": partial_invoices,
+        "total_invoices": row.total_invoices or 0,
+        "total_sales_amount": _money(row.total_sales_amount),
+        "total_discount_given": _money(row.total_discount_given),
+        "total_profit": _money(row.total_profit),
+        "today_sales": _money(row.today_sales),
+        "monthly_sales": _money(row.monthly_sales),
+        "pending_amount": _money(row.pending_amount),
+        "paid_amount": _money(row.paid_amount),
+        "paid_invoices": row.paid_invoices or 0,
+        "pending_invoices": row.pending_invoices or 0,
+        "partial_invoices": row.partial_invoices or 0,
     }
 
 
 def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
-    invoice_date_value = payload.invoice_date or date.today()
+    ensure_can_create(current_user.shop_id, "orders.monthly", db)
 
-    customer = create_or_update_customer_from_invoice(
-        payload.customer,
-        db,
-        current_user,
-    )
+    invoice_date_value = payload.invoice_date or date.today()
 
     if not payload.items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invoice must contain at least one item",
         )
+
+    invoice_number = _generate_invoice_number(
+        db=db,
+        shop_id=current_user.shop_id,
+        invoice_date=invoice_date_value,
+    )
+
+    products_by_id = _lock_products_for_invoice(
+        db,
+        current_user.shop_id,
+        [item.product_id for item in payload.items],
+    )
+    requested_by_product = _aggregate_requested_quantities(payload.items, products_by_id)
+    _validate_available_stock(
+        products_by_id=products_by_id,
+        requested_by_product=requested_by_product,
+    )
 
     prepared_items = []
 
@@ -519,25 +679,8 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
     base_total_profit = Decimal("0.00")
 
     for item_payload in payload.items:
-        product = get_product_for_invoice(item_payload.product_id, db, current_user)
-
+        product = products_by_id[item_payload.product_id]
         requested_quantity = _to_decimal(item_payload.quantity)
-        available_stock = _get_product_stock(product)
-
-        if requested_quantity <= Decimal("0.00"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Quantity must be greater than zero for {product.name}",
-            )
-
-        if requested_quantity > available_stock:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Insufficient stock for {product.name}. "
-                    f"Available: {available_stock}, requested: {requested_quantity}"
-                ),
-            )
 
         mrp = _get_product_mrp(product)
         buy_price = _get_product_buying_price(product)
@@ -592,10 +735,10 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
     if payload.payment_status:
         payment_status = payload.payment_status
 
-    invoice_number = _generate_invoice_number(
-        db=db,
-        shop_id=current_user.shop_id,
-        invoice_date=invoice_date_value,
+    customer = create_or_update_customer_from_invoice(
+        payload.customer,
+        db,
+        current_user,
     )
 
     invoice = Invoice(
@@ -629,7 +772,16 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
     )
 
     db.add(invoice)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if _is_invoice_number_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Invoice number conflict. Please retry creating the invoice.",
+            ) from exc
+        raise
 
     for prepared in prepared_items:
         product = prepared["product"]
@@ -683,12 +835,25 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
 
         db.add(analytics)
 
-        new_stock = _get_product_stock(product) - prepared["quantity"]
+    for product_id, requested_quantity in requested_by_product.items():
+        product = products_by_id[product_id]
+        new_stock = _get_product_stock(product) - requested_quantity
         _set_product_stock(product, new_stock)
 
     customer.total_orders = int(customer.total_orders or 0) + 1
     customer.total_spent = _money(
         _to_decimal(customer.total_spent) + invoice_amounts["final_amount"]
+    )
+
+    record_business_audit(
+        db,
+        shop_id=current_user.shop_id,
+        actor=current_user,
+        action=BusinessAuditAction.INVOICE_CREATED,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        summary=f"Invoice {invoice.invoice_number} created",
+        after_data=_invoice_audit_snapshot(invoice, item_count=len(prepared_items)),
     )
 
     try:
@@ -756,12 +921,14 @@ def update_invoice(
             Invoice.id == invoice_id,
             Invoice.shop_id == current_user.shop_id,
         )
+        .with_for_update()
         .first()
     )
 
     _ensure_invoice_belongs_to_shop(invoice, current_user.shop_id)
 
     data = payload.model_dump(exclude_unset=True)
+    before_audit = _invoice_audit_snapshot(invoice)
 
     is_full_edit = bool(
         data.get("customer") is not None
@@ -789,36 +956,28 @@ def update_invoice(
                 detail="Invoice must contain at least one item",
             )
 
-        # 1. Restore previous stock first
         old_items = list(invoice.items)
+        old_quantities_by_product: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
         for old_item in old_items:
             if old_item.product_id:
-                product = (
-                    db.query(Product)
-                    .filter(
-                        Product.id == old_item.product_id,
-                        Product.shop_id == current_user.shop_id,
-                    )
-                    .first()
-                )
-                if product:
-                    restored_stock = _get_product_stock(product) + _to_decimal(old_item.quantity)
-                    _set_product_stock(product, restored_stock)
+                old_quantities_by_product[old_item.product_id] += _to_decimal(old_item.quantity)
 
-        # 2. Remove old analytics and old items
-        db.query(ProductSalesAnalytics).filter(
-            ProductSalesAnalytics.invoice_id == invoice.id
-        ).delete(synchronize_session=False)
-
-        db.query(InvoiceItem).filter(
-            InvoiceItem.invoice_id == invoice.id
-        ).delete(synchronize_session=False)
-
-        # 3. Rebuild customer
-        customer = create_or_update_customer_from_invoice(
-            payload.customer,
+        product_ids_to_lock = list(old_quantities_by_product.keys()) + [
+            item.product_id for item in payload.items
+        ]
+        products_by_id = _lock_products_for_invoice(
             db,
-            current_user,
+            current_user.shop_id,
+            product_ids_to_lock,
+        )
+        new_quantities_by_product = _aggregate_requested_quantities(
+            payload.items,
+            products_by_id,
+        )
+        _validate_available_stock(
+            products_by_id=products_by_id,
+            requested_by_product=new_quantities_by_product,
+            restored_by_product=dict(old_quantities_by_product),
         )
 
         invoice_date_value = payload.invoice_date or invoice.invoice_date or date.today()
@@ -830,25 +989,8 @@ def update_invoice(
         base_total_profit = Decimal("0.00")
 
         for item_payload in payload.items:
-            product = get_product_for_invoice(item_payload.product_id, db, current_user)
-
+            product = products_by_id[item_payload.product_id]
             requested_quantity = _to_decimal(item_payload.quantity)
-            available_stock = _get_product_stock(product)
-
-            if requested_quantity <= Decimal("0.00"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Quantity must be greater than zero for {product.name}",
-                )
-
-            if requested_quantity > available_stock:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Insufficient stock for {product.name}. "
-                        f"Available: {available_stock}, requested: {requested_quantity}"
-                    ),
-                )
 
             mrp = _get_product_mrp(product)
             buy_price = _get_product_buying_price(product)
@@ -905,6 +1047,21 @@ def update_invoice(
 
         final_payment_status = payload.payment_status or calculated_payment_status
 
+        # Remove old child rows only after all stock validation has succeeded.
+        db.query(ProductSalesAnalytics).filter(
+            ProductSalesAnalytics.invoice_id == invoice.id
+        ).delete(synchronize_session=False)
+
+        db.query(InvoiceItem).filter(
+            InvoiceItem.invoice_id == invoice.id
+        ).delete(synchronize_session=False)
+
+        customer = create_or_update_customer_from_invoice(
+            payload.customer,
+            db,
+            current_user,
+        )
+
         # 4. Update invoice main fields
         invoice.customer_id = customer.id
         invoice.customer_name_snapshot = customer.full_name
@@ -935,7 +1092,7 @@ def update_invoice(
         invoice.invoice_status = payload.invoice_status or invoice.invoice_status
         invoice.notes = payload.notes
 
-        # 5. Insert rebuilt invoice items + reduce stock again + analytics
+        # 5. Insert rebuilt invoice items + analytics. Stock is adjusted once below by net change.
         for prepared in prepared_items:
             item = InvoiceItem(
                 shop_id=current_user.shop_id,
@@ -958,9 +1115,6 @@ def update_invoice(
                 total_profit=prepared["total_profit"],
             )
             db.add(item)
-
-            new_stock = _get_product_stock(prepared["product"]) - prepared["quantity"]
-            _set_product_stock(prepared["product"], new_stock)
 
             analytics = ProductSalesAnalytics(
                 shop_id=current_user.shop_id,
@@ -987,6 +1141,19 @@ def update_invoice(
             )
             db.add(analytics)
 
+        all_stock_product_ids = sorted(
+            set(old_quantities_by_product) | set(new_quantities_by_product)
+        )
+        for product_id in all_stock_product_ids:
+            product = products_by_id.get(product_id)
+            if not product:
+                continue
+            old_quantity = old_quantities_by_product.get(product_id, Decimal("0.00"))
+            new_quantity = new_quantities_by_product.get(product_id, Decimal("0.00"))
+            net_stock_change = new_quantity - old_quantity
+            adjusted_stock = _get_product_stock(product) - net_stock_change
+            _set_product_stock(product, adjusted_stock)
+
         _adjust_customer_totals_after_invoice_edit(
             db=db,
             shop_id=current_user.shop_id,
@@ -995,6 +1162,20 @@ def update_invoice(
             old_final_amount=old_final_amount,
             new_final_amount=invoice_amounts["final_amount"],
         )
+
+        after_audit = _invoice_audit_snapshot(invoice, item_count=len(prepared_items))
+        if before_audit != after_audit:
+            record_business_audit(
+                db,
+                shop_id=current_user.shop_id,
+                actor=current_user,
+                action=BusinessAuditAction.INVOICE_UPDATED,
+                entity_type="invoice",
+                entity_id=invoice.id,
+                summary=f"Invoice {invoice.invoice_number} updated",
+                before_data=before_audit,
+                after_data=after_audit,
+            )
 
         db.commit()
         db.refresh(invoice)
@@ -1080,6 +1261,20 @@ def update_invoice(
         analytics.payment_status = invoice.payment_status
         analytics.invoice_date = invoice.invoice_date
 
+    after_audit = _invoice_audit_snapshot(invoice)
+    if before_audit != after_audit:
+        record_business_audit(
+            db,
+            shop_id=current_user.shop_id,
+            actor=current_user,
+            action=BusinessAuditAction.INVOICE_UPDATED,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            summary=f"Invoice {invoice.invoice_number} updated",
+            before_data=before_audit,
+            after_data=after_audit,
+        )
+
     db.commit()
     db.refresh(invoice)
 
@@ -1095,10 +1290,25 @@ def delete_invoice(invoice_id: int, db: Session, current_user: User):
 
     invoice = get_invoice(invoice_id, db, current_user)
 
+    before_audit = _invoice_audit_snapshot(invoice)
     invoice.invoice_status = "cancelled"
 
     for analytics in invoice.sales_analytics:
         analytics.payment_status = invoice.payment_status
+
+    after_audit = _invoice_audit_snapshot(invoice)
+    if before_audit != after_audit:
+        record_business_audit(
+            db,
+            shop_id=current_user.shop_id,
+            actor=current_user,
+            action=BusinessAuditAction.INVOICE_CANCELLED,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            summary=f"Invoice {invoice.invoice_number} cancelled",
+            before_data=before_audit,
+            after_data=after_audit,
+        )
 
     db.commit()
 

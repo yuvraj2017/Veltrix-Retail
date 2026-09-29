@@ -4,8 +4,10 @@ import {
   CreditCard,
   ShieldCheck,
   Sparkles,
-  Store,
 } from 'lucide-react'
+
+import { BRAND } from './authContent'
+import { BrandLogo } from './BrandLogo'
 
 
 const features = [
@@ -61,16 +63,26 @@ export function RegisterHero() {
       <div className="relative z-10 flex w-full flex-col justify-between px-5 py-8 sm:px-8 xl:px-12 xl:py-10 gap-8 sm:gap-10">
 
 
-        {/* Logo */}
+        {/* Brand — the real mark and the shared name/tagline, matching the
+            login hero. This used to be a generic lucide store icon with the
+            name typed in by hand, which meant swapping BRAND.logoSrc left this
+            panel showing something else entirely.
+
+            LOGO PLACEHOLDER: the file path is BRAND.logoSrc in
+            ./authContent.ts — change it THERE, not here. tone="plate" keeps
+            the tile white so a dark mark holds up on the purple panel. */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-white/14 text-white shadow-[0_8px_20px_rgba(0,0,0,0.12)] ring-1 ring-white/15 backdrop-blur-md shrink-0">
-            <Store size={20} />
-          </div>
+          <BrandLogo
+            tone="plate"
+            fill
+            className="h-11 w-11 shrink-0 rounded-xl p-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.12)] sm:h-12 sm:w-12"
+          />
+
           <div>
-            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
-              StoreMitraa Retail
+            <h2 className="text-base font-semibold tracking-tight text-white sm:text-lg">
+              {BRAND.name}
             </h2>
-            <p className="text-[11px] sm:text-xs text-white/70">Next-gen retail management</p>
+            <p className="text-[11px] text-white/70 sm:text-xs">{BRAND.tagline}</p>
           </div>
         </div>
 

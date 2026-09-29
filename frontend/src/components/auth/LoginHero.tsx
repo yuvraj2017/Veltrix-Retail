@@ -1,521 +1,391 @@
 /**
- * LoginHero — Performance-optimised for 95+ Lighthouse score
+ * LoginHero — the brand panel shared by /login, /forgot-password, /reset-password.
  *
- * ROOT CAUSES addressed (from your Lighthouse report):
+ * Responsive strategy
+ * -------------------
+ * This panel only exists at `lg` and up. Below that it is `display:none` and
+ * the form column renders its own compact brand band instead — on a phone the
+ * sign-in fields must be the first thing on screen, not a 100vh marketing
+ * scroll.
  *
- * ISSUE 1 › "Requests are blocking initial render" (FCP / LCP blocker)
- *   ✅ No external font imports — system-font stack only.
- *      If you need a web font, add the <link rel="preconnect"> + <link rel="preload">
- *      snippet in the <head> BEFORE any render-blocking stylesheet (see NOTE A).
+ * Width is not the only axis that matters here. A 1366x768 laptop is *wide
+ * enough* for the split but only 768px tall, and this panel is full-height
+ * with a lot stacked in it. So the optional blocks are opt-in by height —
+ * each is `hidden` by default with an arbitrary min-height variant that
+ * switches it back on — and they appear in priority order as the viewport
+ * gets taller:
  *
- * ISSUE 2 › "LCP time not spent on loading resources"
- *   ✅ LCP candidate (<h1>) is the FIRST meaningful DOM node — no wrappers before it.
- *   ✅ Hero section background is a single hex colour (zero gradient compositing).
- *   ✅ BgLayers deferred to a `useLayoutEffect` portal → never in the critical path.
- *   ✅ keyframes injected in useEffect (non-blocking).
- *   ✅ No backdrop-filter anywhere in the tree.
- *   ✅ `fetchpriority="high"` hint on the <section> via data-lcp attribute (see NOTE B).
+ * (Do not write an example class name in this comment: Tailwind v4 scans
+ * source files as plain text and would emit a dead rule for it.)
  *
- * ISSUE 3 › "Avoid chaining critical requests"
- *   ✅ Zero third-party script dependencies.
- *   ✅ All icons are inline SVG — no icon-font or sprite-sheet network request.
- *   ✅ BgLayers rendered via a `useLayoutEffect` deferred append so they never
- *      extend the critical chain.
- *   ✅ `will-change:opacity` only on the pulsing dot (single composited layer).
- *   ✅ `content-visibility:auto` on below-fold sections cuts render cost by ~40%.
+ *   >= 760px   trust footer
+ *   >= 840px   capability pills
+ *   >= 900px   floating activity chip
  *
- * NOTE A — if you add a web font, paste this in <head> (no render-block):
- *   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
- *   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=YourFont&display=swap">
- *   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=YourFont&display=swap"
- *         media="print" onload="this.media='all'">
- *   <noscript><link rel="stylesheet" href="...same url..."></noscript>
+ * The brand, headline, subcopy and proof card are unconditional — they are
+ * the panel's job. Below 760px only those four render, which measures well
+ * inside a 768px viewport. Shorter than that the panel keeps `min-h-screen`
+ * and the page scrolls rather than clipping; the form column is centred in
+ * its own `min-h-screen` track, so the sign-in fields stay reachable either
+ * way.
  *
- * NOTE B — add to your document <head> for maximum LCP win:
- *   <link rel="preload" as="fetch" href="/api/hero-data" crossorigin>  (if any data fetch)
- *   <meta name="viewport" content="width=device-width,initial-scale=1">
+ * Performance
+ * -----------
+ * /login is the app's LCP route: one small SVG brand mark and no other
+ * images, no icon font, no `blur()` or `backdrop-filter` (each forces its own
+ * composited layer), no imperative DOM injection. Depth comes from layered CSS gradients — one paint. Every
+ * animation touches only `opacity`/`transform` and is disabled under
+ * prefers-reduced-motion (see index.css).
+ *
+ * Typography inherits Poppins from `body`.
  */
 
-import { memo, type FC, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo } from 'react'
+import { BarChart3, CheckCircle2, ShieldCheck, TrendingUp } from 'lucide-react'
 
-// ─── System font stack (zero network requests, zero render-blocking) ──────────
-// This alone eliminates the most common "render-blocking resource" hit.
-// If brand requires a custom font, load it via <link rel="preload"> in <head>.
-const FONT_STACK = [
-  '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"',
-  'system-ui', 'sans-serif',
-].join(',')
+import { BrandLogo } from './BrandLogo'
+import { BRAND, FEATURES, KPIS, TRUST, WEEK, WEEK_SUMMARY } from './authContent'
 
-// ─── Inline SVG icons (no sprite sheet, no icon font — zero extra requests) ──
-const IconSparkles: FC = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <path d="M12 3l1.912 5.813L20 9l-4.5 3.912L17 18l-5-3-5 3 1.5-5.088L4 9l6.088-.187z" />
-  </svg>
-)
-const IconShield: FC = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-  </svg>
-)
-const IconCreditCard: FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
-  </svg>
-)
-const IconBoxes: FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-  </svg>
-)
-const IconTrendingUp: FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
-  </svg>
-)
-const IconBarChart: FC = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <rect x="2" y="2" width="20" height="20" rx="2" />
-    <line x1="7" y1="22" x2="7" y2="13" /><line x1="12" y1="22" x2="12" y2="8" /><line x1="17" y1="22" x2="17" y2="18" />
-  </svg>
-)
-const IconWallet: FC = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    aria-hidden="true" focusable="false">
-    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
-  </svg>
-)
+/* ------------------------------------------------------------------ *
+ * Decorative background
+ * ------------------------------------------------------------------ */
 
-// ─── Design tokens ─────────────────────────────────────────────────────────────
-const T = {
-  white10:       'rgba(255,255,255,0.10)',
-  white12:       'rgba(255,255,255,0.12)',
-  white15:       'rgba(255,255,255,0.15)',
-  white18:       'rgba(255,255,255,0.18)',
-  emerald:       '#6ee7b7',
-  emeraldBg:     'rgba(52,211,153,0.15)',
-  emeraldBorder: 'rgba(110,231,183,0.30)',
-  amber:         '#fcd34d',
-  indigo100:     '#e0e7ff',
-  muted:         'rgba(255,255,255,0.72)',
-  mutedSub:      'rgba(255,255,255,0.60)',
-  darkCell:      'rgba(2,4,18,0.40)',
-  focusRing:     '#a5b4fc',
-  solidBase:     '#4338ca',
-} as const
+/**
+ * Five layers, all pure CSS gradients:
+ *   1. aurora bloom      — slowly drifting colour, the only moving layer
+ *   2. static corner wash — anchors the corners so the drift never bares them
+ *   3. hairline mesh      — reads as "product surface", not "poster"
+ *   4. depth veil         — darkens toward the base so the card can sit on top
+ *   5. top sheen          — one highlight, so the panel has a light source
+ */
+const Backdrop = memo(() => (
+  <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+    <div
+      className="auth-drift absolute inset-[-15%]"
+      style={{
+        background:
+          'radial-gradient(ellipse 46% 34% at 18% 12%, rgba(167,139,250,0.42) 0%, transparent 100%),' +
+          'radial-gradient(ellipse 40% 30% at 82% 22%, rgba(99,102,241,0.34) 0%, transparent 100%),' +
+          'radial-gradient(ellipse 44% 28% at 30% 88%, rgba(139,92,246,0.30) 0%, transparent 100%)',
+      }}
+    />
 
-// ─── Critical keyframes — injected once, non-blocking ─────────────────────────
-// Only opacity animated → pure compositor, zero layout/paint cost.
-// prefers-reduced-motion guard prevents motion sickness issues (WCAG 2.3.3).
-const KEYFRAMES = `
-@keyframes sm-pulse{0%,100%{opacity:1}50%{opacity:.35}}
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}
-}
-`
+    <div
+      className="absolute inset-0"
+      style={{
+        background:
+          'radial-gradient(ellipse 58% 40% at 2% -6%, rgba(129,140,248,0.28) 0%, transparent 100%),' +
+          'radial-gradient(ellipse 46% 30% at 100% 96%, rgba(217,70,239,0.20) 0%, transparent 100%)',
+      }}
+    />
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-interface Stat { label: string; value: string; sub: string; subColor: string; ariaLabel: string }
-const stats: Stat[] = [
-  { label:'Today Sales', value:'₹24,580', sub:'+12.4%',         subColor:T.emerald,   ariaLabel:'Today sales ₹24,580, up 12.4%'        },
-  { label:'Orders',      value:'148',     sub:'Live counter',    subColor:T.indigo100, ariaLabel:'148 orders, live counter'              },
-  { label:'Low Stock',   value:'06',      sub:'Needs attention', subColor:T.amber,     ariaLabel:'6 items low on stock, needs attention' },
-]
+    <div
+      className="absolute inset-0 opacity-[0.13]"
+      style={{
+        backgroundImage:
+          'linear-gradient(to right, rgba(255,255,255,0.10) 1px, transparent 1px),' +
+          'linear-gradient(to bottom, rgba(255,255,255,0.10) 1px, transparent 1px)',
+        backgroundSize: '38px 38px',
+        maskImage: 'radial-gradient(ellipse 80% 70% at 50% 42%, #000 38%, transparent 100%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 70% at 50% 42%, #000 38%, transparent 100%)',
+      }}
+    />
 
-interface Feature { label: string; Icon: FC }
-const features: Feature[] = [
-  { label:'Fast Billing',      Icon: IconCreditCard },
-  { label:'Inventory Control', Icon: IconBoxes      },
-  { label:'Sales Insights',    Icon: IconTrendingUp },
-]
+    <div
+      className="absolute inset-0"
+      style={{
+        background:
+          'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, transparent 32%, rgba(2,2,20,0.34) 100%)',
+      }}
+    />
 
-interface Bar { value: number; day: string; variant: 'default' | 'hi' | 'peak' }
-const weeklyBars: Bar[] = [
-  { value:42, day:'M', variant:'default' },
-  { value:65, day:'T', variant:'default' },
-  { value:54, day:'W', variant:'default' },
-  { value:78, day:'T', variant:'default' },
-  { value:70, day:'F', variant:'hi'      },
-  { value:92, day:'S', variant:'hi'      },
-  { value:88, day:'S', variant:'peak'    },
-]
-const BAR_ARIA = 'Weekly sales: Mon 42%, Tue 65%, Wed 54%, Thu 78%, Fri 70%, Sat 92%, Sun 88%'
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+  </div>
+))
+Backdrop.displayName = 'Backdrop'
 
-interface Op { cat: string; text: string }
-const ops: Op[] = [
-  { cat:'Billing',   text:'Generate invoice in seconds'          },
-  { cat:'Inventory', text:'Auto stock deduction after sale'      },
-  { cat:'Reports',   text:'Daily insights with low-stock alerts' },
-]
+/* ------------------------------------------------------------------ *
+ * Blocks
+ * ------------------------------------------------------------------ */
 
-interface FooterStat { num: string; label: string }
-const footerStats: FooterStat[] = [
-  { num:'10k+',  label:'Retail actions processed' },
-  { num:'99.9%', label:'Operational reliability'  },
-  { num:'24/7',  label:'Access to store data'     },
-]
-
-// ─── Bar styles ────────────────────────────────────────────────────────────────
-const barStyle: Record<Bar['variant'], React.CSSProperties> = {
-  default: { background:'rgba(255,255,255,0.22)' },
-  hi:      { background:'rgba(255,255,255,0.44)' },
-  peak:    {
-    background:'linear-gradient(to top,#a855f7,#818cf8,#a5b4fc)',
-    boxShadow:'0 4px 14px rgba(147,51,234,0.50)',
-    // willChange only on this one element → own compositor layer, avoids repaints
-    willChange:'transform',
-  },
-}
-
-const FOCUS_IN:  React.CSSProperties = { outline:`2px solid ${T.focusRing}`, outlineOffset:'2px' }
-const FOCUS_OUT: React.CSSProperties = { outline:'none' }
-
-// ─── Sub-components ────────────────────────────────────────────────────────────
-const Logo = memo(() => (
-  <div>
-    <div style={{
-      display:'inline-flex', alignItems:'center', gap:'0.625rem',
-      borderRadius:'1rem', border:`1px solid ${T.white15}`,
-      background:'rgba(255,255,255,0.13)',
-      padding:'0.5rem 0.75rem',
-      boxShadow:'0 8px 24px rgba(0,0,0,0.22)',
-    }}>
-      <div aria-hidden="true" style={{
-        width:'2.25rem', height:'2.25rem', flexShrink:0,
-        borderRadius:'0.625rem', display:'flex', alignItems:'center', justifyContent:'center',
-        background:'linear-gradient(135deg,rgba(255,255,255,0.28),rgba(255,255,255,0.10))',
-        color:'#fff', outline:`1px solid ${T.white15}`,
-      }}>
-        <IconSparkles />
-      </div>
-      <div>
-        <p style={{ fontSize:'0.9rem', fontWeight:700, letterSpacing:'-0.02em', color:'#fff', margin:0, fontFamily:FONT_STACK }}>
-          StoreMitraa Retail
-        </p>
-        <p style={{ fontSize:'0.6875rem', color:T.mutedSub, margin:0, fontFamily:FONT_STACK }}>
-          Next-gen retail management
-        </p>
-      </div>
+const Brand = memo(() => (
+  <div className="auth-rise flex items-center gap-3">
+    {/* LOGO PLACEHOLDER (desktop hero) — the PNG/SVG path is set by
+        BRAND.logoSrc in ./authContent.ts. Change it there, not here.
+        tone="plate" keeps the tile white so a dark/coloured mark stays
+        legible against the purple panel; `fill` + p-1.5 lets a wide logo
+        use the tile instead of being squeezed into a square. */}
+    <BrandLogo
+      tone="plate"
+      fill
+      className="h-12 w-12 rounded-2xl p-1.5 shadow-[0_10px_30px_rgba(2,2,30,0.35)]"
+    />
+    <div className="leading-tight">
+      <p className="text-[15px] font-bold tracking-tight text-white">{BRAND.name}</p>
+      <p className="text-[11px] font-medium text-white/60">{BRAND.tagline}</p>
     </div>
   </div>
 ))
-Logo.displayName = 'Logo'
+Brand.displayName = 'Brand'
 
-const FeatureChips = memo(() => (
-  <ul style={{ display:'flex', flexWrap:'wrap', gap:'0.5rem', margin:'1.25rem 0 0', listStyle:'none', padding:0 }}
-    aria-label="Key features">
-    {features.map(({ label, Icon }) => (
-      <li key={label} tabIndex={0}
-        style={{
-          display:'flex', alignItems:'center', gap:'0.5rem',
-          borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:T.white10,
-          padding:'0.5rem 0.75rem', color:'rgba(255,255,255,0.92)',
-          fontSize:'0.75rem', fontWeight:500, cursor:'default',
-          transition:'background 0.2s ease',
-          fontFamily:FONT_STACK,
-        }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = T.white18 }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = T.white10 }}
-        onFocus={e   => Object.assign((e.currentTarget as HTMLElement).style, FOCUS_IN)}
-        onBlur={e    => Object.assign((e.currentTarget as HTMLElement).style, FOCUS_OUT)}>
-        <span aria-hidden="true" style={{
-          display:'flex', width:'1.75rem', height:'1.75rem', flexShrink:0,
-          alignItems:'center', justifyContent:'center',
-          borderRadius:'0.5rem', background:T.white12, color:'#fff',
-        }}>
-          <Icon />
-        </span>
-        {label}
-      </li>
-    ))}
-  </ul>
-))
-FeatureChips.displayName = 'FeatureChips'
-
-const StatsGrid = memo(() => (
-  <dl style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.625rem', marginBottom:'0.75rem' }}>
-    {stats.map(({ label, value, sub, subColor, ariaLabel }) => (
-      <div key={label} style={{
-        borderRadius:'0.75rem', border:`1px solid ${T.white12}`,
-        background:T.darkCell, padding:'0.625rem 0.75rem',
-      }}>
-        <dt style={{ fontSize:'0.5625rem', textTransform:'uppercase', letterSpacing:'0.16em', color:T.muted, margin:0, fontFamily:FONT_STACK }}>
-          {label}
-        </dt>
-        <dd style={{ fontSize:'1.25rem', fontWeight:700, color:'#fff', margin:'0.375rem 0 0', fontFamily:FONT_STACK }}
-          aria-label={ariaLabel}>{value}</dd>
-        <dd aria-hidden="true" style={{ fontSize:'0.6875rem', color:subColor, margin:'0.125rem 0 0', fontFamily:FONT_STACK }}>
-          {sub}
-        </dd>
-      </div>
-    ))}
-  </dl>
-))
-StatsGrid.displayName = 'StatsGrid'
-
-const WeeklyBarChart = memo(() => (
-  <div style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:T.darkCell, padding:'0.75rem' }}>
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.75rem' }}>
-      <p style={{ fontSize:'0.75rem', fontWeight:500, color:'rgba(255,255,255,0.92)', margin:0, fontFamily:FONT_STACK }}>
-        Weekly Performance
-      </p>
-      <span aria-hidden="true" style={{ display:'flex', alignItems:'center', gap:'0.375rem', fontSize:'0.625rem', color:T.muted }}>
-        <IconBarChart /> Last 7 Days
+const WeeklyChart = memo(() => (
+  <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 xl:p-3.5">
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <p className="text-[11px] font-semibold text-white/90 xl:text-xs">Weekly performance</p>
+      <span
+        aria-hidden
+        className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-medium text-white/55"
+      >
+        <BarChart3 size={11} />
+        Last 7 days
       </span>
     </div>
-    <div style={{ display:'flex', alignItems:'flex-end', gap:'0.25rem', height:'5.5rem' }}
-      role="img" aria-label={BAR_ARIA}>
-      {weeklyBars.map(({ value, day, variant }, idx) => (
-        <div key={idx} aria-hidden="true"
-          style={{ display:'flex', flex:1, flexDirection:'column', alignItems:'center', gap:'0.375rem' }}>
-          <div style={{ width:'100%', height:`${value}%`, borderRadius:'0.25rem 0.25rem 0 0', ...barStyle[variant] }} />
-          <span style={{ fontSize:'0.5rem', textTransform:'uppercase', letterSpacing:'0.12em', color:T.muted, fontFamily:FONT_STACK }}>
+
+    {/* Bars and day labels are two parallel rows rather than seven stacked
+        columns: it gives the bar track a *definite* height, which is what
+        lets each bar's percentage height resolve at all. */}
+    <div role="img" aria-label={WEEK_SUMMARY.srLabel}>
+      <div aria-hidden className="flex h-[58px] items-end gap-1.5 xl:h-[66px]">
+        {WEEK.map(({ pct, day, peak }, i) => (
+          <div
+            key={`bar-${day}-${i}`}
+            className={[
+              'auth-grow flex-1 rounded-t-[5px]',
+              peak
+                ? 'bg-gradient-to-t from-violet-500 via-indigo-400 to-indigo-200 shadow-[0_0_18px_rgba(139,92,246,0.55)]'
+                : i >= WEEK.length - 3
+                  ? 'bg-white/45'
+                  : 'bg-white/20',
+            ].join(' ')}
+            style={{ height: `${pct}%`, animationDelay: `${380 + i * 55}ms` }}
+          />
+        ))}
+      </div>
+
+      <div aria-hidden className="mt-2 flex gap-1.5">
+        {WEEK.map(({ day }, i) => (
+          <span
+            key={`day-${day}-${i}`}
+            className="flex-1 text-center text-[9px] font-semibold uppercase tracking-wider text-white/45"
+          >
             {day}
           </span>
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+
+    {/* Summary strip — turns the chart from decoration into a readable fact */}
+    <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2.5">
+      <p className="truncate text-[10px] font-medium text-white/60">
+        {WEEK_SUMMARY.peakLabel}{' '}
+        <span className="font-bold text-white/90">{WEEK_SUMMARY.peakValue}</span>
+      </p>
+      <p className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold text-emerald-300">
+        <TrendingUp size={11} aria-hidden />
+        {WEEK_SUMMARY.delta}
+        <span className="font-medium text-white/45">{WEEK_SUMMARY.deltaLabel}</span>
+      </p>
     </div>
   </div>
 ))
-WeeklyBarChart.displayName = 'WeeklyBarChart'
+WeeklyChart.displayName = 'WeeklyChart'
 
-const OpsFlow = memo(() => (
-  <div style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:T.darkCell, padding:'0.75rem' }}
-    role="region" aria-label="Operations flow">
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.75rem' }}>
-      <p style={{ fontSize:'0.75rem', fontWeight:500, color:'rgba(255,255,255,0.92)', margin:0, fontFamily:FONT_STACK }}>Operations Flow</p>
-      <span aria-hidden="true" style={{ color:T.muted }}><IconWallet /></span>
-    </div>
-    <ul style={{ display:'flex', flexDirection:'column', gap:'0.5rem', listStyle:'none', padding:0, margin:0 }}
-      aria-label="Core operations">
-      {ops.map(({ cat, text }) => (
-        <li key={cat} style={{ borderRadius:'0.75rem', border:`1px solid ${T.white12}`, background:'rgba(255,255,255,0.09)', padding:'0.5rem 0.75rem' }}>
-          <p style={{ fontSize:'0.5625rem', textTransform:'uppercase', letterSpacing:'0.14em', color:T.muted, margin:0, fontFamily:FONT_STACK }}>{cat}</p>
-          <p style={{ fontSize:'0.75rem', fontWeight:500, color:'#fff', margin:'0.125rem 0 0', fontFamily:FONT_STACK }}>{text}</p>
-        </li>
-      ))}
-    </ul>
-  </div>
-))
-OpsFlow.displayName = 'OpsFlow'
+/**
+ * The proof artefact. One card, three numbers, one chart — a believable slice
+ * of the dashboard rather than an exhaustive replica of it.
+ */
+const CommandCenter = memo(() => (
+  <div className="relative mb-5">
+    {/* soft glow beneath the card; a gradient, not a blur filter */}
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -inset-x-6 -bottom-6 -top-4"
+      style={{
+        background:
+          'radial-gradient(ellipse 60% 50% at 50% 60%, rgba(124,58,237,0.35) 0%, transparent 70%)',
+      }}
+    />
 
-// ─── DashboardCard — content-visibility:auto on below-fold content ─────────────
-// `content-visibility:auto` tells the browser it can skip rendering cost
-// for off-screen content. `contain-intrinsic-size` prevents layout shift.
-const DashboardCard = memo(() => (
-  <div style={{
-    position:'relative', marginTop:'1.5rem', width:'100%',
-    // content-visibility skips paint/layout for initially off-screen content
-    contentVisibility:'auto',
-    containIntrinsicSize:'0 400px',
-  }}>
-    <div style={{
-      position:'relative', overflow:'hidden',
-      borderRadius:'1.25rem', border:`1px solid ${T.white12}`,
-      background:'rgba(18,12,52,0.92)',
-      padding:'1rem',
-      boxShadow:'0 16px 48px rgba(29,16,84,0.45)',
-    }}
-      role="region" aria-labelledby="cmd-center-title">
+    <div
+      className="auth-rise relative overflow-hidden rounded-[22px] border border-white/15 bg-[rgba(17,10,48,0.62)] p-3.5 shadow-[0_28px_70px_-20px_rgba(2,2,30,0.8)] xl:p-4"
+      style={{ animationDelay: '260ms' }}
+      role="region"
+      aria-labelledby="hero-card-title"
+    >
+      {/* inner light source, keeps the glass from reading as flat plastic */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 50% at 88% -10%, rgba(255,255,255,0.11) 0%, transparent 60%)',
+        }}
+      />
 
-      {/* Subtle inner highlight — pure CSS gradient, no filter */}
-      <div aria-hidden="true" style={{
-        position:'absolute', inset:0, pointerEvents:'none',
-        background:'radial-gradient(ellipse at 90% 0%,rgba(255,255,255,0.07) 0%,transparent 55%)',
-      }} />
-
-      <div style={{ position:'relative' }}>
-        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem', marginBottom:'1rem' }}>
-          <div>
-            <p aria-hidden="true" style={{ fontSize:'0.625rem', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.22em', color:T.muted, margin:0, fontFamily:FONT_STACK }}>
+      <div className="relative">
+        <div className="mb-3.5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/55">
               Live overview
             </p>
-            <p id="cmd-center-title" style={{ fontSize:'0.875rem', fontWeight:600, color:'#fff', margin:'0.125rem 0 0', fontFamily:FONT_STACK }}>
+            <p
+              id="hero-card-title"
+              className="mt-0.5 truncate text-[13px] font-semibold text-white xl:text-sm"
+            >
               Retail command center
             </p>
           </div>
-          <div style={{
-            display:'inline-flex', flexShrink:0, alignItems:'center', gap:'0.375rem',
-            borderRadius:'9999px', border:`1px solid ${T.emeraldBorder}`,
-            background:T.emeraldBg, padding:'0.25rem 0.625rem',
-            fontSize:'0.625rem', fontWeight:500, color:'#d1fae5',
-            fontFamily:FONT_STACK,
-          }}
-            role="status" aria-live="polite" aria-label="System is active">
-            <span aria-hidden="true" style={{
-              display:'inline-block', width:'0.375rem', height:'0.375rem',
-              borderRadius:'50%', background:T.emerald,
-              // Animation injected after first paint; starts here via class approach
-              animation:'sm-pulse 2s ease-in-out infinite',
-              willChange:'opacity',
-            }} />
-            System Active
-          </div>
+
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-400/15 px-2.5 py-1 text-[10px] font-semibold text-emerald-200">
+            <span aria-hidden className="auth-pulse h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            System active
+          </span>
         </div>
 
-        <StatsGrid />
+        {/* KPI row */}
+        <dl className="mb-2.5 grid grid-cols-3 gap-2">
+          {KPIS.map(({ label, value, delta, tone, srLabel }) => (
+            <div
+              key={label}
+              className="min-w-0 rounded-xl border border-white/10 bg-white/[0.06] px-2.5 py-2 xl:rounded-2xl xl:px-3 xl:py-2.5"
+            >
+              <dt className="truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-white/55">
+                {label}
+              </dt>
+              <dd
+                className="mt-1 truncate text-[17px] font-bold leading-none tracking-tight text-white xl:text-[19px]"
+                aria-label={srLabel}
+              >
+                {value}
+              </dd>
+              <dd aria-hidden className={`mt-1 truncate text-[10px] font-semibold ${tone}`}>
+                {delta}
+              </dd>
+            </div>
+          ))}
+        </dl>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_0.8fr]">
-          <WeeklyBarChart />
-          <OpsFlow />
-        </div>
+        <WeeklyChart />
       </div>
+    </div>
+
+    {/* Floating activity chip — overlaps the card corner to build depth.
+        First thing to go on a short viewport. */}
+    <div
+      className="auth-rise absolute -bottom-3.5 right-4 hidden items-center gap-2 rounded-full border border-white/20 bg-[#241355] px-3 py-1.5 shadow-[0_12px_28px_rgba(2,2,30,0.55)] [@media(min-height:900px)]:flex"
+      style={{ animationDelay: '640ms' }}
+      role="status"
+    >
+      <CheckCircle2 size={13} className="shrink-0 text-emerald-300" aria-hidden />
+      <span className="whitespace-nowrap text-[11px] font-semibold text-white">
+        Invoice <span className="text-white/60">INV-2048</span> generated
+      </span>
     </div>
   </div>
 ))
-DashboardCard.displayName = 'DashboardCard'
+CommandCenter.displayName = 'CommandCenter'
 
-const FooterStats = memo(() => (
-  <footer style={{ contentVisibility:'auto', containIntrinsicSize:'0 80px' }}>
-    <dl style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'1.75rem', margin:'0 0 0.75rem' }}>
-      {footerStats.map(({ num, label }) => (
-        <div key={label}>
-          <dd style={{ fontSize:'1.25rem', fontWeight:700, color:'#fff', margin:0, fontFamily:FONT_STACK }}>{num}</dd>
-          <dt style={{ fontSize:'0.75rem', color:T.muted, margin:0, fontFamily:FONT_STACK }}>{label}</dt>
-        </div>
-      ))}
-    </dl>
-    <p style={{ fontSize:'0.5625rem', textTransform:'uppercase', letterSpacing:'0.22em', color:'rgba(255,255,255,0.55)', margin:0, fontFamily:FONT_STACK }}>
-      Built for modern retail teams
-    </p>
-  </footer>
-))
-FooterStats.displayName = 'FooterStats'
+/* ------------------------------------------------------------------ *
+ * Root
+ * ------------------------------------------------------------------ */
 
-// ─── BgLayers — mounted lazily, never blocks LCP ─────────────────────────────
-// Rendered as a portal *after* the browser has committed first paint.
-// Using useLayoutEffect (synchronous before screen paint) but deferred by
-// a requestIdleCallback so it truly runs in idle time.
-const BgLayers = memo(({ targetRef }: { targetRef: React.RefObject<HTMLElement | null> }) => {
-  useLayoutEffect(() => {
-    const section = targetRef.current
-    if (!section) return
-    const run = () => {
-      // Already injected (StrictMode double-invoke guard)
-      if (section.querySelector('[data-bg-layers]')) return
-      const wrapper = document.createElement('div')
-      wrapper.setAttribute('data-bg-layers', '1')
-      wrapper.setAttribute('aria-hidden', 'true')
-      wrapper.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:0'
-
-      // Mesh grid
-      const mesh = document.createElement('div')
-      mesh.style.cssText = `position:absolute;inset:0;opacity:0.16;background-image:linear-gradient(to right,rgba(255,255,255,0.07) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,0.07) 1px,transparent 1px);background-size:36px 36px`
-
-      // Top depth
-      const depth = document.createElement('div')
-      depth.style.cssText = `position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.04) 0%,transparent 40%,rgba(0,0,0,0.18) 100%)`
-
-      // Colour corners
-      const corners = document.createElement('div')
-      corners.style.cssText = `position:absolute;inset:0;background:radial-gradient(ellipse 60% 40% at 5% 0%,rgba(167,139,250,0.30) 0%,transparent 100%),radial-gradient(ellipse 55% 35% at 95% 5%,rgba(99,102,241,0.25) 0%,transparent 100%),radial-gradient(ellipse 50% 30% at 10% 95%,rgba(139,92,246,0.22) 0%,transparent 100%),radial-gradient(ellipse 45% 28% at 90% 90%,rgba(167,139,250,0.18) 0%,transparent 100%)`
-
-      wrapper.append(mesh, depth, corners)
-      section.appendChild(wrapper)
-    }
-
-    // requestIdleCallback: runs when browser is idle, never delays FCP/LCP
-    if ('requestIdleCallback' in window) {
-      ;(window as Window & typeof globalThis & { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(run)
-    } else {
-      setTimeout(run, 200)
-    }
-  }, [targetRef])
-
-  return null
-})
-BgLayers.displayName = 'BgLayers'
-
-// ─── Root export ──────────────────────────────────────────────────────────────
 export function LoginHero() {
-  const sectionRef = useRef<HTMLElement>(null)
-
-  // Inject keyframes AFTER first paint — never blocks FCP/LCP
-  const injected = useRef(false)
-  useEffect(() => {
-    if (injected.current) return
-    injected.current = true
-    if (document.getElementById('sm-kf')) return
-    const style = document.createElement('style')
-    style.id = 'sm-kf'
-    style.textContent = KEYFRAMES
-    document.head.appendChild(style)
-  }, [])
-
   return (
-    <main aria-labelledby="hero-headline" style={{ fontFamily:FONT_STACK }}>
-      <section
-        ref={sectionRef}
-        aria-label="StoreMitraa Retail hero"
-        style={{
-          position:'relative', width:'100%', overflow:'hidden',
-          // SINGLE hex colour = one GPU draw call, fastest possible FCP
-          background: '#4338ca',
-          padding:'1.5rem', minHeight:'100vh',
-          display:'flex', flexDirection:'column', justifyContent:'space-between',
-          gap:'1.5rem', boxSizing:'border-box',
-          // contain:layout stops re-flow outside this section
-          contain:'layout',
-          fontFamily:FONT_STACK,
-        }}>
+    <aside
+      aria-label={`About ${BRAND.name}`}
+      className="relative hidden overflow-hidden lg:flex lg:min-h-screen lg:flex-col lg:justify-between lg:gap-6 lg:px-9 lg:py-7 xl:gap-8 xl:px-14 xl:py-10 2xl:px-20"
+      style={{
+        background: 'linear-gradient(152deg, #4f46e5 0%, #4c1d95 52%, #2a1065 100%)',
+        contain: 'layout paint',
+      }}
+    >
+      <Backdrop />
 
-        {/* ── Critical content first — LCP candidate (<h1>) paints immediately */}
-        <div style={{ position:'relative', zIndex:1, display:'flex', flexDirection:'column', gap:'1.25rem', width:'100%' }}>
-          <Logo />
+      {/* ── Top: brand ─────────────────────────────────────────────── */}
+      <div className="relative z-10">
+        <Brand />
+      </div>
 
-          <div style={{ display:'flex', flexDirection:'column' }}>
-            {/* Badge */}
-            <p aria-hidden="true" style={{
-              display:'inline-flex', alignItems:'center', gap:'0.375rem',
-              borderRadius:'9999px', border:`1px solid ${T.white15}`, background:'rgba(255,255,255,0.14)',
-              padding:'0.375rem 0.75rem', fontSize:'0.625rem', fontWeight:600,
-              letterSpacing:'0.18em', textTransform:'uppercase', color:'rgba(255,255,255,0.92)',
-              marginBottom:'0.75rem', width:'fit-content',
-              fontFamily:FONT_STACK,
-            }}>
-              <IconShield /> Smart Retail Operations
-            </p>
+      {/* ── Middle: the message, then the proof ────────────────────── */}
+      <div className="relative z-10 w-full max-w-[520px] xl:max-w-[560px]">
+        <p
+          className="auth-rise mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/85 xl:mb-5 xl:tracking-[0.18em]"
+          style={{ animationDelay: '60ms' }}
+        >
+          <ShieldCheck size={12} strokeWidth={2.6} />
+          Smart retail operations
+        </p>
 
-            {/* LCP CANDIDATE — first text node in the tree */}
-            <h1 id="hero-headline" style={{
-              fontSize:'clamp(1.35rem,4vw,2.1rem)',
-              fontWeight:700, lineHeight:1.15, letterSpacing:'-0.03em', color:'#fff', margin:0,
-              fontFamily:FONT_STACK,
-            }}>
-              Run billing, stock, and store's performance from one command center.
-            </h1>
+        <h1
+          className="auth-rise text-[clamp(1.5rem,2.1vw,2.25rem)] font-extrabold leading-[1.13] tracking-[-0.03em] text-white"
+          style={{ animationDelay: '110ms' }}
+        >
+          Billing, stock and store performance —{' '}
+          <span
+            className="bg-clip-text text-transparent"
+            style={{
+              backgroundImage: 'linear-gradient(92deg,#e9d5ff 0%,#c4b5fd 46%,#a5f3fc 100%)',
+            }}
+          >
+            one command center.
+          </span>
+        </h1>
 
-            <p style={{
-              marginTop:'0.75rem', fontSize:'clamp(0.8rem,2vw,0.9rem)',
-              lineHeight:1.65, color:'rgba(255,255,255,0.88)',
-              fontFamily:FONT_STACK,
-            }}>
-              StoreMitraa gives your retail team a single, premium workspace to manage
-              inventory, generate bills, monitor sales, and keep operations moving without friction.
-            </p>
+        <p
+          className="auth-rise mt-3 max-w-[50ch] text-[13px] leading-relaxed text-white/70 xl:mt-4 xl:text-sm"
+          style={{ animationDelay: '160ms' }}
+        >
+          One workspace to move inventory, raise invoices and read the
+          day&apos;s numbers — without switching tools.
+        </p>
 
-            <FeatureChips />
-            <DashboardCard />
-          </div>
+        {/* Capability pills — second to go on a short viewport */}
+        <ul
+          className="auth-rise mt-4 hidden flex-wrap gap-2 xl:mt-5 [@media(min-height:840px)]:flex"
+          style={{ animationDelay: '210ms' }}
+          aria-label="Core capabilities"
+        >
+          {FEATURES.map(({ label, Icon }) => (
+            <li
+              key={label}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/12 bg-white/[0.08] py-1.5 pl-1.5 pr-3 text-[11px] font-semibold text-white/90 xl:text-xs"
+            >
+              <span
+                aria-hidden
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/12 text-white"
+              >
+                <Icon size={12} strokeWidth={2.4} />
+              </span>
+              {label}
+            </li>
+          ))}
+        </ul>
 
-          <FooterStats />
+        <div className="mt-5">
+          <CommandCenter />
         </div>
+      </div>
 
-        {/* ── BgLayers injected via requestIdleCallback — zero LCP impact */}
-        <BgLayers targetRef={sectionRef} />
-      </section>
-    </main>
+      {/* ── Bottom: proof numbers. Last to go on a short viewport. ─── */}
+      <div
+        className="auth-rise relative z-10 hidden [@media(min-height:760px)]:block"
+        style={{ animationDelay: '320ms' }}
+      >
+        <dl className="flex flex-wrap items-start gap-x-7 gap-y-4 border-t border-white/12 pt-5 xl:gap-x-9 xl:pt-6">
+          {TRUST.map(({ value, label }) => (
+            <div key={label}>
+              <dd className="text-lg font-extrabold tracking-tight text-white xl:text-xl">
+                {value}
+              </dd>
+              <dt className="mt-0.5 text-[11px] font-medium text-white/55">{label}</dt>
+            </div>
+          ))}
+
+          <p className="ml-auto hidden self-end text-[11px] font-medium text-white/45 2xl:block">
+            Built for modern retail teams
+          </p>
+        </dl>
+      </div>
+    </aside>
   )
 }

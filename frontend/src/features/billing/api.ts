@@ -1,3 +1,4 @@
+import { authenticatedFetch as fetch } from '../../lib/authenticated-fetch'
 import type {
   BillingProduct,
   CustomerPayload,
@@ -13,52 +14,10 @@ import type {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
-const TOKEN_KEYS = [
-  'access_token',
-  'token',
-  'authToken',
-  'veltrix_token',
-  'veltrix_access_token',
-]
-
-const getToken = () => {
-  for (const key of TOKEN_KEYS) {
-    const value = localStorage.getItem(key)
-
-    if (value) {
-      return value
-    }
-  }
-
-  return null
-}
-
-const clearAuthStorage = () => {
-  TOKEN_KEYS.forEach((key) => localStorage.removeItem(key))
-}
-
-const buildHeaders = (): HeadersInit => {
-  const token = getToken()
-
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
-  return headers
-}
+const buildHeaders = (): HeadersInit => ({ 'Content-Type': 'application/json' })
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
   if (response.status === 401) {
-    clearAuthStorage()
-
-    if (window.location.pathname !== '/') {
-      window.location.href = '/'
-    }
-
     throw new Error('Your session has expired. Please login again.')
   }
 

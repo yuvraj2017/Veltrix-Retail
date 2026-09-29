@@ -2,13 +2,12 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
 
 from app import models  # noqa: F401
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.core.database import Base, engine
 
 app = FastAPI(
     title=settings.app_name,
@@ -16,6 +15,16 @@ app = FastAPI(
 )
 
 os.makedirs("uploads", exist_ok=True)
+
+# Middleware order note: Starlette's add_middleware() inserts at the FRONT of
+# the stack, so the LAST one registered ends up OUTERMOST. GZip is registered
+# first and CORS second, which leaves CORS on the outside where it can attach
+# headers to every response (preflights and error responses included).
+
+# Compress JSON responses. List/report payloads (invoices, products, reports)
+# are highly repetitive JSON and shrink by roughly 70-85%. Responses under
+# minimum_size are left alone, since compressing them costs more than it saves.
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,50 +34,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+class ImmutableStaticFiles(StaticFiles):
+    """StaticFiles that marks served files as immutable.
+
+    StaticFiles sends ETag/Last-Modified but no Cache-Control, so browsers
+    re-validate every upload on every navigation -- a round trip per image per
+    page. Upload filenames are freshly generated UUIDs and are never
+    overwritten in place, so each URL's content genuinely cannot change and a
+    long immutable max-age is safe.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
+app.mount("/uploads", ImmutableStaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(api_router)
-
-
-def _ensure_invoice_pricing_columns():
-    Base.metadata.create_all(bind=engine)
-
-    with engine.begin() as connection:
-        inspector = inspect(connection)
-
-        if not inspector.has_table("invoices"):
-            return
-
-        column_names = {column["name"] for column in inspector.get_columns("invoices")}
-
-        if "billed_amount" not in column_names:
-            connection.execute(
-                text(
-                    "ALTER TABLE invoices "
-                    "ADD COLUMN billed_amount NUMERIC(12, 2) NOT NULL DEFAULT 0"
-                )
-            )
-
-        if "extra_discount_amount" not in column_names:
-            connection.execute(
-                text(
-                    "ALTER TABLE invoices "
-                    "ADD COLUMN extra_discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0"
-                )
-            )
-
-        connection.execute(
-            text(
-                "UPDATE invoices "
-                "SET billed_amount = final_amount "
-                "WHERE COALESCE(billed_amount, 0) = 0 AND COALESCE(final_amount, 0) <> 0"
-            )
-        )
-
-
-@app.on_event("startup")
-def on_startup():
-    _ensure_invoice_pricing_columns()
 
 
 @app.get("/health")

@@ -322,6 +322,7 @@ export function EditProductModal({
                   src={mainImageSrc}
                   alt={product.name}
                   className="h-72 w-full rounded-3xl object-cover"
+                  decoding="async"
                 />
               </div>
             ) : (
@@ -345,6 +346,8 @@ export function EditProductModal({
                       src={src}
                       alt="Product"
                       className="h-20 w-full object-cover transition duration-300 group-hover:scale-105"
+                      loading="lazy"
+                      decoding="async"
                     />
                     {image.is_main && (
                       <span className="absolute left-2 top-2 rounded-full bg-indigo-600 px-2 py-1 text-[10px] font-semibold uppercase text-white">
@@ -372,6 +375,8 @@ export function EditProductModal({
                     src={image.url}
                     alt="New upload"
                     className="h-20 w-full object-cover transition duration-300 group-hover:scale-105"
+                      loading="lazy"
+                      decoding="async"
                   />
                   <button
                     type="button"

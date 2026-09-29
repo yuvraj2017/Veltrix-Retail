@@ -17,6 +17,8 @@ export type Expense = {
 export type ExpenseListResponse = {
   items: Expense[]
   total: number
+  page: number
+  page_size: number
 }
 
 export type ExpensePayload = {

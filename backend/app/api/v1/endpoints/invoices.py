@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.invoice import (
     InvoiceCreate,
@@ -40,7 +40,7 @@ def get_invoices(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return list_invoices(
         db=db,
@@ -57,7 +57,7 @@ def get_invoices(
 @router.get("/stats", response_model=InvoiceStatsResponse)
 def invoice_stats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_invoice_stats(db, current_user)
 
@@ -66,7 +66,7 @@ def invoice_stats(
 def add_invoice(
     payload: InvoiceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return create_invoice(payload, db, current_user)
 
@@ -75,7 +75,7 @@ def add_invoice(
 def get_single_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_invoice(invoice_id, db, current_user)
 
@@ -85,7 +85,7 @@ def edit_invoice(
     invoice_id: int,
     payload: InvoiceUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return update_invoice(invoice_id, payload, db, current_user)
 
@@ -94,7 +94,7 @@ def edit_invoice(
 def remove_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return delete_invoice(invoice_id, db, current_user)
 
@@ -103,7 +103,7 @@ def remove_invoice(
 def preview_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_invoice_preview(invoice_id, db, current_user)
 
@@ -112,7 +112,7 @@ def preview_invoice(
 def get_invoice_pdf(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     invoice = get_invoice(invoice_id, db, current_user)
 
@@ -128,7 +128,7 @@ def get_invoice_pdf(
 def download_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     invoice = get_invoice(invoice_id, db, current_user)
 
@@ -145,7 +145,7 @@ def share_invoice(
     invoice_id: int,
     payload: InvoiceSharePayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     share_data = build_invoice_share_url(invoice_id, db, current_user)
 

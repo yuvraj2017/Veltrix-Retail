@@ -3,13 +3,50 @@ from decimal import Decimal
 import os
 from fastapi import HTTPException, status
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.product import Product, ProductImage
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductStatsResponse, ProductUpdate
+from app.models.business_audit_log import BusinessAuditAction
+from app.services.business_audit_service import record_business_audit
+from app.services.entitlement_service import ensure_can_create
 
 MAX_PRODUCT_IMAGES = 5
+
+AUDITED_PRODUCT_FIELDS = (
+    "name",
+    "sku",
+    "category",
+    "buying_price",
+    "mrp",
+    "selling_price",
+    "stock_quantity",
+    "low_stock_threshold",
+    "unit",
+    "barcode",
+    "is_active",
+)
+
+
+def _product_audit_snapshot(product: Product) -> dict:
+    return {
+        field: getattr(product, field)
+        for field in AUDITED_PRODUCT_FIELDS
+    }
+
+
+def _product_changed_fields(before: dict, product: Product) -> tuple[dict, dict]:
+    after = _product_audit_snapshot(product)
+    before_changed = {}
+    after_changed = {}
+
+    for field in AUDITED_PRODUCT_FIELDS:
+        if before.get(field) != after.get(field):
+            before_changed[field] = before.get(field)
+            after_changed[field] = after.get(field)
+
+    return before_changed, after_changed
 
 
 def create_product(
@@ -18,6 +55,8 @@ def create_product(
     db: Session,
     image_urls: list[str] | None = None,
 ):
+    ensure_can_create(current_user.shop_id, "products", db)
+
     existing = (
         db.query(Product)
         .filter(Product.shop_id == current_user.shop_id, Product.sku == payload.sku)
@@ -70,6 +109,17 @@ def create_product(
             )
         )
 
+    record_business_audit(
+        db,
+        shop_id=current_user.shop_id,
+        actor=current_user,
+        action=BusinessAuditAction.PRODUCT_CREATED,
+        entity_type="product",
+        entity_id=product.id,
+        summary=f"Product {product.sku} created",
+        after_data=_product_audit_snapshot(product),
+    )
+
     db.commit()
     db.refresh(product)
 
@@ -81,16 +131,40 @@ def create_product(
     )
 
 
+# Server-side sort options. Sorting used to happen in the browser over the
+# full product list, which only worked because the whole table was returned in
+# one response. With pagination the ordering has to be applied in SQL so that
+# page 1 really is the first page of the sorted result.
+_PRODUCT_SORTS = {
+    "date_desc": (Product.created_at.desc(),),
+    "date_asc": (Product.created_at.asc(),),
+    "name_asc": (Product.name.asc(),),
+    "name_desc": (Product.name.desc(),),
+    "stock_asc": (Product.stock_quantity.asc(),),
+    "stock_desc": (Product.stock_quantity.desc(),),
+}
+
+DEFAULT_PRODUCT_PAGE_SIZE = 50
+MAX_PRODUCT_PAGE_SIZE = 200
+
+
 def list_products(
     current_user: User,
     db: Session,
     search: str | None = None,
     category: str | None = None,
     stock_status: str | None = None,
+    sort_by: str = "date_desc",
+    page: int = 1,
+    page_size: int = DEFAULT_PRODUCT_PAGE_SIZE,
 ):
+    # selectinload rather than joinedload: images is a collection, so a JOIN
+    # multiplies the product row once per image and the driver ships all that
+    # duplication. selectinload fetches the images in one extra query keyed by
+    # product id, which keeps the payload proportional to the real data.
     query = (
         db.query(Product)
-        .options(joinedload(Product.images))
+        .options(selectinload(Product.images))
         .filter(Product.shop_id == current_user.shop_id)
     )
 
@@ -116,9 +190,47 @@ def list_products(
         query = query.filter(Product.stock_quantity == 0)
 
     total = query.count()
-    items = query.order_by(Product.created_at.desc()).all()
 
-    return {"items": items, "total": total}
+    page = max(page, 1)
+    page_size = max(min(page_size, MAX_PRODUCT_PAGE_SIZE), 1)
+
+    order_by = _PRODUCT_SORTS.get(sort_by, _PRODUCT_SORTS["date_desc"])
+
+    items = (
+        query.order_by(*order_by, Product.id.desc())  # id tiebreak = stable paging
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def list_product_categories(current_user: User, db: Session) -> list[str]:
+    """Distinct categories for this shop's products.
+
+    The products page previously fetched every product a second time purely to
+    build this list in the browser. One cheap DISTINCT query replaces that
+    full-table round trip.
+    """
+    rows = (
+        db.query(Product.category)
+        .filter(
+            Product.shop_id == current_user.shop_id,
+            Product.category.isnot(None),
+            Product.category != "",
+        )
+        .distinct()
+        .order_by(Product.category.asc())
+        .all()
+    )
+
+    return [row[0] for row in rows]
 
 
 def get_product(product_id: int, current_user: User, db: Session):
@@ -136,6 +248,22 @@ def get_product(product_id: int, current_user: User, db: Session):
     return product
 
 
+def _get_product_for_update(product_id: int, current_user: User, db: Session):
+    product = (
+        db.query(Product)
+        .options(joinedload(Product.images))
+        .filter(Product.id == product_id, Product.shop_id == current_user.shop_id)
+        .with_for_update()
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    return product
+
+
 def update_product(
     product_id: int,
     payload: ProductUpdate,
@@ -143,7 +271,8 @@ def update_product(
     db: Session,
     new_image_urls: list[str] | None = None,
 ):
-    product = get_product(product_id, current_user, db)
+    product = _get_product_for_update(product_id, current_user, db)
+    before_audit = _product_audit_snapshot(product)
 
     if payload.sku and payload.sku != product.sku:
         existing = (
@@ -189,6 +318,20 @@ def update_product(
 
         if not product.main_image_url and new_image_urls:
             product.main_image_url = new_image_urls[0]
+
+    before_changed, after_changed = _product_changed_fields(before_audit, product)
+    if before_changed:
+        record_business_audit(
+            db,
+            shop_id=current_user.shop_id,
+            actor=current_user,
+            action=BusinessAuditAction.PRODUCT_UPDATED,
+            entity_type="product",
+            entity_id=product.id,
+            summary=f"Product {product.sku} updated",
+            before_data=before_changed,
+            after_data=after_changed,
+        )
 
     db.commit()
 

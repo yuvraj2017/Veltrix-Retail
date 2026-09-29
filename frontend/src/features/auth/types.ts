@@ -35,18 +35,43 @@ export type LoginPayload = {
   password: string
 }
 
-export type RegisterResponse = {
-  message: string
-  shop: Shop
-  user: User
+export type ForgotPasswordPayload = {
+  email: string
 }
 
+export type ResetPasswordPayload = {
+  token: string
+  new_password: string
+}
+
+export type AuthMessageResponse = {
+  message: string
+}
+
+export type ResetTokenValidationResponse = {
+  valid: boolean
+  message: string
+}
+
+/** Registration confirmation. Carries no token by design: a new account
+ *  is `pending` and cannot authenticate until a super admin approves it. */
+export type RegisterResponse = {
+  user_id: number
+  email: string
+  full_name: string
+  role: string
+  status: string
+  shop_id: number
+  shop_name?: string | null
+  message: string
+}
 
 export type AuthUser = {
   user_id: number
   email: string
   full_name: string
   role: string
+  status: string
   shop_id: number
   shop_name?: string | null
   shop_logo_url?: string | null
@@ -59,12 +84,19 @@ export type LoginResponse = {
   email: string
   full_name: string
   role: string
+  status: string
   shop_id: number
   shop_name?: string | null
   shop_logo_url?: string | null
 }
 
 export type MeResponse = {
-  user: User
-  shop: Shop
+  user_id: number
+  email: string
+  full_name: string
+  role: string
+  status: string
+  shop_id: number
+  shop_name?: string | null
+  shop_logo_url?: string | null
 }

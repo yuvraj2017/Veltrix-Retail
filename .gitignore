@@ -1,5 +1,49 @@
-.env 
-backend/venv/ 
-frontend/node_modules/ 
-__pycache__/ 
-*.pyc 
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Python
+backend/venv/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / frontend builds
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+frontend/build/
+frontend/test-results/
+frontend/playwright-report/
+
+# Logs and temporary files
+logs/
+backend/logs/
+*.log
+*.tmp
+*.temp
+
+# Database dumps and local backups
+*.sql
+*.dump
+*.bak
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated uploads and documents
+uploads/**
+!uploads/.gitkeep
+!uploads/**/
+!uploads/**/.gitkeep
+backend/uploads/**
+!backend/uploads/.gitkeep
+!backend/uploads/**/
+!backend/uploads/**/.gitkeep
+*.pdf

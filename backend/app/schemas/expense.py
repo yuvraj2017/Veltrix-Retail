@@ -49,6 +49,8 @@ class ExpenseResponse(BaseModel):
 class ExpenseListResponse(BaseModel):
     items: list[ExpenseResponse]
     total: int
+    page: int = 1
+    page_size: int = 50
 
 
 class ExpenseCategoryBreakdownItem(BaseModel):

@@ -23,6 +23,16 @@ const getDetailMessage = (detail: unknown) => {
     }
   }
 
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    'message' in detail &&
+    typeof detail.message === 'string' &&
+    detail.message.trim()
+  ) {
+    return detail.message
+  }
+
   return ''
 }
 

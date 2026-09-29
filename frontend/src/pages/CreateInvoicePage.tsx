@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
 
 import CustomerSelector from '../components/billing/CustomerSelector'
 import InvoiceItemsTable from '../components/billing/InvoiceItemsTable'
 import InvoiceSummaryCard from '../components/billing/InvoiceSummaryCard'
+import { useToast } from '../components/ui/ToastProvider'
 import { billingApi } from '../features/billing/api'
 import { invoiceCreateSchema } from '../features/billing/schemas'
 import type {
@@ -82,6 +83,7 @@ function mapInvoiceItemToLocalItem(item: any): LocalInvoiceItem {
 
 export default function CreateInvoicePage() {
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const [searchParams] = useSearchParams()
 
   const editParam = searchParams.get('edit')
@@ -101,7 +103,6 @@ export default function CreateInvoicePage() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
 
   const [errorMessage, setErrorMessage] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [isLoadingInvoice, setIsLoadingInvoice] = useState(false)
 
@@ -238,13 +239,16 @@ export default function CreateInvoicePage() {
   const saveAndPreview = async () => {
     try {
       setErrorMessage('')
-      setSuccessMessage('')
 
       const payload = buildPayload()
       const parsed = invoiceCreateSchema.safeParse(payload)
 
       if (!parsed.success) {
-        setErrorMessage(parsed.error.issues[0]?.message || 'Please check invoice details')
+        showToast({
+          title: 'Please check invoice details',
+          message: parsed.error.issues[0]?.message || 'Please check invoice details',
+          variant: 'error',
+        })
         return
       }
 
@@ -259,13 +263,16 @@ export default function CreateInvoicePage() {
 
       navigate(`/billing/${invoice.id}/preview`)
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : isEditMode
-            ? 'Unable to update invoice'
-            : 'Unable to create invoice'
-      )
+      showToast({
+        title: isEditMode ? 'Unable to update invoice' : 'Unable to create invoice',
+        message:
+          error instanceof Error
+            ? error.message
+            : isEditMode
+              ? 'Unable to update invoice'
+              : 'Unable to create invoice',
+        variant: 'error',
+      })
     } finally {
       setIsSaving(false)
     }
@@ -282,11 +289,13 @@ export default function CreateInvoicePage() {
       })
     )
 
-    setSuccessMessage(
-      isEditMode
+    showToast({
+      title: 'Draft saved',
+      message: isEditMode
         ? 'Edited invoice draft saved locally in this browser.'
-        : 'Draft saved locally in this browser.'
-    )
+        : 'Draft saved locally in this browser.',
+      variant: 'success',
+    })
   }
 
   if (isLoadingInvoice) {
@@ -363,16 +372,6 @@ export default function CreateInvoicePage() {
                   {isEditMode ? 'Unable to update invoice' : 'Unable to create invoice'}
                 </p>
                 <p className="mt-1 text-sm">{errorMessage}</p>
-              </div>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="mb-6 flex items-start gap-3 rounded-[24px] border border-emerald-100 bg-emerald-50 p-5 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-              <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="font-black">Saved</p>
-                <p className="mt-1 text-sm">{successMessage}</p>
               </div>
             </div>
           )}

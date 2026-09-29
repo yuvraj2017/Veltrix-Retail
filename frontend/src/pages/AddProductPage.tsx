@@ -503,6 +503,8 @@ export default function AddProductPage() {
                           src={image.url}
                           alt={`Preview ${index + 1}`}
                           className="aspect-square w-full object-cover transition duration-300 group-hover:scale-105"
+                          loading="lazy"
+                          decoding="async"
                         />
                         {index === 0 && (
                           <span className="absolute left-2 top-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white shadow">

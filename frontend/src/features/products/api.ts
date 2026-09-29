@@ -9,8 +9,20 @@ export async function getProducts(params?: {
   search?: string
   category?: string
   stock_status?: string
+  sort_by?: string
+  page?: number
+  page_size?: number
 }) {
   const { data } = await api.get<ProductListResponse>('/api/v1/products', { params })
+  return data
+}
+
+/**
+ * Distinct categories for the current shop. Replaces the previous approach of
+ * fetching the entire product list a second time just to derive this in JS.
+ */
+export async function getProductCategories() {
+  const { data } = await api.get<string[]>('/api/v1/products/categories')
   return data
 }
 

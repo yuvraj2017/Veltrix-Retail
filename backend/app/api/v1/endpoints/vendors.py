@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.vendor import (
     MessageResponse,
@@ -40,7 +40,7 @@ router = APIRouter(prefix="/vendors", tags=["Vendors"])
 @router.get("", response_model=list[VendorResponse])
 def get_vendors(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return list_vendors(db, current_user)
 
@@ -49,7 +49,7 @@ def get_vendors(
 def add_vendor(
     payload: VendorCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return create_vendor(payload, db, current_user)
 
@@ -57,7 +57,7 @@ def add_vendor(
 @router.get("/stats", response_model=VendorStatsResponse)
 def vendor_stats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_vendor_stats(db, current_user)
 
@@ -66,7 +66,7 @@ def vendor_stats(
 def get_single_vendor(
     vendor_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_vendor(vendor_id, db, current_user)
 
@@ -76,7 +76,7 @@ def edit_vendor(
     vendor_id: int,
     payload: VendorUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return update_vendor(vendor_id, payload, db, current_user)
 
@@ -85,7 +85,7 @@ def edit_vendor(
 def remove_vendor(
     vendor_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return delete_vendor(vendor_id, db, current_user)
 
@@ -94,7 +94,7 @@ def remove_vendor(
 def vendor_summary(
     vendor_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_vendor_summary(vendor_id, db, current_user)
 
@@ -107,7 +107,7 @@ def get_bills_for_vendor(
     overdue_only: bool = Query(default=False),
     due_in_days: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return list_vendor_bills(
         vendor_id=vendor_id,
@@ -125,7 +125,7 @@ def add_bill_for_vendor(
     vendor_id: int,
     payload: VendorBillCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return create_vendor_bill(vendor_id, payload, db, current_user)
 
@@ -134,7 +134,7 @@ def add_bill_for_vendor(
 def get_single_bill(
     bill_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_vendor_bill(bill_id, db, current_user)
 
@@ -144,7 +144,7 @@ def edit_bill(
     bill_id: int,
     payload: VendorBillUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return update_vendor_bill(bill_id, payload, db, current_user)
 
@@ -153,7 +153,7 @@ def edit_bill(
 def get_bill_payments(
     bill_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return list_bill_payments(bill_id, db, current_user)
 
@@ -167,6 +167,6 @@ def add_payment_to_bill(
     bill_id: int,
     payload: VendorBillPaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return add_bill_payment(bill_id, payload, db, current_user)

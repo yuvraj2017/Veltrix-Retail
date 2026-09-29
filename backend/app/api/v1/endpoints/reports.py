@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.report import (
     CashflowReportResponse,
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 @router.get("/summary", response_model=ReportSummaryResponse)
 def get_reports_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_report_summary(db, current_user)
 
@@ -36,7 +36,7 @@ def get_reports_summary(
 def get_reports_sales_profit(
     period: ReportPeriod = Query(default="monthly"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_sales_profit_report(db, current_user, period=period)
 
@@ -45,7 +45,7 @@ def get_reports_sales_profit(
 def get_reports_cashflow(
     period: ReportPeriod = Query(default="monthly"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_cashflow_report(db, current_user, period=period)
 
@@ -54,7 +54,7 @@ def get_reports_cashflow(
 def get_reports_category_performance(
     period: ReportPeriod = Query(default="monthly"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_category_performance_report(db, current_user, period=period)
 
@@ -63,7 +63,7 @@ def get_reports_category_performance(
 def get_reports_customer_insights(
     period: ReportPeriod = Query(default="monthly"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_customer_insights_report(db, current_user, period=period)
 
@@ -72,6 +72,6 @@ def get_reports_customer_insights(
 def get_reports_payment_insights(
     period: ReportPeriod = Query(default="monthly"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return get_payment_insights_report(db, current_user, period=period)

@@ -1,22 +1,69 @@
+/**
+ * LoginPage — split layout: brand panel (lg and up) + the sign-in task.
+ *
+ * Responsive strategy
+ * -------------------
+ *   < 640   the card loses its chrome (border/shadow/padding) and the fields
+ *           run edge to edge, so a 360px phone spends none of its width on
+ *           decoration. A compact gradient brand band replaces the hero.
+ *   640+    the form becomes a real card on a tinted panel.
+ *   1024+   the hero panel appears alongside at 50/50 and the mobile brand
+ *           band and trust strip switch off.
+ *   1280+   wider gutters and a slightly larger measure.
+ *
+ * The form column is the product here, so it gets equal width, the calmer
+ * surface, and every affordance a returning user expects: real <label for>
+ * bindings, autocomplete hints so password managers fill correctly, a caps
+ * lock warning, errors announced to assistive tech, and one unambiguous
+ * primary action.
+ */
+
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Globe, LockKeyhole, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react'
 import { useState } from 'react'
-import { api } from '../lib/api'
-import { getApiErrorMessage } from '../lib/api-error'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
+
+import { BRAND, TRUST } from '../components/auth/authContent'
+import { BrandLogo } from '../components/auth/BrandLogo'
+import {
+  ALERT_CLASS,
+  CARD_ACCENT,
+  CARD_CLASS,
+  ERROR_TEXT,
+  FADE_RULE,
+  fieldClass,
+  ICON_CLASS,
+  LABEL_CLASS,
+  LINK_CLASS,
+  PRIMARY_BUTTON,
+  PRIMARY_SHEEN,
+} from '../components/auth/formStyles'
 import { LoginHero } from '../components/auth/LoginHero'
 import { useAuth } from '../context/AuthContext'
 import { loginSchema, type LoginFormValues } from '../features/auth/schemas'
-
+import { api } from '../lib/api'
+import { getApiErrorMessage } from '../lib/api-error'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
+
   const [apiError, setApiError] = useState('')
+  /** Bumped on every failure so the alert remounts and replays its shake. */
+  const [errorSeq, setErrorSeq] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-
+  const [capsLock, setCapsLock] = useState(false)
 
   const {
     register,
@@ -27,233 +74,292 @@ export default function LoginPage() {
     defaultValues: {
       email: '',
       password: '',
-      remember: true,
     },
   })
 
+  /**
+   * Held separately because the caps-lock hint needs its own `onBlur`, and a
+   * plain `onBlur={...}` after `{...register('password')}` would silently
+   * overwrite the one react-hook-form uses to track touched state.
+   */
+  const passwordField = register('password')
 
   const onSubmit = async (values: LoginFormValues) => {
     try {
       setApiError('')
       setIsSubmitting(true)
 
-
       const response = await api.post('/api/v1/auth/login', {
         email: values.email,
         password: values.password,
       })
 
-
       login(response.data)
       navigate('/dashboard')
-    } catch (error: any) {
-      console.error('login failed', error)
+    } catch (error) {
       setApiError(getApiErrorMessage(error, 'Login failed. Please try again.'))
+      setErrorSeq((seq) => seq + 1)
     } finally {
       setIsSubmitting(false)
     }
   }
 
-
   return (
-    <div className="min-h-screen bg-white lg:grid lg:grid-cols-[1.08fr_0.92fr]">
+    <div className="min-h-screen bg-white lg:grid lg:grid-cols-2">
       <LoginHero />
 
+      {/* ── Task column ───────────────────────────────────────────── */}
+      <main className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-[#fbfcff] px-4 py-8 sm:px-6 sm:py-10 lg:px-8 xl:px-14 2xl:px-20">
+        {/* barely-there wash so the white panel is not clinical */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse 70% 45% at 100% 0%, rgba(99,102,241,0.07) 0%, transparent 70%),' +
+              'radial-gradient(ellipse 60% 40% at 0% 100%, rgba(139,92,246,0.05) 0%, transparent 70%)',
+          }}
+        />
 
-      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#ffffff_0%,#f8faff_100%)] px-5 py-8 sm:px-8 lg:px-12">
-        <div className="w-full max-w-[520px]">
-          <div className="mb-6 sm:mb-8">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Secure Staff Access
-            </div>
+        <div className="relative mx-auto w-full max-w-[420px] sm:max-w-[456px] lg:max-w-[400px] xl:max-w-[440px]">
+          {/* ── Mobile brand band — stands in for the hidden hero ───── */}
+          <div
+            className="relative mb-6 overflow-hidden rounded-2xl px-4 py-3.5 shadow-[0_14px_34px_-16px_rgba(76,29,149,0.7)] sm:px-5 sm:py-4 lg:hidden"
+            style={{ background: 'linear-gradient(122deg, #4f46e5 0%, #5b21b6 58%, #2a1065 100%)' }}
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(ellipse 60% 90% at 92% 0%, rgba(255,255,255,0.16) 0%, transparent 70%)',
+              }}
+            />
 
-
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Sign in to {""}
-              <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-violet-700 bg-clip-text text-transparent">
-                Store Mitraa
-              </span>
-            </h1>
-
-
-            <p className="mt-3 max-w-md text-sm leading-7 text-slate-500 sm:text-base">
-              Access your retail dashboard, inventory controls, billing tools,
-              and store operations from one secure place.
-            </p>
-          </div>
-
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            <div className="space-y-2.5">
-              <label className="text-sm font-semibold text-slate-700">
-                Business Email
-              </label>
-
-
-              <div className="group relative">
-                <div className="pointer-events-none absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition group-focus-within:border-indigo-200 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-500">
-                  <Mail size={18} />
-                </div>
-
-
-                <input
-                  type="email"
-                  placeholder="you@shop.com"
-                  {...register('email')}
-                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fbff] py-4 pl-16 pr-4 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
-                />
+            {/* No logo tile in this band on purpose — the sign-in card below
+                carries the mark at every width, and two copies 24px apart
+                read as a mistake. The band keeps the name and tagline. */}
+            <div className="relative flex items-center gap-3">
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[15px] font-bold tracking-tight text-white">
+                  {BRAND.name}
+                </p>
+                <p className="truncate text-[11px] font-medium text-white/65">{BRAND.tagline}</p>
               </div>
 
-
-              {errors.email && (
-                <p className="text-xs text-red-500">{errors.email.message}</p>
-              )}
+              <span className="ml-auto hidden shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-400/15 px-2.5 py-1 text-[10px] font-semibold text-emerald-200 sm:inline-flex">
+                <span aria-hidden className="auth-pulse h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                Online
+              </span>
             </div>
+          </div>
 
+          {/* ══ LOGO PLACEHOLDER — the brand mark above the sign-in card ════
+              tone="bare" means no tile and no plate: the artwork sits straight
+              on the page background, so the logo's own silhouette reads rather
+              than a white box around it. `fill` lets any aspect ratio use the
+              box below without being squashed into a square.
 
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-slate-700">
+              The PNG/SVG file path is set by BRAND.logoSrc in
+              ../components/auth/authContent.ts — change it THERE, not here.
+
+              To resize, change h-20 w-48 below. It sits outside the card so
+              the card's own padding does not constrain it. */}
+          <BrandLogo tone="bare" fill className="mx-auto mb-7 h-20 w-48" />
+
+          {/* ── Sign-in card ────────────────────────────────────────── */}
+          <div
+            className={`${CARD_CLASS} max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent max-sm:p-0 max-sm:shadow-none`}
+          >
+            {/* Hairline accent, ties the card back to the brand gradient.
+                Back now that nothing straddles the card's top edge. */}
+            <div aria-hidden className={`${CARD_ACCENT} max-sm:hidden`} />
+
+            <header className="mb-7 text-center">
+              <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.03em] text-slate-900 sm:text-[30px] xl:text-[32px]">
+                Welcome back
+              </h1>
+              <p className="mx-auto mt-2 max-w-[34ch] text-sm leading-relaxed text-slate-500 sm:text-[15px]">
+                Sign in to pick up your store operations right where you left off.
+              </p>
+            </header>
+
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+              {/* Email */}
+              <div>
+                <label htmlFor="login-email" className={`mb-1.5 block ${LABEL_CLASS}`}>
+                  Business email
+                </label>
+
+                <div className="relative">
+                  <input
+                    id="login-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    autoFocus
+                    placeholder="you@shop.com"
+                    aria-invalid={Boolean(errors.email)}
+                    aria-describedby={errors.email ? 'login-email-error' : undefined}
+                    {...register('email')}
+                    className={fieldClass({ error: Boolean(errors.email), extra: 'pr-4' })}
+                  />
+                  <Mail size={17} className={ICON_CLASS} aria-hidden />
+                </div>
+
+                {errors.email && (
+                  <p id="login-email-error" className={ERROR_TEXT}>
+                    <AlertCircle size={13} className="shrink-0" aria-hidden />
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Password */}
+              <div>
+                {/* Just the label — the recovery link moved down to the options
+                    row, so both fields now open the same way. */}
+                <label htmlFor="login-password" className={`mb-1.5 block ${LABEL_CLASS}`}>
                   Password
                 </label>
 
+                <div className="relative">
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    aria-invalid={Boolean(errors.password)}
+                    aria-describedby={
+                      [
+                        errors.password ? 'login-password-error' : '',
+                        capsLock ? 'login-capslock' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                    {...passwordField}
+                    onKeyUp={(event) => setCapsLock(event.getModifierState('CapsLock'))}
+                    onBlur={(event) => {
+                      void passwordField.onBlur(event)
+                      setCapsLock(false)
+                    }}
+                    className={fieldClass({ error: Boolean(errors.password), extra: 'pr-12' })}
+                  />
+                  <LockKeyhole size={17} className={ICON_CLASS} aria-hidden />
 
-                <Link
-                  to="/forgot-password"
-                  className="text-sm font-semibold text-indigo-600 transition hover:text-indigo-700"
-                >
-                  Forgot Password?
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+
+                {errors.password && (
+                  <p id="login-password-error" className={ERROR_TEXT}>
+                    <AlertCircle size={13} className="shrink-0" aria-hidden />
+                    {errors.password.message}
+                  </p>
+                )}
+
+                {/* Caps Lock is the single most common cause of a "wrong
+                    password" that is not actually wrong. */}
+                {capsLock && !errors.password && (
+                  <p
+                    id="login-capslock"
+                    className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-600"
+                  >
+                    <AlertCircle size={13} className="shrink-0" aria-hidden />
+                    Caps Lock is on
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <Link to="/forgot-password" className={`text-[13px] ${LINK_CLASS}`}>
+                  Forgot password?
                 </Link>
               </div>
 
-
-              <div className="group relative">
-                <div className="pointer-events-none absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition group-focus-within:border-indigo-200 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-500">
-                  <LockKeyhole size={18} />
-                </div>
-
-
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter password"
-                  {...register('password')}
-                  className="w-full rounded-2xl border border-slate-200 bg-[#f8fbff] py-4 pl-16 pr-16 text-sm text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition hover:text-indigo-500 group-focus-within:border-indigo-200 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-500"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+              {/* Server error — role="alert" so it is announced on arrival */}
+              {apiError && (
+                <div
+                  key={errorSeq}
+                  role="alert"
+                  className={`auth-shake ${ALERT_CLASS}`}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-
-
-              {errors.password && (
-                <p className="text-xs text-red-500">{errors.password.message}</p>
+                  <AlertCircle size={16} className="mt-px shrink-0" aria-hidden />
+                  <span className="min-w-0 break-words">{apiError}</span>
+                </div>
               )}
-            </div>
 
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex items-center gap-3 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  {...register('remember')}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              {/* Primary action */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`${PRIMARY_BUTTON} mt-1`}
+              >
+                {/* sheen sweep on hover — transform only, no repaint */}
+                <span
+                  aria-hidden
+                  className={PRIMARY_SHEEN}
                 />
-                Keep me signed in
-              </label>
 
-
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-500">
-                Retail-grade security
-              </span>
-            </div>
-
-
-            {apiError && (
-              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                {apiError}
-              </div>
-            )}
-
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-500 via-violet-600 to-indigo-700 px-5 py-4 text-sm font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.28)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(79,70,229,0.34)] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              <span className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_34%)]" />
-              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-
-
-              <span className="relative flex items-center justify-center gap-2">
-                <span>{isSubmitting ? 'Signing in...' : 'Sign In to Dashboard'}</span>
-                {!isSubmitting && (
-                  <ArrowRight
-                    size={18}
-                    className="transition-transform duration-300 group-hover:translate-x-1"
-                  />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" aria-hidden />
+                    Signing you in…
+                  </>
+                ) : (
+                  <>
+                    Sign in
+                    <ArrowRight
+                      size={17}
+                      className="transition-transform duration-200 group-hover:translate-x-0.5"
+                      aria-hidden
+                    />
+                  </>
                 )}
-              </span>
-            </button>
-
-
-            <div className="relative py-1">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-[linear-gradient(180deg,#ffffff_0%,#f8faff_100%)] px-4 text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-
-            <div className="space-y-4">
-              <button
-                type="button"
-                disabled
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-500 transition hover:bg-indigo-50"
-              >
-                <Globe size={18} />
-                Google Coming Soon
               </button>
+            </form>
 
+            {/* ── Secondary path ────────────────────────────────────── */}
+            {/* A hairline that fades at both ends, so the divider stops short
+                of the card edge instead of cutting the card in two. */}
+            <div
+              aria-hidden
+              className={`mt-7 ${FADE_RULE}`}
+            />
 
-              <button
-                type="button"
-                disabled
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-500 transition hover:bg-indigo-50"
-              >
-                Enterprise SSO Coming Soon
-              </button>
-            </div>
-
-
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-center text-sm text-slate-500">
-              Don&apos;t have an account?{' '}
-              <Link
-                to="/register"
-                className="font-semibold text-indigo-600 transition hover:text-indigo-700"
-              >
-                Create one
+            <p className="pt-5 text-center text-sm text-slate-500">
+              New to {BRAND.name}?{' '}
+              <Link to="/register" className={LINK_CLASS}>
+                Create an account
               </Link>
-            </div>
-          </form>
-
-
-          <div className="mt-8 flex flex-col gap-2 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-            <span>Built for modern retail teams</span>
-            <span>Fast. Secure. Reliable.</span>
+            </p>
           </div>
+
+          {/* ── Mobile trust strip — the hero's numbers, without the hero ── */}
+          <dl className="mt-6 grid grid-cols-3 gap-2 rounded-2xl border border-slate-200/70 bg-white/70 px-3 py-3.5 lg:hidden">
+            {TRUST.map(({ value, short }) => (
+              <div key={short} className="min-w-0 text-center">
+                <dd className="text-base font-extrabold tracking-tight text-slate-900">{value}</dd>
+                <dt className="mt-0.5 truncate text-[10px] font-medium text-slate-500">{short}</dt>
+              </div>
+            ))}
+          </dl>
+
+          {/* One trust signal, not three. */}
+          <p className="mt-5 flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400 lg:mt-7">
+            <ShieldCheck size={13} className="shrink-0" aria-hidden />
+            Protected by encrypted sessions
+          </p>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

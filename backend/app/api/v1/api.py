@@ -11,6 +11,9 @@ from app.api.v1.endpoints.billing import router as billing_router
 from app.api.v1.endpoints.invoices import router as invoices_router
 from app.api.v1.endpoints.expenses import router as expenses_router
 from app.api.v1.endpoints.reports import router as reports_router
+from app.api.v1.endpoints.admin import router as admin_router
+from app.api.v1.endpoints.subscription import router as subscription_router
+from app.api.v1.endpoints.audit_logs import router as audit_logs_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -25,3 +28,6 @@ api_router.include_router(invoices_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(expenses_router)
 api_router.include_router(reports_router)
+api_router.include_router(admin_router)
+api_router.include_router(subscription_router)
+api_router.include_router(audit_logs_router)

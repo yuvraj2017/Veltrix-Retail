@@ -6,6 +6,8 @@ export async function getExpenses(params?: {
   search?: string
   category?: string
   payment_mode?: string
+  page?: number
+  page_size?: number
 }) {
   const { data } = await api.get<ExpenseListResponse>('/api/v1/expenses', { params })
   return data

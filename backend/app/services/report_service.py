@@ -236,13 +236,21 @@ def get_sales_profit_report(
     range_start, range_end = _period_bounds(period)
     points = [TrendPoint(label=bucket.label) for bucket in buckets]
 
+    # Aggregated per date in SQL rather than fetching one row per invoice.
+    # The bucketing below only needs a date and a total, so the wire carries at
+    # most one row per day in the period instead of the whole invoice table.
     invoice_rows = (
-        db.query(Invoice.invoice_date, Invoice.final_amount, Invoice.total_profit)
+        db.query(
+            Invoice.invoice_date,
+            func.coalesce(func.sum(Invoice.final_amount), 0).label("final_amount"),
+            func.coalesce(func.sum(Invoice.total_profit), 0).label("total_profit"),
+        )
         .filter(
             Invoice.shop_id == current_user.shop_id,
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
+        .group_by(Invoice.invoice_date)
         .all()
     )
 
@@ -280,22 +288,31 @@ def get_cashflow_report(
     points = [TrendPoint(label=bucket.label) for bucket in buckets]
 
     invoice_rows = (
-        db.query(Invoice.invoice_date, Invoice.paid_amount, Invoice.remaining_amount)
+        db.query(
+            Invoice.invoice_date,
+            func.coalesce(func.sum(Invoice.paid_amount), 0).label("paid_amount"),
+            func.coalesce(func.sum(Invoice.remaining_amount), 0).label("remaining_amount"),
+        )
         .filter(
             Invoice.shop_id == current_user.shop_id,
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
+        .group_by(Invoice.invoice_date)
         .all()
     )
 
     expense_rows = (
-        db.query(Expense.expense_date, Expense.amount)
+        db.query(
+            Expense.expense_date,
+            func.coalesce(func.sum(Expense.amount), 0).label("amount"),
+        )
         .filter(
             Expense.shop_id == current_user.shop_id,
             Expense.expense_date >= range_start,
             Expense.expense_date <= range_end,
         )
+        .group_by(Expense.expense_date)
         .all()
     )
 
@@ -406,13 +423,18 @@ def get_customer_insights_report(
     }
 
     invoice_rows = (
-        db.query(Invoice.customer_id, Invoice.invoice_date, Invoice.final_amount)
+        db.query(
+            Invoice.customer_id,
+            Invoice.invoice_date,
+            func.coalesce(func.sum(Invoice.final_amount), 0).label("final_amount"),
+        )
         .filter(
             Invoice.shop_id == current_user.shop_id,
             Invoice.customer_id.isnot(None),
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
+        .group_by(Invoice.customer_id, Invoice.invoice_date)
         .all()
     )
 
@@ -465,19 +487,28 @@ def get_payment_insights_report(
 ) -> PaymentInsightsReportResponse:
     range_start, range_end = _period_bounds(period)
 
+    # _payment_bucket() decides PAID / PARTIAL / PENDING / OVERDUE from three
+    # things only: the invoice date, the payment status, and whether any amount
+    # remains outstanding. All three are part of the GROUP BY key below, so
+    # every invoice in a group resolves to the same bucket and aggregating
+    # first cannot change the classification.
+    has_remaining = (Invoice.remaining_amount > 0).label("has_remaining")
+
     invoice_rows = (
         db.query(
             Invoice.invoice_date,
             Invoice.payment_status,
-            Invoice.final_amount,
-            Invoice.paid_amount,
-            Invoice.remaining_amount,
+            func.coalesce(func.sum(Invoice.final_amount), 0).label("final_amount"),
+            func.coalesce(func.sum(Invoice.paid_amount), 0).label("paid_amount"),
+            func.coalesce(func.sum(Invoice.remaining_amount), 0).label("remaining_amount"),
+            func.count(Invoice.id).label("invoice_count"),
         )
         .filter(
             Invoice.shop_id == current_user.shop_id,
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
+        .group_by(Invoice.invoice_date, Invoice.payment_status, has_remaining)
         .all()
     )
 
@@ -494,11 +525,11 @@ def get_payment_insights_report(
     }
     status_counts = {key: 0 for key in status_amounts}
 
-    for invoice_date, payment_status, final_amount, paid_amount, remaining_amount in invoice_rows:
-        billed = _to_decimal(final_amount)
-        paid = _to_decimal(paid_amount)
-        remaining = _to_decimal(remaining_amount)
-        bucket = _payment_bucket(invoice_date, payment_status, remaining)
+    for row in invoice_rows:
+        billed = _to_decimal(row.final_amount)
+        paid = _to_decimal(row.paid_amount)
+        remaining = _to_decimal(row.remaining_amount)
+        bucket = _payment_bucket(row.invoice_date, row.payment_status, remaining)
 
         billed_total += billed
         collected_amount += paid
@@ -507,7 +538,7 @@ def get_payment_insights_report(
             overdue_amount += remaining
 
         status_amounts[bucket] += billed
-        status_counts[bucket] += 1
+        status_counts[bucket] += row.invoice_count
 
     statuses = [
         PaymentStatusItem(

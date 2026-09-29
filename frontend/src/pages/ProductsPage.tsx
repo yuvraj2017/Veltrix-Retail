@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ProductStats } from '../components/products/ProductStats'
 import { ProductTable } from '../components/products/ProductTable'
 import { EditProductModal } from '../components/products/EditProductModal'
 import {
   deleteProduct,
+  getProductCategories,
   getProducts,
   getProductStats,
   updateProduct,
@@ -12,97 +14,80 @@ import {
 import type { Product, ProductStats as ProductStatsType } from '../features/products/types'
 import type { ProductFormValues } from '../features/products/schemas'
 
+const PAGE_SIZE = 50
+
+const emptyStats: ProductStatsType = {
+  total_items: 0,
+  out_of_stock: 0,
+  low_stock_count: 0,
+  inventory_value: '0',
+}
+
 export default function ProductsPage() {
   const navigate = useNavigate()
 
-  const [stats, setStats] = useState<ProductStatsType>({
-    total_items: 0,
-    out_of_stock: 0,
-    low_stock_count: 0,
-    inventory_value: '0',
-  })
+  const queryClient = useQueryClient()
 
-  const [products, setProducts] = useState<Product[]>([])
-  const [allProducts, setAllProducts] = useState<Product[]>([])
+  const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [category, setCategory] = useState('')
   const [stockStatus, setStockStatus] = useState('')
   const [sortBy, setSortBy] = useState('date_desc')
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [editLoading, setEditLoading] = useState(false)
 
-  const allCategories = useMemo(
-    () => Array.from(new Set(allProducts.map((p) => p.category).filter(Boolean))),
-    [allProducts]
-  )
+  // Debounce drives the query key, so typing does not spawn a cache entry per
+  // intermediate keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250)
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const sortedProducts = useMemo(() => {
-    const items = [...products]
+  // Any change to filters or sort order invalidates the current page number.
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, category, stockStatus, sortBy])
 
-    items.sort((a, b) => {
-      switch (sortBy) {
-        case 'date_asc':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        case 'date_desc':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        case 'name_asc':
-          return a.name.localeCompare(b.name)
-        case 'name_desc':
-          return b.name.localeCompare(a.name)
-        case 'stock_asc':
-          return a.stock_quantity - b.stock_quantity
-        case 'stock_desc':
-          return b.stock_quantity - a.stock_quantity
-        default:
-          return 0
-      }
-    })
+  // Categories come from their own endpoint now. Deriving them in the browser
+  // required downloading the whole product table a second time on every mount.
+  const categoriesQuery = useQuery({
+    queryKey: ['products', 'categories'],
+    queryFn: getProductCategories,
+  })
 
-    return items
-  }, [products, sortBy])
+  const statsQuery = useQuery({
+    queryKey: ['products', 'stats'],
+    queryFn: getProductStats,
+  })
 
-  const loadAllProducts = async () => {
-    try {
-      const data = await getProducts()
-      setAllProducts(data.items)
-    } catch (error) {
-      console.error('Failed to load all products', error)
-    }
-  }
-
-  const loadProducts = async () => {
-    try {
-      const data = await getProducts({
-        search: search || undefined,
+  // Sorting and paging are applied by the server. With paginated results,
+  // sorting only the current page in the browser would order the wrong rows.
+  const productsQuery = useQuery({
+    queryKey: ['products', 'list', debouncedSearch, category, stockStatus, sortBy, page],
+    queryFn: () =>
+      getProducts({
+        search: debouncedSearch || undefined,
         category: category || undefined,
         stock_status: stockStatus || undefined,
-      })
-      setProducts(data.items)
-    } catch (error) {
-      console.error('Failed to load products', error)
-    }
+        sort_by: sortBy,
+        page,
+        page_size: PAGE_SIZE,
+      }),
+  })
+
+  const products: Product[] = productsQuery.data?.items ?? []
+  const total = productsQuery.data?.total ?? 0
+  const allCategories: string[] = categoriesQuery.data ?? []
+  const stats: ProductStatsType = statsQuery.data ?? emptyStats
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // Mutations invalidate the whole 'products' key: list, stats, and categories
+  // can all change when a product is edited or removed.
+  const refreshProducts = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['products'] })
   }
-
-  const loadStats = async () => {
-    try {
-      const data = await getProductStats()
-      setStats(data)
-    } catch (error) {
-      console.error('Failed to load product stats', error)
-    }
-  }
-
-  useEffect(() => {
-    loadStats()
-    loadAllProducts()
-  }, [])
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      loadProducts()
-    }, 250)
-    return () => clearTimeout(t)
-  }, [search, category, stockStatus])
 
   const handleDelete = async (product: Product) => {
     const ok = window.confirm(`Delete ${product.name}?`)
@@ -110,9 +95,7 @@ export default function ProductsPage() {
 
     try {
       await deleteProduct(product.id)
-      await loadProducts()
-      await loadAllProducts()
-      await loadStats()
+      await refreshProducts()
     } catch (error) {
       console.error('Failed to delete product', error)
     }
@@ -145,9 +128,7 @@ export default function ProductsPage() {
       await updateProduct(selectedProduct.id, formData)
 
       setSelectedProduct(null)
-      await loadProducts()
-      await loadAllProducts()
-      await loadStats()
+      await refreshProducts()
     } catch (error) {
       console.error('Failed to update product', error)
     } finally {
@@ -180,7 +161,7 @@ export default function ProductsPage() {
         <div className="mt-6 sm:mt-8">
           <div className="overflow-x-auto rounded-xl">
             <ProductTable
-              products={sortedProducts}
+              products={products}
               allCategories={allCategories}
               search={search}
               onSearchChange={setSearch}
@@ -195,6 +176,48 @@ export default function ProductsPage() {
               onAdd={() => navigate('/products/new')}
             />
           </div>
+
+          {/* Pagination. Only rendered when the result set exceeds one page, so
+              shops with a small catalog see no extra chrome. */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex flex-col items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm dark:bg-slate-800 sm:flex-row">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Showing{' '}
+                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
+                </span>{' '}
+                of{' '}
+                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  {total}
+                </span>{' '}
+                products
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Previous
+                </button>
+
+                <span className="px-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  {page} / {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <EditProductModal

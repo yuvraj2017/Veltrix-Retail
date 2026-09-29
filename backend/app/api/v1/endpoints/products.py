@@ -1,12 +1,9 @@
-import os
-import shutil
-import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.product import (
     ProductCreate,
@@ -15,19 +12,22 @@ from app.schemas.product import (
     ProductStatsResponse,
     ProductUpdate,
 )
+from app.services.image_service import ImageProcessingError, save_optimized_image
 from app.services.product_service import (
+    DEFAULT_PRODUCT_PAGE_SIZE,
+    MAX_PRODUCT_PAGE_SIZE,
     create_product,
     delete_product,
     delete_product_image,
     get_product,
     get_product_stats,
+    list_product_categories,
     list_products,
     update_product,
 )
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
-UPLOAD_DIR = "uploads/products"
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 MAX_PRODUCT_IMAGES = 5
 
@@ -42,7 +42,6 @@ def save_uploaded_product_images(images: list[UploadFile] | None) -> list[str]:
             detail="Maximum 5 images allowed",
         )
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
     saved_urls: list[str] = []
 
     for image in images:
@@ -52,14 +51,15 @@ def save_uploaded_product_images(images: list[UploadFile] | None) -> list[str]:
                 detail="Only png, jpg, jpeg, and webp files are allowed",
             )
 
-        ext = os.path.splitext(image.filename or "")[1]
-        filename = f"{uuid.uuid4().hex}{ext}"
-        file_path = os.path.join(UPLOAD_DIR, filename)
+        try:
+            full_url, _thumbnail_url = save_optimized_image(image, "products")
+        except ImageProcessingError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-
-        saved_urls.append(f"/uploads/products/{filename}")
+        saved_urls.append(full_url)
 
     return saved_urls
 
@@ -80,7 +80,7 @@ def create_product_endpoint(
     is_active: bool = Form(True),
     main_image_url: str | None = Form(None),
     images: list[UploadFile] | None = File(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
     image_urls = save_uploaded_product_images(images)
@@ -109,15 +109,35 @@ def list_products_endpoint(
     search: str | None = Query(default=None),
     category: str | None = Query(default=None),
     stock_status: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    sort_by: str = Query(default="date_desc"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PRODUCT_PAGE_SIZE, ge=1, le=MAX_PRODUCT_PAGE_SIZE),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
-    return list_products(current_user, db, search, category, stock_status)
+    return list_products(
+        current_user,
+        db,
+        search=search,
+        category=category,
+        stock_status=stock_status,
+        sort_by=sort_by,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/categories", response_model=list[str])
+def list_product_categories_endpoint(
+    current_user: User = Depends(require_active_shop_access),
+    db: Session = Depends(get_db),
+):
+    return list_product_categories(current_user, db)
 
 
 @router.get("/stats", response_model=ProductStatsResponse)
 def product_stats_endpoint(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
     return get_product_stats(current_user, db)
@@ -126,7 +146,7 @@ def product_stats_endpoint(
 @router.get("/{product_id}", response_model=ProductResponse)
 def get_product_endpoint(
     product_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
     return get_product(product_id, current_user, db)
@@ -149,7 +169,7 @@ def update_product_endpoint(
     is_active: bool | None = Form(None),
     main_image_url: str | None = Form(None),
     images: list[UploadFile] | None = File(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
     image_urls = save_uploaded_product_images(images)
@@ -176,7 +196,7 @@ def update_product_endpoint(
 @router.delete("/{product_id}")
 def delete_product_endpoint(
     product_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
     return delete_product(product_id, current_user, db)
@@ -186,7 +206,7 @@ def delete_product_endpoint(
 @router.delete("/images/{image_id}")
 def delete_product_image_endpoint(
     image_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
     return delete_product_image(image_id, current_user, db)

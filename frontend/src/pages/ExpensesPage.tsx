@@ -51,6 +51,8 @@ const compactValueFormatter = new Intl.NumberFormat('en-IN', {
 const formatCurrency = (value: string | number) => currencyFormatter.format(Number(value || 0))
 const formatCompactValue = (value: string | number) => compactValueFormatter.format(Number(value || 0))
 const toNumber = (value: string | number) => Number(value || 0)
+const EXPENSES_PAGE_SIZE = 50
+
 const getRangeHeading = (range: ExpenseRange) => {
   if (range === 'week') return 'This Week'
   if (range === 'month') return 'This Month'
@@ -64,6 +66,8 @@ export default function ExpensesPage() {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [paymentModeFilter, setPaymentModeFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -109,7 +113,7 @@ export default function ExpensesPage() {
     []
   )
 
-  const loadExpensesList = async () => {
+  const loadExpensesList = async (targetPage = page) => {
     try {
       setLoading(true)
       setError('')
@@ -118,8 +122,11 @@ export default function ExpensesPage() {
         search: search.trim() || undefined,
         category: categoryFilter || undefined,
         payment_mode: paymentModeFilter || undefined,
+        page: targetPage,
+        page_size: EXPENSES_PAGE_SIZE,
       })
       setExpenses(data.items)
+      setTotal(data.total)
     } catch (loadError) {
       setError(getApiErrorMessage(loadError, 'Failed to load expenses.'))
     } finally {
@@ -144,16 +151,21 @@ export default function ExpensesPage() {
     void loadAnalytics()
   }, [range])
 
+  // Filter changes invalidate the current page number.
+  useEffect(() => {
+    setPage(1)
+  }, [range, search, categoryFilter, paymentModeFilter])
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      void loadExpensesList()
+      void loadExpensesList(page)
     }, search ? 250 : 0)
 
     return () => clearTimeout(timer)
-  }, [range, search, categoryFilter, paymentModeFilter])
+  }, [range, search, categoryFilter, paymentModeFilter, page])
 
   const refreshAll = async () => {
-    await Promise.all([loadExpensesList(), loadAnalytics()])
+    await Promise.all([loadExpensesList(page), loadAnalytics()])
   }
 
   const handleOpenCreate = () => {
@@ -569,6 +581,52 @@ export default function ExpensesPage() {
               onEdit={handleOpenEdit}
               onDelete={handleDeleteExpense}
             />
+
+            {/* Pagination appears only once the result set outgrows one page. */}
+            {total > EXPENSES_PAGE_SIZE && (
+              <div className="mt-4 flex flex-col items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm dark:bg-slate-800 sm:flex-row">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Showing{' '}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {(page - 1) * EXPENSES_PAGE_SIZE + 1}–
+                    {Math.min(page * EXPENSES_PAGE_SIZE, total)}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {total}
+                  </span>{' '}
+                  expenses
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Previous
+                  </button>
+
+                  <span className="px-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    {page} / {Math.ceil(total / EXPENSES_PAGE_SIZE)}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((p) =>
+                        Math.min(Math.ceil(total / EXPENSES_PAGE_SIZE), p + 1)
+                      )
+                    }
+                    disabled={page >= Math.ceil(total / EXPENSES_PAGE_SIZE)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </div>

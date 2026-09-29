@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -7,6 +7,19 @@ from app.core.database import Base
 
 class Invoice(Base):
     __tablename__ = "invoices"
+
+    # Composite indexes matching how invoices are actually queried. Every read
+    # path is scoped to a single shop, so shop_id is the leading column:
+    #   - (shop_id, invoice_date)    -> dashboard and report date-range sums
+    #   - (shop_id, created_at)      -> list_invoices ORDER BY created_at DESC
+    #                                   (btree scans backwards, so ASC serves DESC)
+    #   - (shop_id, payment_status)  -> paid/pending/partial counts
+    __table_args__ = (
+        Index("uq_invoices_shop_invoice_number", "shop_id", "invoice_number", unique=True),
+        Index("ix_invoices_shop_id_invoice_date", "shop_id", "invoice_date"),
+        Index("ix_invoices_shop_id_created_at", "shop_id", "created_at"),
+        Index("ix_invoices_shop_id_payment_status", "shop_id", "payment_status"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 

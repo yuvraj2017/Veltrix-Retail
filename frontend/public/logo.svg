@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none" role="img" aria-label="Brand logo">
+  <!--
+    PLACEHOLDER LOGO — replace this file with your own artwork.
+
+    Two ways to swap it:
+      1. Overwrite this file (keeps the path `/logo.svg`, no code change), or
+      2. drop your file next to it and point `BRAND.logoSrc` at it in
+         src/components/auth/authContent.ts — anything in public/ is served
+         from the site root, so public/acme.png -> '/acme.png'.
+
+    It now renders on WHITE tiles (a large plate above the sign-in card, and a
+    small tile on the purple hero panel), so a dark or coloured mark reads
+    best — which is why this placeholder is purple, not white. Any aspect
+    ratio is fine: the call sites use `fill`, so a wide wordmark like this one
+    is fitted rather than squashed into a square.
+  -->
+  <g fill="#6d28d9">
+    <path d="M34 18h30a26 26 0 0 1 0 52H48v18H34V18Zm14 13v26h16a13 13 0 0 0 0-26H48Z" />
+  </g>
+  <ellipse cx="52" cy="44" rx="46" ry="18" transform="rotate(-20 52 44)" stroke="#a855f7" stroke-width="5" fill="none" />
+  <text x="100" y="112" font-family="Poppins, Inter, system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="4" fill="#4c1d95" text-anchor="middle">PURPLE</text>
+</svg>

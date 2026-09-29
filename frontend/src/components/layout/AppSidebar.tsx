@@ -10,6 +10,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Wallet,
+  ShieldCheck,
+  UserCheck,
+  ScrollText,
+  CreditCard,
 } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
@@ -23,7 +27,18 @@ const navItems = [
   { name: 'Customers', to: '/customers', icon: Users },
   { name: 'Expenses', to: '/expenses', icon: Wallet },
   { name: 'Reports', to: '/reports', icon: BarChart3 },
+  { name: 'Subscription', to: '/subscription', icon: CreditCard },
   { name: 'Settings', to: '/settings', icon: Settings },
+]
+
+// Rendered only for super admins. A regular user sees no trace of this
+// section; if one navigated to /admin directly, AdminRoute redirects and
+// every underlying request would be refused server-side anyway.
+const adminNavItems = [
+  { name: 'Overview', to: '/admin', icon: ShieldCheck, end: true },
+  { name: 'Users', to: '/admin/users', icon: UserCheck, end: false },
+  { name: 'Plans', to: '/admin/plans', icon: CreditCard, end: false },
+  { name: 'Audit Logs', to: '/admin/audit-logs', icon: ScrollText, end: false },
 ]
 
 const API_BASE_URL =
@@ -49,7 +64,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
-  const { user, shop } = useAuth()
+  const { user, shop, isSuperAdmin } = useAuth()
 
   useEffect(() => {
     if (window.innerWidth < MOBILE_BREAKPOINT) onClose()
@@ -60,7 +75,11 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
     return () => window.removeEventListener('resize', handleResize)
   }, [onClose])
 
-  const shopName = shop?.name || user?.shop_name || 'Editorial Merchant'
+  // Platform administrators are not a shop, so they are labelled as what
+  // they are rather than borrowing a shop identity.
+  const shopName = isSuperAdmin
+    ? 'Platform Admin'
+    : shop?.name || user?.shop_name || 'Editorial Merchant'
   const shopLogoUrl =
     resolveImageUrl(shop?.logo_url) ||
     resolveImageUrl(user?.shop_logo_url) ||
@@ -83,6 +102,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
             src={shopLogoUrl}
             alt={shopName}
             className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 object-cover shadow-sm"
+            decoding="async"
           />
         ) : (
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm">
@@ -99,12 +119,18 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
             {shopName}
           </h2>
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 whitespace-nowrap">
-            Premium Retail Admin
+            {isSuperAdmin ? 'Platform Control' : 'Premium Retail Admin'}
           </p>
         </div>
       </div>
 
-      <nav className={`mt-4 space-y-2 ${isOpen ? 'px-5' : 'px-2'}`}>
+      {/* Shop navigation. A super admin owns no shop, so none of this
+          applies to them -- they get the Administration group below. */}
+      <nav
+        className={`mt-4 space-y-2 ${isOpen ? 'px-5' : 'px-2'} ${
+          isSuperAdmin ? 'hidden' : ''
+        }`}
+      >
         {navItems.map((item) => {
           const Icon = item.icon
           return (
@@ -135,13 +161,58 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         })}
       </nav>
 
+      {isSuperAdmin && (
+        <nav
+          aria-label="Administration"
+          className={`mt-6 space-y-2 ${isOpen ? 'px-5' : 'px-2'}`}
+        >
+          <p
+            className={`mb-1 overflow-hidden text-[10px] font-black uppercase tracking-[0.18em] whitespace-nowrap text-slate-400 transition-all duration-300 dark:text-slate-500 ${
+              isOpen ? 'max-w-[160px] px-4 opacity-100' : 'max-w-0 opacity-0'
+            }`}
+          >
+            Administration
+          </p>
+
+          {adminNavItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.name}
+                to={item.to}
+                end={item.end}
+                title={!isOpen ? item.name : undefined}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-2xl py-3 text-base font-medium transition-all duration-200 ${
+                    isOpen ? 'px-4' : 'justify-center px-0'
+                  } ${
+                    isActive
+                      ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`
+                }
+              >
+                <Icon size={20} className="shrink-0" />
+                <span
+                  className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${
+                    isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0'
+                  }`}
+                >
+                  {item.name}
+                </span>
+              </NavLink>
+            )
+          })}
+        </nav>
+      )}
+
       <div className={`mt-auto space-y-4 pb-6 ${isOpen ? 'px-5' : 'px-2'}`}>
         <Link
-          to="/billing"
+          to="/billing/new"
           title={!isOpen ? 'New Transaction' : undefined}
           className={`flex w-full items-center gap-2 rounded-2xl bg-indigo-600 dark:bg-indigo-700 py-4 text-base font-semibold text-white shadow-md transition hover:bg-indigo-700 dark:hover:bg-indigo-600 ${
             isOpen ? 'justify-center px-4' : 'justify-center px-0'
-          }`}
+          } ${isSuperAdmin ? 'hidden' : ''}`}
         >
           <PlusCircle size={20} className="shrink-0" />
           <span
@@ -165,6 +236,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
               src={shopLogoUrl}
               alt={shopName}
               className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-600 object-cover transition duration-300 group-hover:scale-105"
+              decoding="async"
             />
           ) : (
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900 text-sm font-bold text-emerald-700 dark:text-emerald-300 transition duration-300 group-hover:scale-105">
@@ -189,5 +261,4 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
     </aside>
   )
 }
-
 
