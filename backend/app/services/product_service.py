@@ -11,6 +11,7 @@ from app.schemas.product import ProductCreate, ProductStatsResponse, ProductUpda
 from app.models.business_audit_log import BusinessAuditAction
 from app.services.business_audit_service import record_business_audit
 from app.services.entitlement_service import ensure_can_create
+from app.services.stock_service import record_opening_balance
 
 MAX_PRODUCT_IMAGES = 5
 
@@ -90,7 +91,7 @@ def create_product(
         selling_price=payload.selling_price,
         hsn_sac=payload.hsn_sac.strip() if payload.hsn_sac else None,
         gst_rate=payload.gst_rate,
-        stock_quantity=payload.stock_quantity,
+        stock_quantity=0,
         low_stock_threshold=payload.low_stock_threshold,
         unit=payload.unit,
         barcode=payload.barcode,
@@ -100,6 +101,14 @@ def create_product(
 
     db.add(product)
     db.flush()
+
+    record_opening_balance(
+        db,
+        product=product,
+        shop_id=current_user.shop_id,
+        quantity=payload.stock_quantity,
+        actor=current_user,
+    )
 
     now = datetime.now(timezone.utc)
     for index, image_url in enumerate(image_urls):
@@ -295,6 +304,15 @@ def update_product(
             )
 
     update_data = payload.model_dump(exclude_unset=True)
+    requested_stock = update_data.pop("stock_quantity", None)
+    if requested_stock is not None and requested_stock != product.stock_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Stock quantity is managed by inventory transactions "
+                "and cannot be changed from Edit Product."
+            ),
+        )
     if update_data.get("gst_rate") is None:
         update_data.pop("gst_rate", None)
     for field, value in update_data.items():
@@ -352,10 +370,26 @@ def update_product(
 
 
 def delete_product(product_id: int, current_user: User, db: Session):
-    product = get_product(product_id, current_user, db)
-    db.delete(product)
+    product = _get_product_for_update(product_id, current_user, db)
+    if not product.is_active:
+        return {"message": "Product already inactive"}
+
+    before_audit = _product_audit_snapshot(product)
+    product.is_active = False
+    before_changed, after_changed = _product_changed_fields(before_audit, product)
+    record_business_audit(
+        db,
+        shop_id=current_user.shop_id,
+        actor=current_user,
+        action=BusinessAuditAction.PRODUCT_UPDATED,
+        entity_type="product",
+        entity_id=product.id,
+        summary=f"Product {product.sku} deactivated",
+        before_data=before_changed,
+        after_data=after_changed,
+    )
     db.commit()
-    return {"message": "Product deleted successfully"}
+    return {"message": "Product deactivated successfully"}
 
 
 def get_product_stats(current_user: User, db: Session):

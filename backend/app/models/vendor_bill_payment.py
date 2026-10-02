@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -7,10 +7,16 @@ from app.core.database import Base
 
 class VendorBillPayment(Base):
     __tablename__ = "vendor_bill_payments"
+    __table_args__ = (
+        UniqueConstraint(
+            "shop_id", "vendor_bill_id", "client_request_id",
+            name="uq_vendor_bill_payments_request_scope",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
-    vendor_bill_id = Column(Integer, ForeignKey("vendor_bills.id", ondelete="CASCADE"), nullable=False, index=True)
+    vendor_bill_id = Column(Integer, ForeignKey("vendor_bills.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     payment_date = Column(Date, nullable=False)
     amount = Column(Numeric(12, 2), nullable=False, default=0)
@@ -18,6 +24,8 @@ class VendorBillPayment(Base):
     payment_mode = Column(String(50), nullable=True)
     reference_number = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
+    client_request_id = Column(String(100), nullable=True)
+    request_fingerprint = Column(String(64), nullable=True)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

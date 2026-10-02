@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.schemas.customer import CustomerResponse
 
@@ -194,6 +194,45 @@ class InvoicePaymentResponse(BaseModel):
 class InvoiceReturnItemCreate(BaseModel):
     invoice_item_id: int
     quantity: Decimal = Field(..., gt=0)
+    restocked_quantity: Optional[Decimal] = Field(default=None, ge=0)
+    disposition: str = Field(default="restock")
+    disposition_notes: Optional[str] = None
+
+    @field_validator("disposition")
+    @classmethod
+    def validate_disposition(cls, value):
+        allowed = {"restock", "damaged", "defective", "other_non_restock"}
+        if value not in allowed:
+            raise ValueError(
+                "disposition must be restock, damaged, defective, or other_non_restock"
+            )
+        return value
+
+    @field_validator("disposition_notes", mode="before")
+    @classmethod
+    def strip_disposition_notes(cls, value):
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @model_validator(mode="after")
+    def validate_disposition_quantities(self):
+        if self.quantity != self.quantity.to_integral_value():
+            raise ValueError("return quantity must be a whole number")
+
+        if self.restocked_quantity is None:
+            self.restocked_quantity = self.quantity
+        if self.restocked_quantity != self.restocked_quantity.to_integral_value():
+            raise ValueError("restocked_quantity must be a whole number")
+        if self.restocked_quantity > self.quantity:
+            raise ValueError("restocked_quantity cannot exceed returned quantity")
+
+        has_non_restocked = self.restocked_quantity < self.quantity
+        if has_non_restocked and self.disposition == "restock":
+            raise ValueError("a non-restock disposition is required for non-restocked quantity")
+        if not has_non_restocked and self.disposition != "restock":
+            raise ValueError("disposition must be restock when the full quantity is restocked")
+        return self
 
 
 class InvoiceReturnCreate(BaseModel):
@@ -276,6 +315,10 @@ class InvoiceReturnItemResponse(BaseModel):
     product_name_snapshot: str
     hsn_sac_snapshot: Optional[str] = None
     quantity: Decimal
+    restocked_quantity: int
+    non_restocked_quantity: int
+    disposition: str
+    disposition_notes: Optional[str] = None
     unit_taxable_value: Decimal
     gst_rate: Decimal
     cgst_rate: Decimal

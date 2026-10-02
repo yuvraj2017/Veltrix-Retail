@@ -90,14 +90,14 @@ export default function ProductsPage() {
   }
 
   const handleDelete = async (product: Product) => {
-    const ok = window.confirm(`Delete ${product.name}?`)
+    const ok = window.confirm(`Deactivate ${product.name}? Historical inventory records will be preserved.`)
     if (!ok) return
 
     try {
       await deleteProduct(product.id)
       await refreshProducts()
     } catch (error) {
-      console.error('Failed to delete product', error)
+      console.error('Failed to deactivate product', error)
     }
   }
 
@@ -116,7 +116,6 @@ export default function ProductsPage() {
       formData.append('selling_price', String(values.selling_price))
       formData.append('hsn_sac', values.hsn_sac || '')
       formData.append('gst_rate', String(values.gst_rate || 0))
-      formData.append('stock_quantity', String(values.stock_quantity))
       formData.append('low_stock_threshold', String(values.low_stock_threshold))
       formData.append('unit', values.unit)
       formData.append('barcode', values.barcode || '')
@@ -226,6 +225,7 @@ export default function ProductsPage() {
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
           onSubmit={handleEditSubmit}
+          onStockChanged={refreshProducts}
           loading={editLoading}
         />
       </div>

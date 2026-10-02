@@ -130,6 +130,7 @@ class VendorBillResponse(BaseModel):
 
 
 class VendorBillPaymentCreate(BaseModel):
+    client_request_id: str = Field(..., min_length=8, max_length=100)
     payment_date: date
     amount: Decimal = Field(..., gt=0)
     payment_mode: Optional[str] = Field(default=None, max_length=50)
@@ -146,8 +147,23 @@ class VendorBillPaymentResponse(BaseModel):
     payment_mode: Optional[str] = None
     reference_number: Optional[str] = None
     notes: Optional[str] = None
+    client_request_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VendorCreditResponse(BaseModel):
+    id: int
+    shop_id: int
+    vendor_id: int
+    purchase_return_id: int
+    vendor_bill_id: Optional[int] = None
+    amount: Decimal
+    applied_amount: Decimal
+    status: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 

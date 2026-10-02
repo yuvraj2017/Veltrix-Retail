@@ -2,6 +2,8 @@ import { api } from '../../lib/api'
 import type {
   Product,
   ProductListResponse,
+  StockMovementList,
+  StockAdjustmentResult,
   ProductStats,
 } from './types'
 
@@ -59,7 +61,46 @@ export async function deleteProduct(productId: number) {
   return data
 }
 
+export async function getProductStockMovements(productId: number, page = 1, pageSize = 20) {
+  const { data } = await api.get<StockMovementList>(
+    `/api/v1/inventory/products/${productId}/movements`,
+    { params: { page, page_size: pageSize } },
+  )
+  return data
+}
 
+export async function createStockAdjustment(
+  productId: number,
+  payload: {
+    client_request_id: string
+    direction: 'in' | 'out'
+    quantity: number
+    reason: string
+    notes?: string | null
+  },
+) {
+  const { data } = await api.post<StockAdjustmentResult>(
+    `/api/v1/inventory/products/${productId}/adjustments`,
+    payload,
+  )
+  return data
+}
+
+export async function recordPhysicalStockCount(
+  productId: number,
+  payload: {
+    client_request_id: string
+    counted_quantity: number
+    reason: string
+    notes?: string | null
+  },
+) {
+  const { data } = await api.post<StockAdjustmentResult>(
+    `/api/v1/inventory/products/${productId}/physical-count`,
+    payload,
+  )
+  return data
+}
 
 export async function deleteProductImage(imageId: number) {
   const { data } = await api.delete(`/api/v1/products/images/${imageId}`)

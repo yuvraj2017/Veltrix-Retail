@@ -9,7 +9,8 @@ import type {
   VendorCreatePayload,
   VendorSummary,
   VendorUpdatePayload,
-  VendorStatsResponse
+  VendorStatsResponse,
+  VendorCredit,
 } from "./types";
 
 const API_BASE_URL =
@@ -95,6 +96,14 @@ export const vendorsApi = {
     );
 
     return handleResponse<VendorSummary>(response);
+  },
+
+  getVendorCredits: async (vendorId: number): Promise<VendorCredit[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/vendors/${vendorId}/credits`, {
+      method: "GET",
+      headers: buildHeaders(),
+    });
+    return handleResponse<VendorCredit[]>(response);
   },
 
   getVendorBills: async (

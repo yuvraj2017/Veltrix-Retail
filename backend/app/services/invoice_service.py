@@ -25,6 +25,7 @@ from app.models.invoice_sequence import InvoiceSequence
 from app.models.product import Product
 from app.models.product_sales_analytics import ProductSalesAnalytics
 from app.models.shop import Shop
+from app.models.stock_movement import StockMovementType
 from app.models.user import User
 from app.schemas.invoice import (
     InvoiceCancelPayload,
@@ -40,6 +41,7 @@ from app.services.business_audit_service import record_business_audit
 from app.services.customer_service import create_or_update_customer_from_invoice
 from app.services.entitlement_service import ensure_can_create
 from app.services.gst_service import GstLineInput, calculate_gst_invoice, resolve_gst_state_code
+from app.services.stock_service import apply_stock_movement
 
 
 FINALIZED_INVOICE_STATUS = "saved"
@@ -704,19 +706,53 @@ def _get_shop(db: Session, shop_id: int) -> Shop:
     return shop
 
 
-def _set_product_stock(product: Product, new_stock: Decimal):
-    if new_stock < Decimal("0.00"):
+def _stock_quantity_int(quantity: Decimal) -> int:
+    decimal_quantity = _to_decimal(quantity)
+    if decimal_quantity != decimal_quantity.to_integral_value():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient stock for {product.name}. Available: {_get_product_stock(product)}",
+            detail="Fractional stock quantities are not supported.",
         )
+    return int(decimal_quantity)
 
-    current_type_value = getattr(product, "stock_quantity", None)
 
-    if isinstance(current_type_value, int):
-        product.stock_quantity = int(new_stock)
-    else:
-        product.stock_quantity = new_stock
+def _convert_draft_reservation_to_sale(
+    db: Session,
+    *,
+    invoice: Invoice,
+    quantities_by_product: dict[int, Decimal],
+    products_by_id: dict[int, Product],
+    current_user: User,
+) -> None:
+    for product_id in sorted(quantities_by_product):
+        quantity = _stock_quantity_int(quantities_by_product[product_id])
+        if quantity <= 0:
+            continue
+        product = products_by_id[product_id]
+        apply_stock_movement(
+            db,
+            product=product,
+            shop_id=current_user.shop_id,
+            quantity_delta=quantity,
+            movement_type=StockMovementType.DRAFT_RELEASE,
+            reference_type="invoice",
+            reference_id=invoice.id,
+            reason="Draft reservation finalized",
+            client_request_id=f"draft-finalize-release-invoice-{invoice.id}-product-{product_id}",
+            actor=current_user,
+        )
+        apply_stock_movement(
+            db,
+            product=product,
+            shop_id=current_user.shop_id,
+            quantity_delta=-quantity,
+            movement_type=StockMovementType.SALE,
+            reference_type="invoice",
+            reference_id=invoice.id,
+            reason="Finalized invoice sale",
+            client_request_id=f"sale-invoice-{invoice.id}-product-{product_id}",
+            actor=current_user,
+        )
 
 
 def _validate_stock_quantity(product: Product, requested_quantity: Decimal):
@@ -1349,6 +1385,12 @@ def get_invoice_stats(db: Session, current_user: User):
 def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
     ensure_can_create(current_user.shop_id, "orders.monthly", db)
 
+    if payload.invoice_status not in {EDITABLE_INVOICE_STATUS, FINALIZED_INVOICE_STATUS}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Invoices can only be created as draft or finalized.",
+        )
+
     invoice_date_value = payload.invoice_date or date.today()
     shop = _get_shop(db, current_user.shop_id)
     client_request_id = _normalize_client_request_id(payload.client_request_id)
@@ -1611,10 +1653,31 @@ def create_invoice(payload: InvoiceCreate, db: Session, current_user: User):
 
         db.add(analytics)
 
+    stock_movement_type = (
+        StockMovementType.DRAFT_RESERVE
+        if payload.invoice_status == EDITABLE_INVOICE_STATUS
+        else StockMovementType.SALE
+    )
     for product_id, requested_quantity in requested_by_product.items():
         product = products_by_id[product_id]
-        new_stock = _get_product_stock(product) - requested_quantity
-        _set_product_stock(product, new_stock)
+        quantity = _stock_quantity_int(requested_quantity)
+        movement_label = "draft-reserve" if stock_movement_type == StockMovementType.DRAFT_RESERVE else "sale"
+        apply_stock_movement(
+            db,
+            product=product,
+            shop_id=current_user.shop_id,
+            quantity_delta=-quantity,
+            movement_type=stock_movement_type,
+            reference_type="invoice",
+            reference_id=invoice.id,
+            reason=(
+                "Inventory reserved for draft invoice"
+                if stock_movement_type == StockMovementType.DRAFT_RESERVE
+                else "Finalized invoice sale"
+            ),
+            client_request_id=f"{movement_label}-invoice-{invoice.id}-product-{product_id}",
+            actor=current_user,
+        )
 
     customer.total_orders = int(customer.total_orders or 0) + 1
     customer.total_spent = _money(
@@ -1710,6 +1773,7 @@ def update_invoice(
     data = payload.model_dump(exclude_unset=True)
     before_audit = _invoice_audit_snapshot(invoice)
     shop = _get_shop(db, current_user.shop_id)
+    was_draft = invoice.invoice_status == EDITABLE_INVOICE_STATUS
 
     is_full_edit = bool(
         data.get("customer") is not None
@@ -1875,6 +1939,49 @@ def update_invoice(
             payments=existing_payments,
         )
 
+        target_invoice_status = payload.invoice_status or invoice.invoice_status
+        all_stock_product_ids = sorted(
+            set(old_quantities_by_product) | set(new_quantities_by_product)
+        )
+        for product_id in all_stock_product_ids:
+            product = products_by_id.get(product_id)
+            if not product:
+                continue
+            old_quantity = old_quantities_by_product.get(product_id, Decimal("0.00"))
+            new_quantity = new_quantities_by_product.get(product_id, Decimal("0.00"))
+            net_stock_change = new_quantity - old_quantity
+            if net_stock_change == Decimal("0.00"):
+                continue
+            is_reserve = net_stock_change > Decimal("0.00")
+            apply_stock_movement(
+                db,
+                product=product,
+                shop_id=current_user.shop_id,
+                quantity_delta=-_stock_quantity_int(net_stock_change),
+                movement_type=(
+                    StockMovementType.DRAFT_RESERVE
+                    if is_reserve
+                    else StockMovementType.DRAFT_RELEASE
+                ),
+                reference_type="invoice",
+                reference_id=invoice.id,
+                reason=(
+                    "Draft quantity increased"
+                    if is_reserve
+                    else "Draft quantity decreased"
+                ),
+                actor=current_user,
+            )
+
+        if was_draft and target_invoice_status == FINALIZED_INVOICE_STATUS:
+            _convert_draft_reservation_to_sale(
+                db,
+                invoice=invoice,
+                quantities_by_product=new_quantities_by_product,
+                products_by_id=products_by_id,
+                current_user=current_user,
+            )
+
         # Remove old child rows only after all stock validation has succeeded.
         db.query(ProductSalesAnalytics).filter(
             ProductSalesAnalytics.invoice_id == invoice.id
@@ -1923,7 +2030,7 @@ def update_invoice(
 
         invoice.payment_status = payment_summary["payment_status"]
         invoice.payment_mode = payment_summary["payment_mode"]
-        invoice.invoice_status = payload.invoice_status or invoice.invoice_status
+        invoice.invoice_status = target_invoice_status
         if invoice.invoice_status == FINALIZED_INVOICE_STATUS and invoice.finalized_at is None:
             invoice.finalized_at = _utcnow_naive()
         invoice.notes = payload.notes
@@ -1986,19 +2093,6 @@ def update_invoice(
                 payment_status=invoice.payment_status,
             )
             db.add(analytics)
-
-        all_stock_product_ids = sorted(
-            set(old_quantities_by_product) | set(new_quantities_by_product)
-        )
-        for product_id in all_stock_product_ids:
-            product = products_by_id.get(product_id)
-            if not product:
-                continue
-            old_quantity = old_quantities_by_product.get(product_id, Decimal("0.00"))
-            new_quantity = new_quantities_by_product.get(product_id, Decimal("0.00"))
-            net_stock_change = new_quantity - old_quantity
-            adjusted_stock = _get_product_stock(product) - net_stock_change
-            _set_product_stock(product, adjusted_stock)
 
         _adjust_customer_totals_after_invoice_edit(
             db=db,
@@ -2113,6 +2207,23 @@ def update_invoice(
         invoice.payment_mode = data["payment_mode"]
 
     if "invoice_status" in data and data["invoice_status"] is not None:
+        if was_draft and data["invoice_status"] == FINALIZED_INVOICE_STATUS:
+            quantities_by_product: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+            for item in invoice.items:
+                if item.product_id:
+                    quantities_by_product[int(item.product_id)] += _to_decimal(item.quantity)
+            products_by_id = _lock_products_for_invoice(
+                db,
+                current_user.shop_id,
+                list(quantities_by_product),
+            )
+            _convert_draft_reservation_to_sale(
+                db,
+                invoice=invoice,
+                quantities_by_product=dict(quantities_by_product),
+                products_by_id=products_by_id,
+                current_user=current_user,
+            )
         invoice.invoice_status = data["invoice_status"]
         if invoice.invoice_status == FINALIZED_INVOICE_STATUS and invoice.finalized_at is None:
             invoice.finalized_at = _utcnow_naive()
@@ -2173,11 +2284,35 @@ def _lock_return_products(
     return {product.id: product for product in products}
 
 
-def _normalize_return_items(payload: InvoiceReturnCreate) -> dict[int, Decimal]:
-    quantities: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+def _normalize_return_items(payload: InvoiceReturnCreate) -> dict[int, dict]:
+    normalized: dict[int, dict] = {}
     for item in payload.items:
-        quantities[int(item.invoice_item_id)] += _to_decimal(item.quantity)
-    return dict(quantities)
+        item_id = int(item.invoice_item_id)
+        quantity = _to_decimal(item.quantity)
+        restocked_quantity = _to_decimal(item.restocked_quantity)
+        non_restocked_quantity = quantity - restocked_quantity
+        existing = normalized.get(item_id)
+        if existing and (
+            existing["disposition"] != item.disposition
+            or existing["disposition_notes"] != item.disposition_notes
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate return lines must use the same disposition and notes.",
+            )
+        if not existing:
+            existing = {
+                "quantity": Decimal("0.00"),
+                "restocked_quantity": Decimal("0.00"),
+                "non_restocked_quantity": Decimal("0.00"),
+                "disposition": item.disposition,
+                "disposition_notes": item.disposition_notes,
+            }
+            normalized[item_id] = existing
+        existing["quantity"] += quantity
+        existing["restocked_quantity"] += restocked_quantity
+        existing["non_restocked_quantity"] += non_restocked_quantity
+    return normalized
 
 
 def _calculate_return_item_amounts(invoice_item: InvoiceItem, quantity: Decimal) -> dict:
@@ -2219,6 +2354,8 @@ def _build_full_return_payload(invoice: Invoice, *, reason: str, notes: str | No
         {
             "invoice_item_id": item.id,
             "quantity": remaining.get(item.id, Decimal("0.00")),
+            "restocked_quantity": remaining.get(item.id, Decimal("0.00")),
+            "disposition": "restock",
         }
         for item in invoice.items
         if remaining.get(item.id, Decimal("0.00")) > Decimal("0.00")
@@ -2310,7 +2447,8 @@ def create_invoice_return(
     invoice_items_by_id = {item.id: item for item in invoice.items}
     remaining_by_item = _remaining_returnable_by_item(db, invoice)
 
-    for item_id, requested_quantity in requested_by_item.items():
+    for item_id, requested in requested_by_item.items():
+        requested_quantity = requested["quantity"]
         invoice_item = invoice_items_by_id.get(item_id)
         if not invoice_item or invoice_item.shop_id != current_user.shop_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice item not found")
@@ -2326,11 +2464,17 @@ def create_invoice_return(
                 ),
             )
 
-    product_ids = {
-        int(invoice_items_by_id[item_id].product_id)
-        for item_id in requested_by_item
-        if invoice_items_by_id[item_id].product_id
-    }
+    product_ids: set[int] = set()
+    for item_id, requested in requested_by_item.items():
+        if requested["restocked_quantity"] <= Decimal("0.00"):
+            continue
+        product_id = invoice_items_by_id[item_id].product_id
+        if not product_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This returned item is no longer linked to a product and cannot be restocked.",
+            )
+        product_ids.add(int(product_id))
     products_by_id = _lock_return_products(db, shop_id=current_user.shop_id, product_ids=product_ids)
 
     totals = defaultdict(lambda: Decimal("0.00"))
@@ -2362,7 +2506,9 @@ def create_invoice_return(
     db.add(return_record)
     db.flush()
 
-    for item_id, requested_quantity in requested_by_item.items():
+    for item_id, requested in requested_by_item.items():
+        requested_quantity = requested["quantity"]
+        restocked_quantity = requested["restocked_quantity"]
         invoice_item = invoice_items_by_id[item_id]
         amounts = _calculate_return_item_amounts(invoice_item, requested_quantity)
         totals["subtotal_amount"] += amounts["subtotal_amount"]
@@ -2384,6 +2530,10 @@ def create_invoice_return(
             product_name_snapshot=invoice_item.product_name_snapshot,
             hsn_sac_snapshot=invoice_item.hsn_sac_snapshot,
             quantity=requested_quantity,
+            restocked_quantity=_stock_quantity_int(restocked_quantity),
+            non_restocked_quantity=_stock_quantity_int(requested["non_restocked_quantity"]),
+            disposition=requested["disposition"],
+            disposition_notes=requested["disposition_notes"],
             unit_taxable_value=amounts["unit_taxable_value"],
             gst_rate=invoice_item.gst_rate,
             cgst_rate=invoice_item.cgst_rate,
@@ -2399,12 +2549,30 @@ def create_invoice_return(
             total_profit=amounts["total_profit"],
         )
         db.add(return_item)
+        db.flush()
 
-        if invoice_item.product_id:
+        if restocked_quantity > Decimal("0.00") and invoice_item.product_id:
             product = products_by_id.get(int(invoice_item.product_id))
-            if product:
-                _validate_stock_quantity(product, requested_quantity)
-                _set_product_stock(product, _get_product_stock(product) + requested_quantity)
+            if not product:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="The product is unavailable and cannot be restocked.",
+                )
+            _validate_stock_quantity(product, restocked_quantity)
+            apply_stock_movement(
+                db,
+                product=product,
+                shop_id=current_user.shop_id,
+                quantity_delta=_stock_quantity_int(restocked_quantity),
+                movement_type=StockMovementType.SALE_RETURN,
+                reference_type="invoice_return",
+                reference_id=return_record.id,
+                reference_line_id=return_item.id,
+                reason=requested["disposition"],
+                notes=requested["disposition_notes"],
+                client_request_id=f"sale-return-{return_record.id}-item-{return_item.id}",
+                actor=current_user,
+            )
 
     return_record.subtotal_amount = _money(totals["subtotal_amount"])
     return_record.taxable_amount = _money(totals["taxable_amount"])
@@ -2635,6 +2803,34 @@ def cancel_invoice(
             .with_for_update()
             .first()
         )
+    elif invoice.invoice_status == EDITABLE_INVOICE_STATUS:
+        reserved_by_product: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        for item in invoice.items:
+            if item.product_id:
+                reserved_by_product[int(item.product_id)] += _to_decimal(item.quantity)
+
+        products_by_id = _lock_products_for_invoice(
+            db,
+            current_user.shop_id,
+            list(reserved_by_product),
+        )
+        for product_id in sorted(reserved_by_product):
+            quantity = _stock_quantity_int(reserved_by_product[product_id])
+            if quantity <= 0:
+                continue
+            apply_stock_movement(
+                db,
+                product=products_by_id[product_id],
+                shop_id=current_user.shop_id,
+                quantity_delta=quantity,
+                movement_type=StockMovementType.DRAFT_RELEASE,
+                reference_type="invoice",
+                reference_id=invoice.id,
+                reason=payload.reason or "Draft invoice cancelled",
+                notes=payload.notes,
+                client_request_id=f"draft-cancel-release-invoice-{invoice.id}-product-{product_id}",
+                actor=current_user,
+            )
 
     invoice.invoice_status = CANCELLED_INVOICE_STATUS
     for analytics in invoice.sales_analytics:

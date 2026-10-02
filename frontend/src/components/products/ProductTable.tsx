@@ -123,7 +123,7 @@ function ActionMenu({
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 dark:bg-red-900 text-red-500 dark:text-red-400">
                   <Trash2 size={15} />
                 </span>
-                Delete Product
+                Deactivate Product
               </button>
             </div>
           </>,

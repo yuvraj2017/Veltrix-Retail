@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
+from sqlalchemy import CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -79,6 +79,15 @@ class InvoiceReturnItem(Base):
 
     __table_args__ = (
         Index("ix_invoice_return_items_shop_invoice_item", "shop_id", "invoice_item_id"),
+        CheckConstraint(
+            "quantity = restocked_quantity + non_restocked_quantity "
+            "AND restocked_quantity >= 0 AND non_restocked_quantity >= 0",
+            name="ck_invoice_return_items_disposition_quantities",
+        ),
+        CheckConstraint(
+            "disposition IN ('restock', 'damaged', 'defective', 'other_non_restock')",
+            name="ck_invoice_return_items_disposition",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -91,6 +100,10 @@ class InvoiceReturnItem(Base):
     product_name_snapshot = Column(String(255), nullable=False)
     hsn_sac_snapshot = Column(String(20), nullable=True)
     quantity = Column(Numeric(12, 2), nullable=False)
+    restocked_quantity = Column(Integer, nullable=False, default=0, server_default="0")
+    non_restocked_quantity = Column(Integer, nullable=False, default=0, server_default="0")
+    disposition = Column(String(30), nullable=False, default="restock", server_default="restock")
+    disposition_notes = Column(Text, nullable=True)
 
     unit_taxable_value = Column(Numeric(12, 2), nullable=False, default=0)
     gst_rate = Column(Numeric(5, 2), nullable=False, default=0)

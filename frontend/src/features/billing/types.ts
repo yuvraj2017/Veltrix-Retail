@@ -132,6 +132,9 @@ export type InvoicePayment = {
 export type InvoiceReturnItemCreatePayload = {
   invoice_item_id: number
   quantity: number
+  restocked_quantity?: number
+  disposition?: 'restock' | 'damaged' | 'defective' | 'other_non_restock'
+  disposition_notes?: string | null
 }
 
 export type InvoiceReturnCreatePayload = {
@@ -174,6 +177,10 @@ export type InvoiceReturnItem = {
   product_name_snapshot: string
   hsn_sac_snapshot?: string | null
   quantity: string | number
+  restocked_quantity: number
+  non_restocked_quantity: number
+  disposition: 'restock' | 'damaged' | 'defective' | 'other_non_restock'
+  disposition_notes?: string | null
   unit_taxable_value: string | number
   gst_rate: string | number
   cgst_rate: string | number

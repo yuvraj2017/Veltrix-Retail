@@ -81,3 +81,50 @@ export type CreateProductPayload = {
 }
 
 export type UpdateProductPayload = Partial<CreateProductPayload>
+
+export type StockMovement = {
+  id: number
+  shop_id: number
+  product_id: number
+  movement_type:
+    | 'opening_balance'
+    | 'sale'
+    | 'sale_return'
+    | 'draft_reserve'
+    | 'draft_release'
+    | 'adjustment_in'
+    | 'adjustment_out'
+    | 'purchase_receipt'
+  quantity_delta: number
+  quantity_before: number
+  quantity_after: number
+  reference_type: string | null
+  reference_id: number | null
+  reference_line_id: number | null
+  reason: string | null
+  notes: string | null
+  occurred_at: string
+  created_at: string
+}
+
+export type StockMovementList = {
+  items: StockMovement[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type StockAdjustmentResult = {
+  id: number
+  product_id: number
+  operation_type: 'adjustment' | 'physical_count'
+  movement_id: number | null
+  movement_type: 'adjustment_in' | 'adjustment_out' | null
+  quantity_before: number
+  quantity_delta: number
+  quantity_after: number
+  reason: string
+  notes: string | null
+  client_request_id: string
+  replayed: boolean
+}

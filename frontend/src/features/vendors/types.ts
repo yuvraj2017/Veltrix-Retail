@@ -118,16 +118,30 @@ export type VendorBillPayment = {
   payment_mode?: string | null;
   reference_number?: string | null;
   notes?: string | null;
+  client_request_id?: string | null;
   created_at: string;
   updated_at: string;
 };
 
 export type VendorBillPaymentCreatePayload = {
+  client_request_id: string;
   payment_date: string;
   amount: number;
   payment_mode?: string | null;
   reference_number?: string | null;
   notes?: string | null;
+};
+
+export type VendorCredit = {
+  id: number;
+  shop_id: number;
+  vendor_id: number;
+  purchase_return_id: number;
+  vendor_bill_id?: number | null;
+  amount: string | number;
+  applied_amount: string | number;
+  status: "unapplied" | "partial" | "applied";
+  created_at: string;
 };
 
 

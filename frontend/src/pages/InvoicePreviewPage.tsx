@@ -73,6 +73,8 @@ export default function InvoicePreviewPage() {
   const [returnReason, setReturnReason] = useState('')
   const [returnNotes, setReturnNotes] = useState('')
   const [returnQuantities, setReturnQuantities] = useState<Record<number, string>>({})
+  const [restockQuantities, setRestockQuantities] = useState<Record<number, string>>({})
+  const [returnDispositions, setReturnDispositions] = useState<Record<number, 'damaged' | 'defective' | 'other_non_restock'>>({})
   const [isRefundingReturnId, setIsRefundingReturnId] = useState<number | null>(null)
   const [refundForms, setRefundForms] = useState<Record<number, RefundForm>>({})
 
@@ -196,9 +198,18 @@ export default function InvoicePreviewPage() {
     const items = returnableItems
       .map(({ item, remaining }) => {
         const quantity = Number(returnQuantities[item.id] || 0)
+        const returnedQuantity = Math.min(Math.max(quantity, 0), remaining)
+        const restockedQuantity = Math.min(
+          Math.max(Number(restockQuantities[item.id] ?? quantity), 0),
+          returnedQuantity,
+        )
         return {
           invoice_item_id: item.id,
-          quantity: Math.min(Math.max(quantity, 0), remaining),
+          quantity: returnedQuantity,
+          restocked_quantity: restockedQuantity,
+          disposition: restockedQuantity === returnedQuantity
+            ? 'restock' as const
+            : returnDispositions[item.id] || 'damaged' as const,
         }
       })
       .filter((item) => item.quantity > 0)
@@ -223,10 +234,12 @@ export default function InvoicePreviewPage() {
       setReturnReason('')
       setReturnNotes('')
       setReturnQuantities({})
+      setRestockQuantities({})
+      setReturnDispositions({})
       await loadInvoice()
       showToast({
         title: 'Return recorded',
-        message: 'Stock, credit note, and invoice balance have been updated.',
+        message: 'Credit note, invoice balance, and selected sellable stock have been updated.',
         variant: 'success',
       })
     } catch (error) {
@@ -663,10 +676,56 @@ export default function InvoicePreviewPage() {
                                 const value = event.target.value
                                 const quantity = value === '' ? '' : String(Math.min(Math.max(Number(value), 0), remaining))
                                 setReturnQuantities((current) => ({ ...current, [item.id]: quantity }))
+                                setRestockQuantities((current) => {
+                                  if (current[item.id] === undefined) return current
+                                  return {
+                                    ...current,
+                                    [item.id]: quantity === ''
+                                      ? ''
+                                      : String(Math.min(Number(current[item.id] || 0), Number(quantity))),
+                                  }
+                                })
                               }}
                               className="h-10 w-24 rounded-[14px] border border-rose-100 bg-white px-3 text-sm font-bold text-slate-800 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                             />
                           </div>
+                          {Number(returnQuantities[item.id] || 0) > 0 && (
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                Restock as sellable
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={Number(returnQuantities[item.id] || 0)}
+                                  step={1}
+                                  value={restockQuantities[item.id] ?? returnQuantities[item.id]}
+                                  onChange={(event) => {
+                                    const returned = Number(returnQuantities[item.id] || 0)
+                                    const value = event.target.value
+                                    const restocked = value === '' ? '' : String(Math.min(Math.max(Number(value), 0), returned))
+                                    setRestockQuantities((current) => ({ ...current, [item.id]: restocked }))
+                                  }}
+                                  className="mt-1 h-10 w-full rounded-[14px] border border-rose-100 bg-white px-3 text-sm font-bold text-slate-800 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                />
+                              </label>
+                              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                Non-restock reason
+                                <select
+                                  value={returnDispositions[item.id] || 'damaged'}
+                                  disabled={Number(restockQuantities[item.id] ?? (returnQuantities[item.id] || 0)) >= Number(returnQuantities[item.id] || 0)}
+                                  onChange={(event) => setReturnDispositions((current) => ({
+                                    ...current,
+                                    [item.id]: event.target.value as 'damaged' | 'defective' | 'other_non_restock',
+                                  }))}
+                                  className="mt-1 h-10 w-full rounded-[14px] border border-rose-100 bg-white px-3 text-sm font-bold text-slate-800 outline-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                >
+                                  <option value="damaged">Damaged</option>
+                                  <option value="defective">Defective</option>
+                                  <option value="other_non_restock">Other</option>
+                                </select>
+                              </label>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

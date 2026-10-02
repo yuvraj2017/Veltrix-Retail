@@ -29,6 +29,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
   const [notes, setNotes] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [clientRequestId, setClientRequestId] = useState<string | null>(null);
 
   const remainingAmount = useMemo(() => Number(bill?.remaining_amount || 0), [bill]);
 
@@ -50,15 +51,23 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
         setErrorMessage(parsed.error.issues[0]?.message || "Invalid payment");
         return;
       }
+      if (parsed.data.amount > remainingAmount) {
+        setErrorMessage(`Payment cannot exceed the remaining amount of Rs ${remainingAmount.toLocaleString("en-IN")}.`);
+        return;
+      }
 
       setIsSaving(true);
+      const requestKey = clientRequestId || crypto.randomUUID();
+      setClientRequestId(requestKey);
       await vendorsApi.addBillPayment(bill.id, {
+        client_request_id: requestKey,
         payment_date: parsed.data.payment_date,
         amount: parsed.data.amount,
         payment_mode: parsed.data.payment_mode,
         reference_number: parsed.data.reference_number,
         notes: parsed.data.notes,
       });
+      setClientRequestId(null);
       onSuccess();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to add payment");
@@ -68,7 +77,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-3 py-4 dark:bg-black/50 sm:px-4">
       <style>{`
         input[data-hide-number-spinner='true']::-webkit-inner-spin-button,
         input[data-hide-number-spinner='true']::-webkit-outer-spin-button {
@@ -87,7 +96,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.98 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        className="w-full max-w-[440px] rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-[440px] overflow-y-auto rounded-2xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
       >
         {/* Header */}
         <div className="px-6 pt-6">
@@ -137,7 +146,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
               <input
                 type="date"
                 value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
+                onChange={(e) => { setPaymentDate(e.target.value); setClientRequestId(null); }}
                 className="h-9 w-full rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 text-[13px] text-gray-900 dark:text-gray-100 outline-none focus:border-gray-400 dark:focus:border-gray-500 focus:bg-white dark:focus:bg-gray-750 transition"
               />
             </div>
@@ -147,7 +156,8 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
                 type="number"
                 data-hide-number-spinner="true"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                max={remainingAmount}
+                onChange={(e) => { setAmount(e.target.value); setClientRequestId(null); }}
                 placeholder="0.00"
                 className="h-9 w-full rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-400 dark:focus:border-gray-500 focus:bg-white dark:focus:bg-gray-750 transition"
               />
@@ -157,11 +167,11 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
           {/* Payment mode */}
           <div>
             <label className="text-[12px] text-gray-500 dark:text-gray-400 block mb-2">Payment mode</label>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
               {PAYMENT_MODES.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
-                  onClick={() => setPaymentMode(value)}
+                  onClick={() => { setPaymentMode(value); setClientRequestId(null); }}
                   className={`flex flex-col items-center gap-1 py-2.5 rounded-lg text-[11px] font-medium border transition-all ${
                     paymentMode === value
                       ? "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-500 text-gray-900 dark:text-gray-100"
@@ -181,7 +191,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
             <input
               type="text"
               value={referenceNumber}
-              onChange={(e) => setReferenceNumber(e.target.value)}
+              onChange={(e) => { setReferenceNumber(e.target.value); setClientRequestId(null); }}
               placeholder="Transaction / cheque ref"
               className="h-9 w-full rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-400 dark:focus:border-gray-500 focus:bg-white dark:focus:bg-gray-750 transition"
             />
@@ -195,7 +205,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
             </label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); setClientRequestId(null); }}
               placeholder="Add a note…"
               rows={2}
               className="w-full rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 text-[13px] text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-400 dark:focus:border-gray-500 focus:bg-white dark:focus:bg-gray-750 transition resize-none"

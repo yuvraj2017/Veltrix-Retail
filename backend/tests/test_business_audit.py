@@ -157,7 +157,7 @@ def test_product_creation_records_business_audit(db_session, make_user):
     assert entry.after_data["stock_quantity"] == 5
 
 
-def test_product_update_records_price_and_stock_changes(db_session, make_user):
+def test_product_update_records_price_change_without_overwriting_stock(db_session, make_user):
     user = make_user(email="audit-product-update@example.com")
     product = _make_product(
         db_session,
@@ -169,7 +169,7 @@ def test_product_update_records_price_and_stock_changes(db_session, make_user):
 
     update_product(
         product.id,
-        ProductUpdate(selling_price=Decimal("120.00"), stock_quantity=8),
+        ProductUpdate(selling_price=Decimal("120.00")),
         user,
         db_session,
     )
@@ -181,11 +181,9 @@ def test_product_update_records_price_and_stock_changes(db_session, make_user):
     )
     assert entry.before_data == {
         "selling_price": "100.00",
-        "stock_quantity": 5,
     }
     assert entry.after_data == {
         "selling_price": "120.00",
-        "stock_quantity": 8,
     }
 
 

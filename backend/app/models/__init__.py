@@ -1,6 +1,19 @@
 from app.models.shop import Shop
 from app.models.user import User
 from app.models.product import Product, ProductImage
+from app.models.stock_movement import StockMovement, StockMovementType
+from app.models.stock_adjustment_request import StockAdjustmentRequest
+from app.models.purchase import (
+    GoodsReceipt,
+    GoodsReceiptItem,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    PurchaseOrderSequence,
+    PurchaseReturn,
+    PurchaseReturnItem,
+    PurchaseReturnSequence,
+    VendorCredit,
+)
 
 from app.models.vendor import Vendor
 from app.models.vendor_bill import VendorBill
@@ -47,6 +60,18 @@ __all__ = [
     "User",
     "Product",
     "ProductImage",
+    "StockMovement",
+    "StockMovementType",
+    "StockAdjustmentRequest",
+    "PurchaseOrder",
+    "PurchaseOrderItem",
+    "PurchaseOrderSequence",
+    "GoodsReceipt",
+    "GoodsReceiptItem",
+    "PurchaseReturn",
+    "PurchaseReturnItem",
+    "PurchaseReturnSequence",
+    "VendorCredit",
     "Vendor",
     "VendorBill",
     "VendorBillPayment",

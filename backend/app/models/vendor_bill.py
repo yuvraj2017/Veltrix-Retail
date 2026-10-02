@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -7,10 +7,13 @@ from app.core.database import Base
 
 class VendorBill(Base):
     __tablename__ = "vendor_bills"
+    __table_args__ = (
+        UniqueConstraint("shop_id", "bill_number", name="uq_vendor_bills_shop_number"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
-    vendor_id = Column(Integer, ForeignKey("vendors.id", ondelete="CASCADE"), nullable=False, index=True)
+    vendor_id = Column(Integer, ForeignKey("vendors.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     bill_number = Column(String(100), nullable=False)
     bill_date = Column(Date, nullable=False)
@@ -33,4 +36,4 @@ class VendorBill(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     vendor = relationship("Vendor", back_populates="bills")
-    payments = relationship("VendorBillPayment", back_populates="bill", cascade="all, delete-orphan")
+    payments = relationship("VendorBillPayment", back_populates="bill")

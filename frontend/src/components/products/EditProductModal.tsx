@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Check,
   ChevronDown,
+  History,
   PencilLine,
   Sparkles,
   Trash2,
@@ -11,9 +12,14 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
-import { deleteProductImage } from '../../features/products/api'
+import {
+  createStockAdjustment,
+  deleteProductImage,
+  getProductStockMovements,
+  recordPhysicalStockCount,
+} from '../../features/products/api'
 import { productSchema, type ProductFormValues } from '../../features/products/schemas'
-import type { Product } from '../../features/products/types'
+import type { Product, StockMovement } from '../../features/products/types'
 
 const categories = ['Apparel', 'Electronics', 'Accessories', 'Footwear', 'Home Decor', 'Other']
 const MAX_IMAGES = 5
@@ -106,16 +112,30 @@ export function EditProductModal({
   product,
   onClose,
   onSubmit,
+  onStockChanged,
   loading,
 }: {
   product: Product | null
   onClose: () => void
   onSubmit: (values: ProductFormValues, newImages: File[]) => Promise<void>
+  onStockChanged?: () => void | Promise<void>
   loading: boolean
 }) {
   const [newImages, setNewImages] = useState<PreviewImage[]>([])
   const [existingImages, setExistingImages] = useState<Product['images']>([])
   const [removingImageId, setRemovingImageId] = useState<number | null>(null)
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
+  const [stockHistoryLoading, setStockHistoryLoading] = useState(false)
+  const [currentStock, setCurrentStock] = useState(0)
+  const [inventoryMode, setInventoryMode] = useState<'adjustment' | 'physical_count'>('adjustment')
+  const [adjustmentDirection, setAdjustmentDirection] = useState<'in' | 'out'>('in')
+  const [adjustmentQuantity, setAdjustmentQuantity] = useState('')
+  const [physicalCount, setPhysicalCount] = useState('')
+  const [adjustmentReason, setAdjustmentReason] = useState('manual_correction')
+  const [adjustmentNotes, setAdjustmentNotes] = useState('')
+  const [inventoryRequestId, setInventoryRequestId] = useState<string | null>(null)
+  const [inventorySubmitting, setInventorySubmitting] = useState(false)
+  const [inventoryMessage, setInventoryMessage] = useState('')
 
   const {
     register,
@@ -131,6 +151,13 @@ export function EditProductModal({
     if (product) {
       setExistingImages(product.images || [])
       setNewImages([])
+      setCurrentStock(product.stock_quantity)
+      setAdjustmentQuantity('')
+      setPhysicalCount('')
+      setAdjustmentReason('manual_correction')
+      setAdjustmentNotes('')
+      setInventoryRequestId(null)
+      setInventoryMessage('')
       reset({
         name: product.name,
         sku: product.sku,
@@ -148,6 +175,11 @@ export function EditProductModal({
         is_active: product.is_active,
         main_image_url: product.main_image_url || '',
       })
+      setStockHistoryLoading(true)
+      getProductStockMovements(product.id)
+        .then((result) => setStockMovements(result.items))
+        .catch(() => setStockMovements([]))
+        .finally(() => setStockHistoryLoading(false))
     }
   }, [product, reset])
 
@@ -160,6 +192,98 @@ export function EditProductModal({
   if (!product) return null
 
   const remainingSlots = Math.max(0, MAX_IMAGES - existingImages.length - newImages.length)
+
+  const reloadStockHistory = async () => {
+    const result = await getProductStockMovements(product.id)
+    setStockMovements(result.items)
+  }
+
+  const resetInventoryRequest = () => {
+    setInventoryRequestId(null)
+    setInventoryMessage('')
+  }
+
+  const submitInventoryOperation = async () => {
+    const quantity = Number(adjustmentQuantity)
+    const countedQuantity = Number(physicalCount)
+    if (adjustmentReason === 'other' && !adjustmentNotes.trim()) {
+      setInventoryMessage('Notes are required when reason is Other.')
+      return
+    }
+    if (inventoryMode === 'adjustment' && (!Number.isInteger(quantity) || quantity <= 0)) {
+      setInventoryMessage('Enter a whole adjustment quantity greater than zero.')
+      return
+    }
+    if (inventoryMode === 'physical_count' && (!Number.isInteger(countedQuantity) || countedQuantity < 0)) {
+      setInventoryMessage('Enter a non-negative whole physical count.')
+      return
+    }
+
+    const reducesStock = inventoryMode === 'adjustment'
+      ? adjustmentDirection === 'out'
+      : countedQuantity < currentStock
+    if (reducesStock && !window.confirm('This operation will reduce sellable stock. Continue?')) {
+      return
+    }
+
+    const requestId = inventoryRequestId || crypto.randomUUID()
+    setInventoryRequestId(requestId)
+    setInventorySubmitting(true)
+    setInventoryMessage('')
+    try {
+      const result = inventoryMode === 'adjustment'
+        ? await createStockAdjustment(product.id, {
+            client_request_id: requestId,
+            direction: adjustmentDirection,
+            quantity,
+            reason: adjustmentReason,
+            notes: adjustmentNotes.trim() || null,
+          })
+        : await recordPhysicalStockCount(product.id, {
+            client_request_id: requestId,
+            counted_quantity: countedQuantity,
+            reason: adjustmentReason,
+            notes: adjustmentNotes.trim() || null,
+          })
+      setCurrentStock(result.quantity_after)
+      setInventoryMessage(
+        `Stock ${result.quantity_before} to ${result.quantity_after} (${result.quantity_delta >= 0 ? '+' : ''}${result.quantity_delta}).`,
+      )
+      setAdjustmentQuantity('')
+      setPhysicalCount('')
+      setAdjustmentNotes('')
+      setInventoryRequestId(null)
+      await reloadStockHistory()
+      await onStockChanged?.()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update inventory.'
+      setInventoryMessage(message)
+    } finally {
+      setInventorySubmitting(false)
+    }
+  }
+
+  const reasonOptions = inventoryMode === 'physical_count'
+    ? [
+        ['manual_correction', 'Manual correction'],
+        ['other', 'Other'],
+      ]
+    : adjustmentDirection === 'in'
+      ? [
+          ['manual_correction', 'Manual correction'],
+          ['found_stock', 'Found stock'],
+          ['return_to_sellable', 'Return to sellable'],
+          ['other', 'Other'],
+        ]
+      : [
+          ['damaged', 'Damaged'],
+          ['defective', 'Defective'],
+          ['expired', 'Expired'],
+          ['lost', 'Lost'],
+          ['theft_shrinkage', 'Theft / shrinkage'],
+          ['manual_correction', 'Manual correction'],
+          ['other', 'Other'],
+        ]
 
   const addFiles = (fileList: FileList | null) => {
     if (!fileList || remainingSlots <= 0) return
@@ -302,7 +426,15 @@ export function EditProductModal({
                 <p className={sectionHeadingClass}>INVENTORY</p>
                 <div>
                   <label className={labelClass}>STOCK QUANTITY</label>
-                  <input type="text" {...register('stock_quantity')} className={inputClass} />
+                  <input
+                    type="text"
+                    value={currentStock}
+                    readOnly
+                    className={`${inputClass} cursor-not-allowed bg-slate-100 dark:bg-slate-700`}
+                  />
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Stock is managed by inventory transactions and cannot be edited here.
+                  </p>
                 </div>
                 <div>
                   <label className={labelClass}>LOW STOCK ALERT</label>
@@ -312,6 +444,191 @@ export function EditProductModal({
                   <label className={labelClass}>UNIT</label>
                   <input {...register('unit')} className={inputClass} />
                 </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className={sectionHeadingClass}>CONTROLLED INVENTORY</p>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Current sellable stock: <span className="font-semibold text-slate-800 dark:text-slate-200">{currentStock}</span>
+                  </p>
+                </div>
+                <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInventoryMode('adjustment')
+                      setAdjustmentReason('manual_correction')
+                      resetInventoryRequest()
+                    }}
+                    className={`px-3 py-2 text-sm font-semibold transition ${inventoryMode === 'adjustment' ? 'rounded-md bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300'}`}
+                  >
+                    Adjust Stock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInventoryMode('physical_count')
+                      setAdjustmentReason('manual_correction')
+                      resetInventoryRequest()
+                    }}
+                    className={`px-3 py-2 text-sm font-semibold transition ${inventoryMode === 'physical_count' ? 'rounded-md bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300'}`}
+                  >
+                    Physical Count
+                  </button>
+                </div>
+              </div>
+
+              {!product.is_active ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                  Inventory operations are unavailable for inactive products.
+                </p>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {inventoryMode === 'adjustment' ? (
+                    <>
+                      <div>
+                        <label className={labelClass}>DIRECTION</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['in', 'out'] as const).map((direction) => (
+                            <button
+                              key={direction}
+                              type="button"
+                              onClick={() => {
+                                setAdjustmentDirection(direction)
+                                setAdjustmentReason('manual_correction')
+                                resetInventoryRequest()
+                              }}
+                              className={`rounded-lg border px-3 py-3 text-sm font-semibold uppercase transition ${adjustmentDirection === direction ? direction === 'in' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300'}`}
+                            >
+                              {direction}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelClass}>QUANTITY</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={adjustmentQuantity}
+                          onChange={(event) => {
+                            setAdjustmentQuantity(event.target.value)
+                            resetInventoryRequest()
+                          }}
+                          className={inputClass}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="md:col-span-2">
+                      <label className={labelClass}>COUNTED SELLABLE QUANTITY</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={physicalCount}
+                        onChange={(event) => {
+                          setPhysicalCount(event.target.value)
+                          resetInventoryRequest()
+                        }}
+                        className={inputClass}
+                      />
+                      {physicalCount !== '' && Number.isInteger(Number(physicalCount)) && Number(physicalCount) >= 0 && (
+                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                          Expected difference: <span className="font-semibold">{Number(physicalCount) - currentStock >= 0 ? '+' : ''}{Number(physicalCount) - currentStock}</span>. The backend recalculates this after locking the product.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className={labelClass}>REASON</label>
+                    <select
+                      value={adjustmentReason}
+                      onChange={(event) => {
+                        setAdjustmentReason(event.target.value)
+                        resetInventoryRequest()
+                      }}
+                      className={inputClass}
+                    >
+                      {reasonOptions.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>NOTES {adjustmentReason === 'other' ? '(REQUIRED)' : '(OPTIONAL)'}</label>
+                    <input
+                      value={adjustmentNotes}
+                      onChange={(event) => {
+                        setAdjustmentNotes(event.target.value)
+                        resetInventoryRequest()
+                      }}
+                      placeholder="Inventory context"
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                    <button
+                      type="button"
+                      disabled={inventorySubmitting}
+                      onClick={submitInventoryOperation}
+                      className="rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {inventorySubmitting ? 'Applying...' : inventoryMode === 'adjustment' ? 'Apply Adjustment' : 'Confirm Physical Count'}
+                    </button>
+                    {inventoryMessage && (
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300" role="status">
+                        {inventoryMessage}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-4 flex items-center gap-2">
+                <History size={17} className="text-indigo-600 dark:text-indigo-400" />
+                <p className={sectionHeadingClass}>RECENT STOCK HISTORY</p>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+                {stockHistoryLoading ? (
+                  <p className="p-4 text-sm text-slate-500 dark:text-slate-400">Loading stock history...</p>
+                ) : stockMovements.length === 0 ? (
+                  <p className="p-4 text-sm text-slate-500 dark:text-slate-400">No stock movements recorded.</p>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    {stockMovements.map((movement) => (
+                      <div
+                        key={movement.id}
+                        className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 dark:border-slate-800"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold capitalize text-slate-800 dark:text-slate-200">
+                            {movement.movement_type.replaceAll('_', ' ')}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {new Date(movement.occurred_at).toLocaleString()} · {movement.reason || 'Stock movement'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${movement.quantity_delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {movement.quantity_delta >= 0 ? '+' : ''}{movement.quantity_delta}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {movement.quantity_before} → {movement.quantity_after}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -30,6 +30,8 @@ const VendorsPage = lazy(() => import("../pages/VendorsPage"));
 const AddVendorPage = lazy(() => import("../pages/AddVendorPage"));
 const VendorDetailsPage = lazy(() => import("../pages/VendorDetailsPage"));
 const AddVendorBillPage = lazy(() => import("../pages/AddVendorBillPage"));
+const PurchaseOrdersPage = lazy(() => import("../pages/PurchaseOrdersPage"));
+const InventoryPage = lazy(() => import("../pages/InventoryPage"));
 
 const BillingPage = lazy(() => import("../pages/BillingPage"));
 const CreateInvoicePage = lazy(() => import("../pages/CreateInvoicePage"));
@@ -108,6 +110,8 @@ export const router = createBrowserRouter([
           { path: "/vendors/:vendorId", element: <VendorDetailsPage /> },
           { path: "/vendors/:vendorId/bills/new", element: <AddVendorBillPage /> },
           { path: "/vendors/:vendorId/bills/:billId/edit", element: <AddVendorBillPage /> },
+          { path: "/purchase-orders", element: <PurchaseOrdersPage /> },
+          { path: "/inventory", element: <InventoryPage /> },
 
           { path: "/billing", element: <BillingPage /> },
           { path: "/billing/new", element: <CreateInvoicePage /> },

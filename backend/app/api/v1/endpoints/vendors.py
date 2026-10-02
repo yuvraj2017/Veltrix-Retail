@@ -15,6 +15,7 @@ from app.schemas.vendor import (
     VendorCreate,
     VendorResponse,
     VendorStatsResponse,
+    VendorCreditResponse,
     VendorSummaryResponse,
     VendorUpdate,
 )
@@ -30,6 +31,7 @@ from app.services.vendor_service import (
     list_bill_payments,
     list_vendor_bills,
     list_vendors,
+    list_vendor_credits,
     update_vendor,
     update_vendor_bill,
 )
@@ -97,6 +99,15 @@ def vendor_summary(
     current_user: User = Depends(require_active_shop_access),
 ):
     return get_vendor_summary(vendor_id, db, current_user)
+
+
+@router.get("/{vendor_id}/credits", response_model=list[VendorCreditResponse])
+def get_vendor_credits(
+    vendor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return list_vendor_credits(vendor_id, db, current_user)
 
 
 @router.get("/{vendor_id}/bills", response_model=list[VendorBillResponse])

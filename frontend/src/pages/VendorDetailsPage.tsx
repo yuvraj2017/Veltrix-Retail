@@ -10,6 +10,7 @@ import {
   Mail,
   Phone,
   Plus,
+  ReceiptText,
   Sparkles,
   Truck,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ import type {
   Vendor,
   VendorBill,
   VendorSummary,
+  VendorCredit,
 } from '../features/vendors/types'
 
 const money = (value: string | number) => {
@@ -42,6 +44,7 @@ export default function VendorDetailsPage() {
   const [vendor, setVendor] = useState<Vendor | null>(null)
   const [summary, setSummary] = useState<VendorSummary | null>(null)
   const [bills, setBills] = useState<VendorBill[]>([])
+  const [credits, setCredits] = useState<VendorCredit[]>([])
   const [selectedBill, setSelectedBill] = useState<VendorBill | null>(null)
   const [historyBill, setHistoryBill] = useState<VendorBill | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -50,17 +53,27 @@ export default function VendorDetailsPage() {
     return bills.filter((bill) => bill.status !== 'completed').length
   }, [bills])
 
+  const unappliedCredits = useMemo(
+    () => credits.reduce(
+      (sum, credit) => sum + Number(credit.amount) - Number(credit.applied_amount),
+      0,
+    ),
+    [credits],
+  )
+
   const loadDetails = async () => {
     try {
       setIsLoading(true)
-      const [vendorData, summaryData, billData] = await Promise.all([
+      const [vendorData, summaryData, billData, creditData] = await Promise.all([
         vendorsApi.getVendor(id),
         vendorsApi.getVendorSummary(id),
         vendorsApi.getVendorBills(id),
+        vendorsApi.getVendorCredits(id),
       ])
       setVendor(vendorData)
       setSummary(summaryData)
       setBills(billData)
+      setCredits(creditData)
     } finally {
       setIsLoading(false)
     }
@@ -174,7 +187,7 @@ export default function VendorDetailsPage() {
         </motion.div>
 
         {/* Info cards row */}
-        <div className="mb-8 grid gap-4 lg:grid-cols-[1fr_1fr_2fr]">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <InfoCard
             label="Total Outstanding"
             value={money(summary?.total_remaining_amount || 0)}
@@ -189,25 +202,12 @@ export default function VendorDetailsPage() {
             icon={Building2}
           />
 
-          {/* Fast-track promo card */}
-          <motion.div
-            whileHover={{ y: -3 }}
-            className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-indigo-100 via-violet-100 to-indigo-50 p-7 text-indigo-950 shadow-[0_20px_54px_rgba(99,102,241,0.12)]
-              dark:from-indigo-950/80 dark:via-violet-950/80 dark:to-indigo-950/60 dark:text-indigo-100 dark:shadow-[0_20px_54px_rgba(99,102,241,0.06)]"
-          >
-            <h3 className="text-2xl font-black tracking-[-0.04em]">
-              Fast-Track Payments
-            </h3>
-            <p className="mt-3 max-w-md text-sm leading-6 text-indigo-900/70 dark:text-indigo-300/70">
-              Maintain recurring payment workflows and keep vendor relationships
-              healthy with clear balance visibility.
-            </p>
-            <button className="mt-6 rounded-2xl bg-[#16007a] px-5 py-3 text-sm font-black text-white shadow-[0_16px_36px_rgba(49,46,129,0.22)] transition hover:-translate-y-[1px]
-              dark:bg-indigo-600 dark:shadow-[0_16px_36px_rgba(99,102,241,0.20)]">
-              Activate Auto-Pay
-            </button>
-            <div className="absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/45 blur-xl dark:bg-indigo-400/10" />
-          </motion.div>
+          <InfoCard
+            label="Unapplied Vendor Credits"
+            value={money(unappliedCredits)}
+            helper={`${credits.filter((credit) => credit.status !== 'applied').length} purchase return credit(s)`}
+            icon={ReceiptText}
+          />
         </div>
 
         {/* Bills table card */}

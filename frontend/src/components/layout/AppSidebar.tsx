@@ -14,6 +14,8 @@ import {
   UserCheck,
   ScrollText,
   CreditCard,
+  ClipboardList,
+  Warehouse,
 } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
@@ -22,7 +24,9 @@ import { useAuth } from '../../context/AuthContext'
 const navItems = [
   { name: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { name: 'Products', to: '/products', icon: Package },
+  { name: 'Inventory', to: '/inventory', icon: Warehouse },
   { name: 'Vendors', to: '/vendors', icon: Handshake },
+  { name: 'Purchasing', to: '/purchase-orders', icon: ClipboardList },
   { name: 'Billing', to: '/billing', icon: ReceiptText },
   { name: 'Customers', to: '/customers', icon: Users },
   { name: 'Expenses', to: '/expenses', icon: Wallet },

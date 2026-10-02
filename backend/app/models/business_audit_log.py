@@ -60,6 +60,16 @@ class BusinessAuditAction:
     CREDIT_NOTE_CREATED = "credit_note.created"
     PRODUCT_CREATED = "product.created"
     PRODUCT_UPDATED = "product.updated"
+    INVENTORY_ADJUSTED = "inventory.adjusted"
+    INVENTORY_COUNT_RECONCILED = "inventory.count_reconciled"
+    PURCHASE_ORDER_CREATED = "purchase_order.created"
+    PURCHASE_ORDER_UPDATED = "purchase_order.updated"
+    PURCHASE_ORDER_CANCELLED = "purchase_order.cancelled"
+    GOODS_RECEIPT_CREATED = "goods_receipt.created"
+    PURCHASE_RETURN_CREATED = "purchase_return.created"
+    VENDOR_BILL_CREATED = "vendor_bill.created"
+    VENDOR_BILL_UPDATED = "vendor_bill.updated"
+    VENDOR_PAYMENT_CREATED = "vendor_payment.created"
 
     ALL = (
         INVOICE_CREATED,
@@ -71,4 +81,14 @@ class BusinessAuditAction:
         CREDIT_NOTE_CREATED,
         PRODUCT_CREATED,
         PRODUCT_UPDATED,
+        INVENTORY_ADJUSTED,
+        INVENTORY_COUNT_RECONCILED,
+        PURCHASE_ORDER_CREATED,
+        PURCHASE_ORDER_UPDATED,
+        PURCHASE_ORDER_CANCELLED,
+        GOODS_RECEIPT_CREATED,
+        PURCHASE_RETURN_CREATED,
+        VENDOR_BILL_CREATED,
+        VENDOR_BILL_UPDATED,
+        VENDOR_PAYMENT_CREATED,
     )
