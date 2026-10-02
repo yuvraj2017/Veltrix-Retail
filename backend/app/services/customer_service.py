@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.customer import Customer
 from app.models.invoice import Invoice
 from app.models.invoice_item import InvoiceItem
+from app.models.invoice_return import InvoiceReturn
 from app.models.user import User
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 
@@ -178,11 +179,34 @@ def _build_customer_directory_records(
         )
 
     rows = query.all()
+    return_rows = (
+        db.query(
+            Invoice.customer_id,
+            func.coalesce(func.sum(InvoiceReturn.total_amount), 0).label("returned_amount"),
+        )
+        .join(Invoice, Invoice.id == InvoiceReturn.invoice_id)
+        .filter(
+            InvoiceReturn.shop_id == current_user.shop_id,
+            InvoiceReturn.status == "completed",
+            Invoice.invoice_status != "cancelled",
+            Invoice.customer_id.isnot(None),
+        )
+        .group_by(Invoice.customer_id)
+        .all()
+    )
+    returns_by_customer = {
+        int(row.customer_id): {
+            "returned_amount": _money(row.returned_amount),
+        }
+        for row in return_rows
+        if row.customer_id is not None
+    }
     records = []
 
     for row in rows:
         total_orders = int(row.total_orders or 0)
-        total_spent = _money(row.total_spent)
+        return_totals = returns_by_customer.get(int(row.customer_id), {})
+        total_spent = _money(max(_money(row.total_spent) - _to_decimal(return_totals.get("returned_amount")), Decimal("0.00")))
         outstanding_amount = _money(row.outstanding_amount)
         average_order_value = _money(row.average_order_value if total_orders else 0)
         last_invoice_date = row.last_invoice_date
@@ -480,9 +504,23 @@ def get_customer_analytics(customer_id: int, db: Session, current_user: User):
     )
 
     total_orders = len(invoices)
-    total_spent = _money(sum(_money(invoice.final_amount) for invoice in invoices))
+    returned_row = (
+        db.query(
+            func.coalesce(func.sum(InvoiceReturn.total_amount), 0).label("returned_amount"),
+            func.coalesce(func.sum(InvoiceReturn.total_profit), 0).label("returned_profit"),
+        )
+        .join(Invoice, Invoice.id == InvoiceReturn.invoice_id)
+        .filter(
+            InvoiceReturn.shop_id == current_user.shop_id,
+            InvoiceReturn.status == "completed",
+            Invoice.invoice_status != "cancelled",
+            Invoice.customer_id == customer.id,
+        )
+        .one()
+    )
+    total_spent = _money(max(sum(_money(invoice.final_amount) for invoice in invoices) - _to_decimal(returned_row.returned_amount), Decimal("0.00")))
     outstanding_amount = _money(sum(_money(invoice.remaining_amount) for invoice in invoices))
-    total_profit = _money(sum(_money(invoice.total_profit) for invoice in invoices))
+    total_profit = _money(sum(_money(invoice.total_profit) for invoice in invoices) - _to_decimal(returned_row.returned_profit))
     average_order_value = _money(total_spent / total_orders) if total_orders else Decimal("0.00")
     first_invoice_date = min((invoice.invoice_date for invoice in invoices), default=None)
     last_invoice_date = max((invoice.invoice_date for invoice in invoices), default=None)
@@ -528,6 +566,31 @@ def get_customer_analytics(customer_id: int, db: Session, current_user: User):
         if month_bucket in month_set:
             spend_by_month[month_bucket]["total_spend"] += _money(invoice.final_amount)
             spend_by_month[month_bucket]["collected_amount"] += _money(invoice.paid_amount)
+
+    return_trend_rows = (
+        db.query(
+            Invoice.invoice_date,
+            func.coalesce(func.sum(InvoiceReturn.total_amount), 0).label("returned_amount"),
+        )
+        .join(Invoice, Invoice.id == InvoiceReturn.invoice_id)
+        .filter(
+            InvoiceReturn.shop_id == current_user.shop_id,
+            InvoiceReturn.status == "completed",
+            Invoice.invoice_status != "cancelled",
+            Invoice.customer_id == customer.id,
+        )
+        .group_by(Invoice.invoice_date)
+        .all()
+    )
+    for invoice_date, returned_amount in return_trend_rows:
+        month_bucket = _month_bucket(invoice_date)
+        if month_bucket in month_set:
+            spend_by_month[month_bucket]["total_spend"] = _money(
+                max(
+                    spend_by_month[month_bucket]["total_spend"] - _to_decimal(returned_amount),
+                    Decimal("0.00"),
+                )
+            )
 
     return {
         "customer_id": customer.id,

@@ -45,8 +45,13 @@ class Invoice(Base):
     customer_address_snapshot = Column(Text, nullable=True)
     customer_city_snapshot = Column(String(100), nullable=True)
     customer_state_snapshot = Column(String(100), nullable=True)
+    customer_state_code_snapshot = Column(String(2), nullable=True)
     customer_pincode_snapshot = Column(String(20), nullable=True)
     customer_gst_number_snapshot = Column(String(50), nullable=True)
+    seller_gst_number_snapshot = Column(String(15), nullable=True)
+    seller_state_snapshot = Column(String(100), nullable=True)
+    seller_state_code_snapshot = Column(String(2), nullable=True)
+    tax_treatment = Column(String(20), nullable=False, default="non_gst", server_default="non_gst")
 
     invoice_date = Column(Date, nullable=False, server_default=func.current_date())
 
@@ -66,6 +71,7 @@ class Invoice(Base):
     payment_status = Column(String(20), nullable=False, default="pending")
     payment_mode = Column(String(30), nullable=True)
     invoice_status = Column(String(20), nullable=False, default="draft")
+    finalized_at = Column(DateTime(timezone=False), nullable=True)
 
     notes = Column(Text, nullable=True)
 
@@ -96,6 +102,16 @@ class Invoice(Base):
     )
     sales_analytics = relationship(
         "ProductSalesAnalytics",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+    )
+    payments = relationship(
+        "InvoicePayment",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+    )
+    returns = relationship(
+        "InvoiceReturn",
         back_populates="invoice",
         cascade="all, delete-orphan",
     )

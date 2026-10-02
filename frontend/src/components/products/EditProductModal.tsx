@@ -139,6 +139,8 @@ export function EditProductModal({
         buying_price: Number(product.buying_price),
         mrp: Number(product.mrp),
         selling_price: Number(product.selling_price),
+        hsn_sac: product.hsn_sac || '',
+        gst_rate: Number(product.gst_rate || 0),
         stock_quantity: product.stock_quantity,
         low_stock_threshold: product.low_stock_threshold,
         unit: product.unit,
@@ -284,6 +286,14 @@ export function EditProductModal({
                 <div>
                   <label className={labelClass}>MRP (RETAIL)</label>
                   <input type="text" step="0.01" {...register('mrp')} className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>HSN / SAC</label>
+                  <input {...register('hsn_sac')} className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>GST RATE %</label>
+                  <input type="text" step="0.01" {...register('gst_rate')} className={inputClass} />
                 </div>
               </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Barcode, PackageSearch, Plus, Search, X } from 'lucide-react'
 
@@ -7,6 +7,7 @@ import type { BillingProduct } from '../../features/billing/types'
 
 type ProductCodeSearchProps = {
   onAddProduct: (product: BillingProduct) => void
+  autoFocus?: boolean
 }
 
 const money = (value: string | number) => {
@@ -19,17 +20,36 @@ const money = (value: string | number) => {
   })
 }
 
-export default function ProductCodeSearch({ onAddProduct }: ProductCodeSearchProps) {
+export type ProductCodeSearchHandle = {
+  focus: () => void
+}
+
+const ProductCodeSearch = forwardRef<ProductCodeSearchHandle, ProductCodeSearchProps>(function ProductCodeSearch(
+  { onAddProduct, autoFocus = false },
+  ref,
+) {
   const [code, setCode] = useState('')
   const [results, setResults] = useState<BillingProduct[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }))
+
+  useEffect(() => {
+    if (!autoFocus) return
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 120)
+    return () => window.clearTimeout(timer)
+  }, [autoFocus])
 
   const addProduct = (product: BillingProduct) => {
     onAddProduct(product)
     setCode('')
     setResults([])
     setErrorMessage('')
+    window.setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   const directAddByCode = async () => {
@@ -44,9 +64,11 @@ export default function ProductCodeSearch({ onAddProduct }: ProductCodeSearchPro
       const product = await billingApi.getBillingProductByCode(cleaned)
       addProduct(product)
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Product not found'
-      )
+      if (results.length > 0) {
+        addProduct(results[0])
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : 'Product not found')
+      }
     } finally {
       setIsSearching(false)
     }
@@ -103,6 +125,8 @@ export default function ProductCodeSearch({ onAddProduct }: ProductCodeSearchPro
           />
 
           <input
+            ref={inputRef}
+            data-testid="product-search-input"
             value={code}
             onChange={(event) => setCode(event.target.value)}
             onKeyDown={(event) => {
@@ -111,7 +135,8 @@ export default function ProductCodeSearch({ onAddProduct }: ProductCodeSearchPro
                 directAddByCode()
               }
             }}
-            placeholder="Enter product code / SKU / barcode..."
+            autoComplete="off"
+            placeholder="Scan barcode or search product..."
             className="h-14 w-full rounded-[20px] border border-indigo-100 bg-white px-5 pl-14 text-[15px] font-medium text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-indigo-300 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)]"
           />
 
@@ -191,4 +216,6 @@ export default function ProductCodeSearch({ onAddProduct }: ProductCodeSearchPro
       )}
     </div>
   )
-}
+})
+
+export default ProductCodeSearch

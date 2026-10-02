@@ -72,10 +72,12 @@ def _serialize_billing_product(product: Product):
         "barcode": getattr(product, "barcode", None),
         "category": getattr(product, "category", None),
         "unit": getattr(product, "unit", None),
+        "hsn_sac": getattr(product, "hsn_sac", None),
         "mrp": _get_product_mrp(product),
         "buying_price": _get_product_buying_price(product),
         "selling_price": _get_product_selling_price(product),
         "available_stock": _get_product_available_stock(product),
+        "gst_rate": _to_decimal(getattr(product, "gst_rate", 0)),
         "is_active": getattr(product, "is_active", True),
     }
 

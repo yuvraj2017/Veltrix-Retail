@@ -1,5 +1,6 @@
 export type PaymentStatus = 'pending' | 'paid' | 'partial'
-export type PaymentMode = 'cash' | 'upi' | 'card' | 'bank_transfer' | 'other'
+export type PaymentMethod = 'cash' | 'upi' | 'card' | 'bank_transfer' | 'other'
+export type PaymentMode = PaymentMethod | 'mixed'
 export type InvoiceStatus = 'draft' | 'saved' | 'cancelled'
 
 export type CustomerPayload = {
@@ -35,10 +36,12 @@ export type BillingProduct = {
   barcode?: string | null
   category?: string | null
   unit?: string | null
+  hsn_sac?: string | null
   mrp: string | number
   buying_price: string | number
   selling_price: string | number
   available_stock: string | number
+  gst_rate: string | number
   is_active: boolean
 }
 
@@ -52,12 +55,14 @@ export type InvoiceItemCreatePayload = {
 }
 
 export type InvoiceCreatePayload = {
+  client_request_id?: string | null
   customer: CustomerPayload
   items: InvoiceItemCreatePayload[]
   invoice_date?: string | null
   payment_status: PaymentStatus
   payment_mode?: PaymentMode | null
   paid_amount: number
+  payments?: InvoicePaymentInput[]
   total_payable_amount?: number | null
   total_tax_amount: number
   invoice_status: InvoiceStatus
@@ -81,11 +86,133 @@ export type InvoiceItem = {
   total_discount_amount: string | number
   selling_price_per_unit: string | number
   total_selling_price: string | number
+  hsn_sac_snapshot?: string | null
+  gst_rate: string | number
+  taxable_value: string | number
+  cgst_rate: string | number
+  cgst_amount: string | number
+  sgst_rate: string | number
+  sgst_amount: string | number
+  igst_rate: string | number
+  igst_amount: string | number
+  total_tax_amount: string | number
   total_buy_cost: string | number
   profit_per_unit: string | number
   total_profit: string | number
   created_at: string
   updated_at: string
+}
+
+export type InvoicePaymentInput = {
+  amount: number
+  payment_method: PaymentMethod
+  payment_reference?: string | null
+  notes?: string | null
+  received_at?: string | null
+}
+
+export type InvoicePaymentCreatePayload = InvoicePaymentInput & {
+  client_request_id: string
+}
+
+export type InvoicePayment = {
+  id: number
+  shop_id: number
+  invoice_id: number
+  amount: string | number
+  payment_method: PaymentMethod
+  payment_reference?: string | null
+  notes?: string | null
+  status: string
+  received_at: string
+  created_by?: number | null
+  created_at: string
+}
+
+export type InvoiceReturnItemCreatePayload = {
+  invoice_item_id: number
+  quantity: number
+}
+
+export type InvoiceReturnCreatePayload = {
+  client_request_id: string
+  reason: string
+  notes?: string | null
+  items: InvoiceReturnItemCreatePayload[]
+}
+
+export type InvoiceRefundCreatePayload = {
+  client_request_id: string
+  amount: number
+  refund_method: PaymentMethod
+  reference?: string | null
+  notes?: string | null
+}
+
+export type InvoiceRefund = {
+  id: number
+  shop_id: number
+  invoice_id: number
+  return_id: number
+  amount: string | number
+  refund_method: PaymentMethod
+  reference?: string | null
+  notes?: string | null
+  status: string
+  refunded_at: string
+  created_by?: number | null
+  created_at: string
+}
+
+export type InvoiceReturnItem = {
+  id: number
+  shop_id: number
+  return_id: number
+  invoice_item_id: number
+  product_id?: number | null
+  product_code: string
+  product_name_snapshot: string
+  hsn_sac_snapshot?: string | null
+  quantity: string | number
+  unit_taxable_value: string | number
+  gst_rate: string | number
+  cgst_rate: string | number
+  cgst_amount: string | number
+  sgst_rate: string | number
+  sgst_amount: string | number
+  igst_rate: string | number
+  igst_amount: string | number
+  taxable_value: string | number
+  total_tax_amount: string | number
+  total_amount: string | number
+  total_buy_cost: string | number
+  total_profit: string | number
+  created_at: string
+}
+
+export type InvoiceReturn = {
+  id: number
+  shop_id: number
+  invoice_id: number
+  return_number: string
+  credit_note_number: string
+  status: string
+  reason: string
+  notes?: string | null
+  subtotal_amount: string | number
+  taxable_amount: string | number
+  cgst_amount: string | number
+  sgst_amount: string | number
+  igst_amount: string | number
+  total_tax_amount: string | number
+  total_amount: string | number
+  applied_to_outstanding_amount: string | number
+  refundable_amount: string | number
+  created_by?: number | null
+  completed_at: string
+  created_at: string
+  items: InvoiceReturnItem[]
+  refunds: InvoiceRefund[]
 }
 
 export type Invoice = {
@@ -100,8 +227,13 @@ export type Invoice = {
   customer_address_snapshot?: string | null
   customer_city_snapshot?: string | null
   customer_state_snapshot?: string | null
+  customer_state_code_snapshot?: string | null
   customer_pincode_snapshot?: string | null
   customer_gst_number_snapshot?: string | null
+  seller_gst_number_snapshot?: string | null
+  seller_state_snapshot?: string | null
+  seller_state_code_snapshot?: string | null
+  tax_treatment: string
 
   invoice_date: string
 
@@ -119,6 +251,7 @@ export type Invoice = {
   payment_status: PaymentStatus
   payment_mode?: PaymentMode | null
   invoice_status: InvoiceStatus
+  finalized_at?: string | null
 
   notes?: string | null
   created_by?: number | null
@@ -127,6 +260,16 @@ export type Invoice = {
   updated_at: string
 
   items: InvoiceItem[]
+  payments: InvoicePayment[]
+  returns: InvoiceReturn[]
+}
+
+export type LocalPaymentLine = {
+  id: string
+  amount: number
+  payment_method: PaymentMethod
+  payment_reference: string
+  notes: string
 }
 
 export type InvoiceListItem = {
@@ -148,6 +291,7 @@ export type InvoiceListItem = {
   payment_status: PaymentStatus
   payment_mode?: PaymentMode | null
   invoice_status: InvoiceStatus
+  finalized_at?: string | null
   created_at: string
 }
 
@@ -198,9 +342,11 @@ export type LocalInvoiceItem = {
   product_name: string
   category?: string | null
   unit?: string | null
+  hsn_sac?: string | null
   mrp: number
   buy_price: number
   available_stock: number
+  gst_rate: number
   quantity: number
   discount_percentage: number
   discount_amount_per_unit: number

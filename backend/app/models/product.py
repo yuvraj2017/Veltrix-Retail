@@ -24,6 +24,8 @@ class Product(Base, IDMixin, TimestampMixin):
     buying_price = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
     mrp = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
     selling_price = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    hsn_sac = Column(String(20), nullable=True)
+    gst_rate = Column(Numeric(5, 2), nullable=False, default=0, server_default="0")
 
     stock_quantity = Column(Integer, nullable=False, default=0, server_default="0")
     low_stock_threshold = Column(Integer, nullable=False, default=5, server_default="5")

@@ -1,14 +1,16 @@
 import { useState } from 'react'
+import type { RefObject } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, PackageCheck, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Minus, PackageCheck, Plus, Trash2, X } from 'lucide-react'
 
 import type { LocalInvoiceItem } from '../../features/billing/types'
-import ProductCodeSearch from './ProductCodeSearch'
+import ProductCodeSearch, { type ProductCodeSearchHandle } from './ProductCodeSearch'
 import type { BillingProduct } from '../../features/billing/types'
 
 type InvoiceItemsTableProps = {
   items: LocalInvoiceItem[]
   onItemsChange: (items: LocalInvoiceItem[]) => void
+  searchRef?: RefObject<ProductCodeSearchHandle | null>
 }
 
 type RecalculationMode = 'discount' | 'unit-price' | 'total' | 'preserve-unit-price'
@@ -43,9 +45,11 @@ const buildLocalItem = (product: BillingProduct): LocalInvoiceItem => {
     product_name: product.name,
     category: product.category,
     unit: product.unit,
+    hsn_sac: product.hsn_sac || '',
     mrp,
     buy_price: buyPrice,
     available_stock: toNumber(product.available_stock),
+    gst_rate: toNumber(product.gst_rate),
     quantity,
     discount_percentage: 0,
     discount_amount_per_unit: 0,
@@ -106,7 +110,7 @@ const recalculateItem = (
   }
 }
 
-export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItemsTableProps) {
+export default function InvoiceItemsTable({ items, onItemsChange, searchRef }: InvoiceItemsTableProps) {
   const [stockAlert, setStockAlert] = useState<{
     productName: string
     availableStock: number
@@ -154,10 +158,12 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
           )
         })
       )
+      window.setTimeout(() => searchRef?.current?.focus(), 0)
       return
     }
 
     onItemsChange([...items, buildLocalItem(product)])
+    window.setTimeout(() => searchRef?.current?.focus(), 0)
   }
 
   const updateItem = (
@@ -200,6 +206,10 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
         </div>
       </div>
 
+      <div className="mb-6">
+        <ProductCodeSearch ref={searchRef} onAddProduct={addProduct} autoFocus />
+      </div>
+
       {items.length > 0 && (
         <div className="mb-6 hidden grid-cols-[1.4fr_0.7fr_0.7fr_0.7fr_0.9fr_0.9fr_0.4fr] px-4 text-[12px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 lg:grid">
           <div>Product Details</div>
@@ -223,6 +233,12 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
           >
             <div>
               <p className="font-black text-slate-950 dark:text-white">{item.product_name}</p>
+              {(item.hsn_sac || Number(item.gst_rate || 0) > 0) && (
+                <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {item.hsn_sac ? `HSN/SAC: ${item.hsn_sac}` : 'HSN/SAC: -'}
+                  {Number(item.gst_rate || 0) > 0 ? ` | GST: ${item.gst_rate}%` : ''}
+                </p>
+              )}
               <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Code: {item.product_code} • Stock: {item.available_stock}
               </p>
@@ -234,16 +250,16 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
 
             <input
               type="number"
-              min={0}
+              min={1}
               max={item.available_stock}
               value={getInputValue(item.quantity)}
-              placeholder="0"
+              placeholder="1"
               onFocus={(event) => {
                 if (event.target.value === '0') event.target.select()
               }}
               onChange={(event) => {
                 const value = event.target.value
-                const parsedValue = value === '' ? 0 : Number(value)
+                const parsedValue = value === '' ? 1 : Number(value)
 
                 if (parsedValue > item.available_stock) {
                   showStockAlert(item.product_name, item.available_stock, parsedValue)
@@ -252,13 +268,31 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
                 updateItem(
                   item.product_id,
                   {
-                    quantity: value === '' ? 0 : Math.min(parsedValue, item.available_stock),
+                    quantity: Math.min(Math.max(parsedValue, 1), item.available_stock),
                   },
                   'preserve-unit-price'
                 )
               }}
               className="h-12 rounded-2xl border border-indigo-100 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 font-bold text-slate-800 dark:text-slate-200 outline-none transition focus:border-indigo-300 dark:focus:border-indigo-500 focus:shadow-[0_0_0_5px_rgba(99,102,241,0.12)] dark:focus:shadow-[0_0_0_5px_rgba(99,102,241,0.2)]"
             />
+            <div className="flex gap-2 lg:hidden">
+              <QuantityButton
+                label="Decrease quantity"
+                icon={Minus}
+                onClick={() => updateItem(item.product_id, { quantity: Math.max(item.quantity - 1, 1) })}
+              />
+              <QuantityButton
+                label="Increase quantity"
+                icon={Plus}
+                onClick={() => {
+                  if (item.quantity >= item.available_stock) {
+                    showStockAlert(item.product_name, item.available_stock, item.quantity + 1)
+                    return
+                  }
+                  updateItem(item.product_id, { quantity: item.quantity + 1 })
+                }}
+              />
+            </div>
 
             <input
               type="number"
@@ -355,10 +389,6 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
         ))}
       </div>
 
-      <div className="mt-6">
-        <ProductCodeSearch onAddProduct={addProduct} />
-      </div>
-
       {stockAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[30px] bg-white p-6 shadow-[0_30px_80px_rgba(15,23,42,0.22)] dark:bg-slate-900">
@@ -406,5 +436,26 @@ export default function InvoiceItemsTable({ items, onItemsChange }: InvoiceItems
         </div>
       )}
     </section>
+  )
+}
+
+function QuantityButton({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string
+  icon: typeof Plus
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="flex h-10 flex-1 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm transition hover:bg-indigo-50 hover:text-indigo-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+    >
+      <Icon size={16} />
+    </button>
   )
 }

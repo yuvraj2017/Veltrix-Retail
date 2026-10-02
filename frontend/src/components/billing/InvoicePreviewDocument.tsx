@@ -39,6 +39,17 @@ const formatDate = (value: string) => {
   })
 }
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 const resolveImageUrl = (path?: string | null) => {
   if (!path) return null
   if (path.startsWith('http://') || path.startsWith('https://')) return path
@@ -58,6 +69,13 @@ export default function InvoicePreviewDocument({
   const extraDiscountAmount = Number(invoice.extra_discount_amount || 0)
   const totalDiscountAmount = Number(invoice.total_discount_amount || 0)
   const itemDiscountAmount = Math.max(totalDiscountAmount - extraDiscountAmount, 0)
+  const taxableValue = invoice.items.reduce(
+    (sum, item) => sum + Number(item.taxable_value || 0),
+    0,
+  )
+  const cgstAmount = invoice.items.reduce((sum, item) => sum + Number(item.cgst_amount || 0), 0)
+  const sgstAmount = invoice.items.reduce((sum, item) => sum + Number(item.sgst_amount || 0), 0)
+  const igstAmount = invoice.items.reduce((sum, item) => sum + Number(item.igst_amount || 0), 0)
 
   const customerAddress = [
     invoice.customer_address_snapshot,
@@ -119,6 +137,9 @@ export default function InvoicePreviewDocument({
               )}
 
               <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] font-medium text-slate-600 sm:justify-end">
+                {invoice.seller_gst_number_snapshot && (
+                  <span>GSTIN: {invoice.seller_gst_number_snapshot}</span>
+                )}
                 {shopInfo.phone && (
                   <span className="inline-flex items-center gap-1.5">
                     <Phone size={12} className="text-indigo-600" />
@@ -168,6 +189,9 @@ export default function InvoicePreviewDocument({
                 </p>
               )}
               <p>{customerAddress || 'Address not added'}</p>
+              {invoice.customer_gst_number_snapshot && (
+                <p>GSTIN: {invoice.customer_gst_number_snapshot}</p>
+              )}
             </div>
           </div>
 
@@ -189,11 +213,13 @@ export default function InvoicePreviewDocument({
         </div>
 
         <div className="overflow-hidden rounded-[18px] border border-slate-200 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-          <div className="grid grid-cols-[0.45fr_2fr_0.8fr_0.7fr_0.95fr] bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-4 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-white">
+          <div className="grid grid-cols-[0.35fr_1.45fr_0.55fr_0.5fr_0.8fr_0.7fr_0.8fr] bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-white">
             <div>Sl.</div>
             <div>Item Description</div>
-            <div>MRP</div>
+            <div>HSN</div>
             <div>Qty.</div>
+            <div className="text-right">Taxable</div>
+            <div className="text-right">GST</div>
             <div className="text-right">Total</div>
           </div>
 
@@ -201,7 +227,7 @@ export default function InvoicePreviewDocument({
             {invoice.items.map((item, index) => (
               <div
                 key={item.id}
-                className={`invoice-row grid grid-cols-[0.45fr_2fr_0.8fr_0.7fr_0.95fr] items-center px-4 py-4 text-[13px] ${
+                className={`invoice-row grid grid-cols-[0.35fr_1.45fr_0.55fr_0.5fr_0.8fr_0.7fr_0.8fr] items-center px-4 py-4 text-[12px] ${
                   index % 2 === 0 ? 'bg-slate-50' : 'bg-white'
                 }`}
               >
@@ -220,12 +246,25 @@ export default function InvoicePreviewDocument({
                       ? ` • Discount: ${Number(item.discount_percentage)}%`
                       : ''}
                   </p>
+                  {(Number(item.cgst_amount || 0) > 0 ||
+                    Number(item.sgst_amount || 0) > 0 ||
+                    Number(item.igst_amount || 0) > 0) && (
+                    <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                      CGST {money(item.cgst_amount || 0)} | SGST {money(item.sgst_amount || 0)} | IGST {money(item.igst_amount || 0)}
+                    </p>
+                  )}
                 </div>
 
-                <div className="font-black text-slate-700">{money(item.mrp)}</div>
+                <div className="font-black text-slate-700">{item.hsn_sac_snapshot || '-'}</div>
                 <div className="font-black text-slate-700">{Number(item.quantity)}</div>
                 <div className="text-right font-black text-slate-900">
-                  {money(item.total_selling_price)}
+                  {money(item.taxable_value || item.total_selling_price)}
+                </div>
+                <div className="text-right font-black text-slate-700">
+                  {Number(item.gst_rate || 0)}%
+                </div>
+                <div className="text-right font-black text-slate-900">
+                  {money(Number(item.taxable_value || item.total_selling_price) + Number(item.total_tax_amount || 0))}
                 </div>
               </div>
             ))}
@@ -256,14 +295,88 @@ export default function InvoicePreviewDocument({
               {itemDiscountAmount > 0 && (
                 <SummaryRow label="Item Discount:" value={`-${money(itemDiscountAmount)}`} />
               )}
-              <SummaryRow label="Tax:" value={money(invoice.total_tax_amount)} />
+              {taxableValue > 0 && <SummaryRow label="Taxable Value:" value={money(taxableValue)} />}
+              {cgstAmount > 0 && <SummaryRow label="CGST:" value={money(cgstAmount)} />}
+              {sgstAmount > 0 && <SummaryRow label="SGST:" value={money(sgstAmount)} />}
+              {igstAmount > 0 && <SummaryRow label="IGST:" value={money(igstAmount)} />}
+              <SummaryRow label="Total GST:" value={money(invoice.total_tax_amount)} />
               <SummaryRow label="Total Billed Amount:" value={money(billedAmount)} />
               {extraDiscountAmount > 0 && (
                 <SummaryRow label="Extra Discount:" value={`-${money(extraDiscountAmount)}`} />
               )}
               <SummaryRow label="Total Discount:" value={`-${money(totalDiscountAmount)}`} />
               <SummaryRow label="Paid:" value={money(invoice.paid_amount)} />
+              <SummaryRow label="Balance Due:" value={money(invoice.remaining_amount)} />
+              <SummaryRow label="Payment Status:" value={invoice.payment_status || 'pending'} />
             </div>
+
+            {invoice.payments?.length > 0 && (
+              <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 p-4">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  Payment History
+                </p>
+                <div className="space-y-2">
+                  {invoice.payments.map((payment) => (
+                    <div key={payment.id} className="grid grid-cols-[1fr_auto] gap-3 text-[11px]">
+                      <div>
+                        <p className="font-black text-slate-800">
+                          {payment.payment_method.replaceAll('_', ' ')}
+                        </p>
+                        <p className="text-slate-500">
+                          {formatDateTime(payment.received_at)}
+                          {payment.payment_reference ? ` | Ref: ${payment.payment_reference}` : ''}
+                        </p>
+                      </div>
+                      <div className="font-black text-slate-900">{money(payment.amount)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {invoice.returns?.length > 0 && (
+              <div className="mt-4 rounded-[18px] border border-rose-200 bg-rose-50 p-4">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">
+                  Returns / Credit Notes
+                </p>
+                <div className="space-y-3">
+                  {invoice.returns.map((returnRecord) => (
+                    <div key={returnRecord.id} className="border-b border-rose-100 pb-3 last:border-b-0 last:pb-0">
+                      <div className="grid grid-cols-[1fr_auto] gap-3 text-[11px]">
+                        <div>
+                          <p className="font-black text-slate-800">
+                            {returnRecord.return_number} / {returnRecord.credit_note_number}
+                          </p>
+                          <p className="text-slate-500">
+                            {formatDateTime(returnRecord.completed_at)}
+                            {returnRecord.reason ? ` | ${returnRecord.reason}` : ''}
+                          </p>
+                        </div>
+                        <div className="font-black text-rose-700">-{money(returnRecord.total_amount)}</div>
+                      </div>
+                      <div className="mt-2 space-y-1 text-[10px] font-semibold text-slate-600">
+                        {returnRecord.items.map((item) => (
+                          <div key={item.id} className="flex justify-between gap-3">
+                            <span>{item.product_name_snapshot} x {Number(item.quantity)}</span>
+                            <span>{money(item.total_amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {returnRecord.refunds?.length > 0 && (
+                        <div className="mt-2 space-y-1 text-[10px] font-semibold text-slate-500">
+                          {returnRecord.refunds.map((refund) => (
+                            <div key={refund.id} className="flex justify-between gap-3">
+                              <span>Refund {refund.refund_method.replaceAll('_', ' ')}</span>
+                              <span>{money(refund.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 overflow-hidden rounded-[18px] border border-indigo-200 bg-white shadow-[0_18px_36px_rgba(79,70,229,0.10)]">
               <div className="bg-gradient-to-r from-indigo-500 via-violet-600 to-indigo-700 px-5 py-4 text-white">

@@ -25,16 +25,26 @@ export const invoiceItemCreateSchema = z.object({
   selling_price_per_unit: z.number().min(0).optional().nullable(),
 })
 
+export const invoicePaymentInputSchema = z.object({
+  amount: z.number().positive('Payment amount must be greater than zero'),
+  payment_method: z.enum(['cash', 'upi', 'card', 'bank_transfer', 'other']),
+  payment_reference: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  received_at: z.string().optional().nullable(),
+})
+
 export const invoiceCreateSchema = z.object({
+  client_request_id: z.string().min(8).max(100).optional().nullable(),
   customer: customerPayloadSchema,
   items: z.array(invoiceItemCreateSchema).min(1, 'Add at least one product'),
   invoice_date: z.string().optional().nullable(),
   payment_status: z.enum(['pending', 'paid', 'partial']),
   payment_mode: z
-    .enum(['cash', 'upi', 'card', 'bank_transfer', 'other'])
+    .enum(['cash', 'upi', 'card', 'bank_transfer', 'other', 'mixed'])
     .optional()
     .nullable(),
   paid_amount: z.number().min(0),
+  payments: z.array(invoicePaymentInputSchema).optional(),
   total_payable_amount: z.number().min(0).optional().nullable(),
   total_tax_amount: z.number().min(0),
   invoice_status: z.enum(['draft', 'saved', 'cancelled']),

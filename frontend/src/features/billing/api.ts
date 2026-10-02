@@ -6,7 +6,13 @@ import type {
   Invoice,
   InvoiceCreatePayload,
   InvoiceListResponse,
+  InvoicePayment,
+  InvoicePaymentCreatePayload,
   InvoicePreviewResponse,
+  InvoiceRefund,
+  InvoiceRefundCreatePayload,
+  InvoiceReturn,
+  InvoiceReturnCreatePayload,
   InvoiceShareResponse,
   InvoiceStats,
 } from './types'
@@ -15,6 +21,30 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 const buildHeaders = (): HeadersInit => ({ 'Content-Type': 'application/json' })
+
+const getErrorMessage = (errorData: any, fallback: string) => {
+  const detail = errorData?.detail
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail
+  }
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const firstIssue = detail[0]
+    if (typeof firstIssue === 'string' && firstIssue.trim()) return firstIssue
+    if (firstIssue?.msg && typeof firstIssue.msg === 'string') return firstIssue.msg
+  }
+
+  if (detail?.message && typeof detail.message === 'string') {
+    return detail.message
+  }
+
+  if (errorData?.message && typeof errorData.message === 'string') {
+    return errorData.message
+  }
+
+  return fallback
+}
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
   if (response.status === 401) {
@@ -26,7 +56,7 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
 
     try {
       const errorData = await response.json()
-      message = errorData?.detail || errorData?.message || message
+      message = getErrorMessage(errorData, message)
     } catch {
       message = response.statusText || message
     }
@@ -160,6 +190,54 @@ export const billingApi = {
     )
 
     return handleResponse<InvoicePreviewResponse>(response)
+  },
+
+  getInvoicePayments: async (invoiceId: number): Promise<InvoicePayment[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}/payments`, {
+      method: 'GET',
+      headers: buildHeaders(),
+    })
+
+    return handleResponse<InvoicePayment[]>(response)
+  },
+
+  addInvoicePayment: async (
+    invoiceId: number,
+    payload: InvoicePaymentCreatePayload
+  ): Promise<InvoicePayment> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}/payments`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    })
+
+    return handleResponse<InvoicePayment>(response)
+  },
+
+  createInvoiceReturn: async (
+    invoiceId: number,
+    payload: InvoiceReturnCreatePayload
+  ): Promise<InvoiceReturn> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}/returns`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    })
+
+    return handleResponse<InvoiceReturn>(response)
+  },
+
+  addReturnRefund: async (
+    returnId: number,
+    payload: InvoiceRefundCreatePayload
+  ): Promise<InvoiceRefund> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invoices/returns/${returnId}/refunds`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    })
+
+    return handleResponse<InvoiceRefund>(response)
   },
 
   // updateInvoice: async (

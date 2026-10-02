@@ -21,6 +21,8 @@ AUDITED_PRODUCT_FIELDS = (
     "buying_price",
     "mrp",
     "selling_price",
+    "hsn_sac",
+    "gst_rate",
     "stock_quantity",
     "low_stock_threshold",
     "unit",
@@ -86,6 +88,8 @@ def create_product(
         buying_price=payload.buying_price,
         mrp=payload.mrp,
         selling_price=payload.selling_price,
+        hsn_sac=payload.hsn_sac.strip() if payload.hsn_sac else None,
+        gst_rate=payload.gst_rate,
         stock_quantity=payload.stock_quantity,
         low_stock_threshold=payload.low_stock_threshold,
         unit=payload.unit,
@@ -251,7 +255,7 @@ def get_product(product_id: int, current_user: User, db: Session):
 def _get_product_for_update(product_id: int, current_user: User, db: Session):
     product = (
         db.query(Product)
-        .options(joinedload(Product.images))
+        .options(selectinload(Product.images))
         .filter(Product.id == product_id, Product.shop_id == current_user.shop_id)
         .with_for_update()
         .first()
@@ -291,7 +295,11 @@ def update_product(
             )
 
     update_data = payload.model_dump(exclude_unset=True)
+    if update_data.get("gst_rate") is None:
+        update_data.pop("gst_rate", None)
     for field, value in update_data.items():
+        if field == "hsn_sac" and isinstance(value, str):
+            value = value.strip() or None
         setattr(product, field, value)
 
     if new_image_urls:

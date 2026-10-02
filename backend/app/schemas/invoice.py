@@ -59,11 +59,13 @@ class BillingProductResponse(BaseModel):
 
     category: Optional[str] = None
     unit: Optional[str] = None
+    hsn_sac: Optional[str] = None
 
     mrp: Decimal
     buying_price: Decimal
     selling_price: Decimal
     available_stock: Decimal
+    gst_rate: Decimal
 
     is_active: bool
 
@@ -115,6 +117,16 @@ class InvoiceItemResponse(BaseModel):
 
     selling_price_per_unit: Decimal
     total_selling_price: Decimal
+    hsn_sac_snapshot: Optional[str] = None
+    gst_rate: Decimal
+    taxable_value: Decimal
+    cgst_rate: Decimal
+    cgst_amount: Decimal
+    sgst_rate: Decimal
+    sgst_amount: Decimal
+    igst_rate: Decimal
+    igst_amount: Decimal
+    total_tax_amount: Decimal
 
     total_buy_cost: Decimal
     profit_per_unit: Decimal
@@ -126,11 +138,197 @@ class InvoiceItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+PAYMENT_METHODS = {"cash", "upi", "card", "bank_transfer", "other"}
+
+
+class InvoicePaymentInput(BaseModel):
+    amount: Decimal = Field(..., gt=0)
+    payment_method: str
+    payment_reference: Optional[str] = Field(default=None, max_length=150)
+    notes: Optional[str] = None
+    received_at: Optional[datetime] = None
+
+    @field_validator("payment_method")
+    @classmethod
+    def validate_payment_method(cls, value):
+        if value not in PAYMENT_METHODS:
+            raise ValueError("payment_method must be cash, upi, card, bank_transfer, or other")
+        return value
+
+    @field_validator("payment_reference", "notes", mode="before")
+    @classmethod
+    def strip_payment_text(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+
+class InvoicePaymentCreate(InvoicePaymentInput):
+    client_request_id: str = Field(..., min_length=8, max_length=100)
+
+    @field_validator("client_request_id", mode="before")
+    @classmethod
+    def strip_client_request_id(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+        return value
+
+
+class InvoicePaymentResponse(BaseModel):
+    id: int
+    shop_id: int
+    invoice_id: int
+    amount: Decimal
+    payment_method: str
+    payment_reference: Optional[str] = None
+    notes: Optional[str] = None
+    status: str
+    received_at: datetime
+    created_by: Optional[int] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InvoiceReturnItemCreate(BaseModel):
+    invoice_item_id: int
+    quantity: Decimal = Field(..., gt=0)
+
+
+class InvoiceReturnCreate(BaseModel):
+    client_request_id: str = Field(..., min_length=8, max_length=100)
+    reason: str = Field(..., min_length=3, max_length=200)
+    notes: Optional[str] = None
+    items: list[InvoiceReturnItemCreate] = Field(..., min_length=1)
+
+    @field_validator("client_request_id", "reason", "notes", mode="before")
+    @classmethod
+    def strip_return_text(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+
+class InvoiceCancelPayload(BaseModel):
+    client_request_id: Optional[str] = Field(default=None, min_length=8, max_length=100)
+    reason: str = Field(default="Invoice cancellation", min_length=3, max_length=200)
+    notes: Optional[str] = None
+
+    @field_validator("client_request_id", "reason", "notes", mode="before")
+    @classmethod
+    def strip_cancel_text(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+
+class InvoiceRefundCreate(BaseModel):
+    client_request_id: str = Field(..., min_length=8, max_length=100)
+    amount: Decimal = Field(..., gt=0)
+    refund_method: str
+    reference: Optional[str] = Field(default=None, max_length=150)
+    notes: Optional[str] = None
+    refunded_at: Optional[datetime] = None
+
+    @field_validator("refund_method")
+    @classmethod
+    def validate_refund_method(cls, value):
+        if value not in PAYMENT_METHODS:
+            raise ValueError("refund_method must be cash, upi, card, bank_transfer, or other")
+        return value
+
+    @field_validator("client_request_id", "reference", "notes", mode="before")
+    @classmethod
+    def strip_refund_text(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+
+class InvoiceRefundResponse(BaseModel):
+    id: int
+    shop_id: int
+    invoice_id: int
+    return_id: int
+    amount: Decimal
+    refund_method: str
+    reference: Optional[str] = None
+    notes: Optional[str] = None
+    status: str
+    refunded_at: datetime
+    created_by: Optional[int] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InvoiceReturnItemResponse(BaseModel):
+    id: int
+    shop_id: int
+    return_id: int
+    invoice_item_id: int
+    product_id: Optional[int] = None
+    product_code: str
+    product_name_snapshot: str
+    hsn_sac_snapshot: Optional[str] = None
+    quantity: Decimal
+    unit_taxable_value: Decimal
+    gst_rate: Decimal
+    cgst_rate: Decimal
+    sgst_rate: Decimal
+    igst_rate: Decimal
+    taxable_value: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    total_tax_amount: Decimal
+    total_amount: Decimal
+    total_buy_cost: Decimal = Field(default=0)
+    total_profit: Decimal = Field(default=0)
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InvoiceReturnResponse(BaseModel):
+    id: int
+    shop_id: int
+    invoice_id: int
+    return_number: str
+    credit_note_number: str
+    status: str
+    reason: str
+    notes: Optional[str] = None
+    subtotal_amount: Decimal
+    taxable_amount: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    total_tax_amount: Decimal
+    total_amount: Decimal
+    total_buy_cost: Decimal = Field(default=0)
+    total_profit: Decimal = Field(default=0)
+    applied_to_outstanding_amount: Decimal
+    refundable_amount: Decimal
+    created_by: Optional[int] = None
+    completed_at: datetime
+    created_at: datetime
+    items: list[InvoiceReturnItemResponse] = []
+    refunds: list[InvoiceRefundResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
 # =========================================================
 # INVOICE CREATE / UPDATE
 # =========================================================
 
 class InvoiceCreate(BaseModel):
+    client_request_id: Optional[str] = Field(default=None, min_length=8, max_length=100)
     customer: InvoiceCustomerPayload
 
     items: list[InvoiceItemCreate] = Field(..., min_length=1)
@@ -140,12 +338,21 @@ class InvoiceCreate(BaseModel):
     payment_status: str = Field(default="pending")
     payment_mode: Optional[str] = None
     paid_amount: Decimal = Field(default=0, ge=0)
+    payments: Optional[list[InvoicePaymentInput]] = None
     total_payable_amount: Optional[Decimal] = Field(default=None, ge=0)
 
     total_tax_amount: Decimal = Field(default=0, ge=0)
 
     invoice_status: str = Field(default="saved")
     notes: Optional[str] = None
+
+    @field_validator("client_request_id", mode="before")
+    @classmethod
+    def strip_client_request_id(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
     @field_validator("payment_status")
     @classmethod
@@ -161,9 +368,9 @@ class InvoiceCreate(BaseModel):
         if value is None:
             return value
 
-        allowed = {"cash", "upi", "card", "bank_transfer", "other"}
+        allowed = {"cash", "upi", "card", "bank_transfer", "other", "mixed"}
         if value not in allowed:
-            raise ValueError("payment_mode must be cash, upi, card, bank_transfer, or other")
+            raise ValueError("payment_mode must be cash, upi, card, bank_transfer, other, or mixed")
         return value
 
     @field_validator("invoice_status")
@@ -249,9 +456,9 @@ class InvoiceUpdate(BaseModel):
         if value is None:
             return value
 
-        allowed = {"cash", "upi", "card", "bank_transfer", "other"}
+        allowed = {"cash", "upi", "card", "bank_transfer", "other", "mixed"}
         if value not in allowed:
-            raise ValueError("payment_mode must be cash, upi, card, bank_transfer, or other")
+            raise ValueError("payment_mode must be cash, upi, card, bank_transfer, other, or mixed")
         return value
 
     @field_validator("invoice_status")
@@ -285,8 +492,13 @@ class InvoiceResponse(BaseModel):
     customer_address_snapshot: Optional[str] = None
     customer_city_snapshot: Optional[str] = None
     customer_state_snapshot: Optional[str] = None
+    customer_state_code_snapshot: Optional[str] = None
     customer_pincode_snapshot: Optional[str] = None
     customer_gst_number_snapshot: Optional[str] = None
+    seller_gst_number_snapshot: Optional[str] = None
+    seller_state_snapshot: Optional[str] = None
+    seller_state_code_snapshot: Optional[str] = None
+    tax_treatment: str
 
     invoice_date: date
 
@@ -306,6 +518,7 @@ class InvoiceResponse(BaseModel):
     payment_status: str
     payment_mode: Optional[str] = None
     invoice_status: str
+    finalized_at: Optional[datetime] = None
 
     notes: Optional[str] = None
 
@@ -315,6 +528,8 @@ class InvoiceResponse(BaseModel):
     updated_at: datetime
 
     items: list[InvoiceItemResponse] = []
+    payments: list[InvoicePaymentResponse] = []
+    returns: list[InvoiceReturnResponse] = []
 
     model_config = {"from_attributes": True}
 
@@ -344,6 +559,7 @@ class InvoiceListResponse(BaseModel):
     payment_status: str
     payment_mode: Optional[str] = None
     invoice_status: str
+    finalized_at: Optional[datetime] = None
 
     created_at: datetime
 

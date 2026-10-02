@@ -37,7 +37,7 @@ def _make_product(db_session, shop_id: int, *, sku: str, stock_quantity: int = 1
     return product
 
 
-def _invoice_payload(product: Product, quantity=1) -> InvoiceCreate:
+def _invoice_payload(product: Product, quantity=1, *, invoice_status: str = "saved") -> InvoiceCreate:
     return InvoiceCreate.model_validate(
         {
             "customer": {
@@ -58,12 +58,12 @@ def _invoice_payload(product: Product, quantity=1) -> InvoiceCreate:
             "payment_mode": "cash",
             "paid_amount": 0,
             "total_tax_amount": 0,
-            "invoice_status": "saved",
+            "invoice_status": invoice_status,
         }
     )
 
 
-def _invoice_api_payload(product: Product, quantity=1) -> dict:
+def _invoice_api_payload(product: Product, quantity=1, *, invoice_status: str = "saved") -> dict:
     return {
         "customer": {
             "first_name": "Phase",
@@ -83,7 +83,7 @@ def _invoice_api_payload(product: Product, quantity=1) -> dict:
         "payment_mode": "cash",
         "paid_amount": "0",
         "total_tax_amount": "0",
-        "invoice_status": "saved",
+        "invoice_status": invoice_status,
     }
 
 
@@ -109,7 +109,11 @@ def test_active_tenant_invoice_stock_number_and_audit_work_together(db_session, 
     user = make_user(email="phase1-active-flow@example.com")
     product = _make_product(db_session, user.shop_id, sku="P1ACTIVE", stock_quantity=5)
 
-    invoice = create_invoice(_invoice_payload(product, quantity=2), db_session, user)
+    invoice = create_invoice(
+        _invoice_payload(product, quantity=2, invoice_status="draft"),
+        db_session,
+        user,
+    )
 
     assert invoice.invoice_number == "INV-20260927-001"
     assert _stock(db_session, product) == 3
@@ -175,13 +179,17 @@ def test_insufficient_stock_leaves_no_successful_invoice_audit(db_session, make_
 def test_invoice_update_adjusts_stock_and_records_audit(db_session, make_user):
     user = make_user(email="phase1-update-flow@example.com")
     product = _make_product(db_session, user.shop_id, sku="P1EDIT", stock_quantity=10)
-    invoice = create_invoice(_invoice_payload(product, quantity=2), db_session, user)
+    invoice = create_invoice(
+        _invoice_payload(product, quantity=2, invoice_status="draft"),
+        db_session,
+        user,
+    )
 
     update_invoice(
         invoice.id,
         InvoiceUpdate.model_validate(
             {
-                **_invoice_api_payload(product, quantity=4),
+                **_invoice_api_payload(product, quantity=4, invoice_status="draft"),
                 "customer": {
                     "first_name": "Phase",
                     "last_name": "One",

@@ -247,6 +247,10 @@ export default function SettingsPage() {
     whatsapp_number: '',
     address: '',
     logo_url: '',
+    gst_enabled: false,
+    gstin: '',
+    state: '',
+    gst_state_code: '',
   })
   const [accountForm, setAccountForm] = useState({
     full_name: '',
@@ -299,6 +303,10 @@ export default function SettingsPage() {
           whatsapp_number: shopData.whatsapp_number || '',
           address: shopData.address || '',
           logo_url: shopData.logo_url || '',
+          gst_enabled: Boolean(shopData.gst_enabled),
+          gstin: shopData.gstin || '',
+          state: shopData.state || '',
+          gst_state_code: shopData.gst_state_code || '',
         })
         setAccountForm({
           full_name: profileData.full_name || '',
@@ -349,6 +357,10 @@ export default function SettingsPage() {
         whatsapp_number: shopForm.whatsapp_number || null,
         address: shopForm.address || null,
         logo_url: shopForm.logo_url || null,
+        gst_enabled: Boolean(shopForm.gst_enabled),
+        gstin: shopForm.gstin || null,
+        state: shopForm.state || null,
+        gst_state_code: shopForm.gst_state_code || null,
       })
       setShop(updated)
       showToast({
@@ -531,6 +543,17 @@ export default function SettingsPage() {
             </div>
             <div className="mt-4">
               <TextAreaField label="Business Address" value={shopForm.address || ''} onChange={(value) => setShopForm((current) => ({ ...current, address: value }))} placeholder="Full operating address" />
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <ToggleRow
+                title="GST registered"
+                description="Enable GST calculation for products with GST rates."
+                checked={Boolean(shopForm.gst_enabled)}
+                onChange={(checked) => setShopForm((current) => ({ ...current, gst_enabled: checked }))}
+              />
+              <InputField label="GSTIN" value={shopForm.gstin || ''} onChange={(value) => setShopForm((current) => ({ ...current, gstin: value }))} placeholder="24AAAAA0000A1Z5" />
+              <InputField label="Business State" value={shopForm.state || ''} onChange={(value) => setShopForm((current) => ({ ...current, state: value }))} placeholder="Gujarat" />
+              <InputField label="GST State Code" value={shopForm.gst_state_code || ''} onChange={(value) => setShopForm((current) => ({ ...current, gst_state_code: value }))} placeholder="24" />
             </div>
             <div className="mt-4 space-y-4">
               <Banner state={storeBanner} />

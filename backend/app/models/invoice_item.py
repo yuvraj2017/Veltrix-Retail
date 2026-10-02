@@ -47,6 +47,16 @@ class InvoiceItem(Base):
 
     selling_price_per_unit = Column(Numeric(12, 2), nullable=False, default=0)
     total_selling_price = Column(Numeric(12, 2), nullable=False, default=0)
+    hsn_sac_snapshot = Column(String(20), nullable=True)
+    gst_rate = Column(Numeric(5, 2), nullable=False, default=0, server_default="0")
+    taxable_value = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    cgst_rate = Column(Numeric(5, 2), nullable=False, default=0, server_default="0")
+    cgst_amount = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    sgst_rate = Column(Numeric(5, 2), nullable=False, default=0, server_default="0")
+    sgst_amount = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    igst_rate = Column(Numeric(5, 2), nullable=False, default=0, server_default="0")
+    igst_amount = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    total_tax_amount = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
 
     total_buy_cost = Column(Numeric(12, 2), nullable=False, default=0)
     profit_per_unit = Column(Numeric(12, 2), nullable=False, default=0)

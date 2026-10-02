@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.customer import Customer
 from app.models.expense import Expense
 from app.models.invoice import Invoice
+from app.models.invoice_return import InvoiceRefund, InvoiceReturn
 from app.models.product_sales_analytics import ProductSalesAnalytics
 from app.models.user import User
 from app.models.vendor_bill import VendorBill
@@ -161,6 +162,68 @@ def _payment_bucket(invoice_date: date, payment_status: str | None, remaining_am
     return "PENDING"
 
 
+def _active_invoice_filters(shop_id: int):
+    return (
+        Invoice.shop_id == shop_id,
+        Invoice.invoice_status != "cancelled",
+    )
+
+
+def _return_totals(
+    db: Session,
+    shop_id: int,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+) -> tuple[Decimal, Decimal, Decimal]:
+    filters = [
+        InvoiceReturn.shop_id == shop_id,
+        InvoiceReturn.status == "completed",
+        Invoice.invoice_status != "cancelled",
+    ]
+    if start is not None:
+        filters.append(Invoice.invoice_date >= start)
+    if end is not None:
+        filters.append(Invoice.invoice_date <= end)
+
+    row = (
+        db.query(
+            func.coalesce(func.sum(InvoiceReturn.total_amount), 0).label("amount"),
+            func.coalesce(func.sum(InvoiceReturn.total_profit), 0).label("profit"),
+            func.coalesce(func.sum(InvoiceReturn.applied_to_outstanding_amount), 0).label("applied"),
+        )
+        .join(Invoice, Invoice.id == InvoiceReturn.invoice_id)
+        .filter(*filters)
+        .one()
+    )
+    return _to_decimal(row.amount), _to_decimal(row.profit), _to_decimal(row.applied)
+
+
+def _refund_total(
+    db: Session,
+    shop_id: int,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+) -> Decimal:
+    filters = [
+        InvoiceRefund.shop_id == shop_id,
+        InvoiceRefund.status == "completed",
+        Invoice.invoice_status != "cancelled",
+    ]
+    if start is not None:
+        filters.append(Invoice.invoice_date >= start)
+    if end is not None:
+        filters.append(Invoice.invoice_date <= end)
+
+    return _to_decimal(
+        db.query(func.coalesce(func.sum(InvoiceRefund.amount), 0))
+        .join(Invoice, Invoice.id == InvoiceRefund.invoice_id)
+        .filter(*filters)
+        .scalar()
+    )
+
+
 def get_report_summary(db: Session, current_user: User) -> ReportSummaryResponse:
     shop_id = current_user.shop_id
     today = date.today()
@@ -174,9 +237,11 @@ def get_report_summary(db: Session, current_user: User) -> ReportSummaryResponse
             func.coalesce(func.sum(Invoice.remaining_amount), 0).label("receivables"),
             func.count(Invoice.id).label("invoice_count"),
         )
-        .filter(Invoice.shop_id == shop_id)
+        .filter(*_active_invoice_filters(shop_id))
         .one()
     )
+    returned_amount, returned_profit, _returned_outstanding = _return_totals(db, shop_id)
+    refunded_amount = _refund_total(db, shop_id)
 
     expense_total = _to_decimal(
         db.query(func.coalesce(func.sum(Expense.amount), 0))
@@ -199,16 +264,16 @@ def get_report_summary(db: Session, current_user: User) -> ReportSummaryResponse
     active_customers = (
         db.query(func.count(func.distinct(Invoice.customer_id)))
         .filter(
-            Invoice.shop_id == shop_id,
+            *_active_invoice_filters(shop_id),
             Invoice.customer_id.isnot(None),
             Invoice.invoice_date >= active_cutoff,
         )
         .scalar()
     ) or 0
 
-    total_revenue = _to_decimal(totals.revenue)
-    total_profit = _to_decimal(totals.profit)
-    total_collected = _to_decimal(totals.collected)
+    total_revenue = max(_to_decimal(totals.revenue) - returned_amount, Decimal("0.00"))
+    total_profit = _to_decimal(totals.profit) - returned_profit
+    total_collected = max(_to_decimal(totals.collected) - refunded_amount, Decimal("0.00"))
     outstanding_receivables = _to_decimal(totals.receivables)
     invoice_count = int(totals.invoice_count or 0)
     average_order_value = total_revenue / invoice_count if invoice_count else Decimal("0.00")
@@ -246,7 +311,7 @@ def get_sales_profit_report(
             func.coalesce(func.sum(Invoice.total_profit), 0).label("total_profit"),
         )
         .filter(
-            Invoice.shop_id == current_user.shop_id,
+            *_active_invoice_filters(current_user.shop_id),
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
@@ -269,12 +334,42 @@ def get_sales_profit_report(
         total_revenue += revenue
         total_profit += profit
 
+    return_rows = (
+        db.query(
+            Invoice.invoice_date,
+            func.coalesce(func.sum(InvoiceReturn.total_amount), 0).label("return_amount"),
+            func.coalesce(func.sum(InvoiceReturn.total_profit), 0).label("return_profit"),
+        )
+        .join(Invoice, Invoice.id == InvoiceReturn.invoice_id)
+        .filter(
+            InvoiceReturn.shop_id == current_user.shop_id,
+            InvoiceReturn.status == "completed",
+            Invoice.invoice_status != "cancelled",
+            Invoice.invoice_date >= range_start,
+            Invoice.invoice_date <= range_end,
+        )
+        .group_by(Invoice.invoice_date)
+        .all()
+    )
+
+    for invoice_date, return_amount, return_profit in return_rows:
+        bucket_index = _bucket_index_for(invoice_date, buckets)
+        if bucket_index is None:
+            continue
+
+        revenue_reversal = _to_decimal(return_amount)
+        profit_reversal = _to_decimal(return_profit)
+        points[bucket_index].revenue = round(points[bucket_index].revenue - float(revenue_reversal), 2)
+        points[bucket_index].profit = round(points[bucket_index].profit - float(profit_reversal), 2)
+        total_revenue -= revenue_reversal
+        total_profit -= profit_reversal
+
     return SalesProfitReportResponse(
         period=period,
         points=points,
-        total_revenue=float(total_revenue),
+        total_revenue=float(max(total_revenue, Decimal("0.00"))),
         total_profit=float(total_profit),
-        profit_margin=_safe_percent(total_profit, total_revenue),
+        profit_margin=_safe_percent(total_profit, max(total_revenue, Decimal("0.00"))),
     )
 
 
@@ -294,7 +389,7 @@ def get_cashflow_report(
             func.coalesce(func.sum(Invoice.remaining_amount), 0).label("remaining_amount"),
         )
         .filter(
-            Invoice.shop_id == current_user.shop_id,
+            *_active_invoice_filters(current_user.shop_id),
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
@@ -331,6 +426,30 @@ def get_cashflow_report(
         points[bucket_index].outstanding += float(outstanding)
         total_collections += collections
         outstanding_receivables += outstanding
+
+    refund_rows = (
+        db.query(
+            Invoice.invoice_date,
+            func.coalesce(func.sum(InvoiceRefund.amount), 0).label("refund_amount"),
+        )
+        .join(Invoice, Invoice.id == InvoiceRefund.invoice_id)
+        .filter(
+            InvoiceRefund.shop_id == current_user.shop_id,
+            InvoiceRefund.status == "completed",
+            Invoice.invoice_status != "cancelled",
+            Invoice.invoice_date >= range_start,
+            Invoice.invoice_date <= range_end,
+        )
+        .group_by(Invoice.invoice_date)
+        .all()
+    )
+    for invoice_date, refund_amount in refund_rows:
+        bucket_index = _bucket_index_for(invoice_date, buckets)
+        if bucket_index is None:
+            continue
+        refund_value = _to_decimal(refund_amount)
+        points[bucket_index].collections = round(points[bucket_index].collections - float(refund_value), 2)
+        total_collections -= refund_value
 
     for expense_date, amount in expense_rows:
         bucket_index = _bucket_index_for(expense_date, buckets)
@@ -410,7 +529,7 @@ def get_customer_insights_report(
     first_invoice_rows = (
         db.query(Invoice.customer_id, func.min(Invoice.invoice_date).label("first_invoice_date"))
         .filter(
-            Invoice.shop_id == current_user.shop_id,
+            *_active_invoice_filters(current_user.shop_id),
             Invoice.customer_id.isnot(None),
         )
         .group_by(Invoice.customer_id)
@@ -429,7 +548,7 @@ def get_customer_insights_report(
             func.coalesce(func.sum(Invoice.final_amount), 0).label("final_amount"),
         )
         .filter(
-            Invoice.shop_id == current_user.shop_id,
+            *_active_invoice_filters(current_user.shop_id),
             Invoice.customer_id.isnot(None),
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
@@ -504,7 +623,7 @@ def get_payment_insights_report(
             func.count(Invoice.id).label("invoice_count"),
         )
         .filter(
-            Invoice.shop_id == current_user.shop_id,
+            *_active_invoice_filters(current_user.shop_id),
             Invoice.invoice_date >= range_start,
             Invoice.invoice_date <= range_end,
         )
@@ -539,6 +658,22 @@ def get_payment_insights_report(
 
         status_amounts[bucket] += billed
         status_counts[bucket] += row.invoice_count
+
+    returned_amount, _returned_profit, _returned_outstanding = _return_totals(
+        db,
+        current_user.shop_id,
+        start=range_start,
+        end=range_end,
+    )
+    refunded_amount = _refund_total(
+        db,
+        current_user.shop_id,
+        start=range_start,
+        end=range_end,
+    )
+    billed_total = max(billed_total - returned_amount, Decimal("0.00"))
+    collected_amount = max(collected_amount - refunded_amount, Decimal("0.00"))
+    status_amounts["PAID"] = max(status_amounts["PAID"] - returned_amount, Decimal("0.00"))
 
     statuses = [
         PaymentStatusItem(

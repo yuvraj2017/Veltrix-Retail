@@ -82,6 +82,8 @@ export default function AddProductPage() {
       buying_price: 0,
       mrp: 0,
       selling_price: 0,
+      hsn_sac: '',
+      gst_rate: 0,
       stock_quantity: 0,
       low_stock_threshold: 5,
       unit: 'pcs',
@@ -143,6 +145,8 @@ export default function AddProductPage() {
       formData.append('buying_price', String(values.buying_price))
       formData.append('mrp', String(values.mrp))
       formData.append('selling_price', String(values.selling_price || values.mrp))
+      formData.append('hsn_sac', values.hsn_sac || '')
+      formData.append('gst_rate', String(values.gst_rate || 0))
       formData.append('stock_quantity', String(values.stock_quantity))
       formData.append('low_stock_threshold', String(values.low_stock_threshold))
       formData.append('unit', values.unit)
@@ -441,6 +445,46 @@ export default function AddProductPage() {
               </section>
             </div>
 
+            <section className="rounded-2xl bg-white dark:bg-slate-800 p-5 shadow-sm ring-1 ring-slate-100 dark:ring-slate-700 sm:p-7">
+              <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                GST Details
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                    HSN / SAC
+                  </label>
+                  <input
+                    {...register('hsn_sac')}
+                    placeholder="Example: 6109"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 px-4 py-3 text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 outline-none transition focus:border-indigo-400 dark:focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-700 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/30"
+                  />
+                  {errors.hsn_sac && (
+                    <p className="mt-1 text-xs text-red-500 dark:text-red-400">{errors.hsn_sac.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                    GST Rate %
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.]?[0-9]*"
+                    placeholder="0"
+                    {...register('gst_rate', {
+                      setValueAs: (value) => (value === '' ? 0 : Number(value)),
+                    })}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 px-4 py-3 text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 outline-none transition focus:border-indigo-400 dark:focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-700 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/30"
+                  />
+                  {errors.gst_rate && (
+                    <p className="mt-1 text-xs text-red-500 dark:text-red-400">{errors.gst_rate.message}</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
             {/* API error */}
             {apiError && (
               <div className="rounded-xl bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-600 dark:text-red-400 ring-1 ring-red-100 dark:ring-red-900/50">
@@ -544,4 +588,3 @@ export default function AddProductPage() {
       </div>
   )
 }
-

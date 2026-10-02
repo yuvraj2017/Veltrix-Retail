@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Boolean, Column, String, Text
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -15,5 +15,9 @@ class Shop(Base, IDMixin, TimestampMixin):
     whatsapp_number = Column(String(20), nullable=True)
     address = Column(Text, nullable=True)
     logo_url = Column(String(255), nullable=True)
+    gst_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
+    gstin = Column(String(15), nullable=True)
+    state = Column(String(100), nullable=True)
+    gst_state_code = Column(String(2), nullable=True)
 
     users = relationship("User", back_populates="shop", cascade="all, delete-orphan")

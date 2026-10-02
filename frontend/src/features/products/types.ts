@@ -17,6 +17,8 @@ export type Product = {
   buying_price: string
   mrp: string
   selling_price: string
+  hsn_sac: string | null
+  gst_rate: string | number
 
   stock_quantity: number
   low_stock_threshold: number
@@ -68,6 +70,8 @@ export type CreateProductPayload = {
   buying_price: number
   mrp: number
   selling_price: number
+  hsn_sac?: string | null
+  gst_rate: number
   stock_quantity: number
   low_stock_threshold: number
   unit: string

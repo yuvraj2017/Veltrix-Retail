@@ -23,6 +23,8 @@ class ProductBase(BaseModel):
     buying_price: Decimal = Field(default=0)
     mrp: Decimal = Field(default=0)
     selling_price: Decimal = Field(default=0)
+    hsn_sac: str | None = Field(default=None, max_length=20)
+    gst_rate: Decimal = Field(default=0, ge=0, le=100)
 
     stock_quantity: int = Field(default=0, ge=0)
     low_stock_threshold: int = Field(default=5, ge=0)
@@ -46,6 +48,8 @@ class ProductUpdate(BaseModel):
     buying_price: Decimal | None = None
     mrp: Decimal | None = None
     selling_price: Decimal | None = None
+    hsn_sac: str | None = Field(default=None, max_length=20)
+    gst_rate: Decimal | None = Field(default=None, ge=0, le=100)
 
     stock_quantity: int | None = Field(default=None, ge=0)
     low_stock_threshold: int | None = Field(default=None, ge=0)
@@ -68,6 +72,8 @@ class ProductResponse(BaseModel):
     buying_price: Decimal
     mrp: Decimal
     selling_price: Decimal
+    hsn_sac: str | None = None
+    gst_rate: Decimal
 
     stock_quantity: int
     low_stock_threshold: int

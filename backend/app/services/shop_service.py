@@ -38,6 +38,10 @@ def update_shop_for_user(
     shop.whatsapp_number = payload.whatsapp_number.strip() if payload.whatsapp_number else None
     shop.address = payload.address.strip() if payload.address else None
     shop.logo_url = payload.logo_url.strip() if payload.logo_url else None
+    shop.gst_enabled = bool(payload.gst_enabled)
+    shop.gstin = payload.gstin.strip().upper() if payload.gstin else None
+    shop.state = payload.state.strip() if payload.state else None
+    shop.gst_state_code = payload.gst_state_code.strip()[:2] if payload.gst_state_code else None
 
     db.commit()
     db.refresh(shop)

@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, PlusCircle, Printer } from 'lucide-react'
 
 import CustomerSelector from '../components/billing/CustomerSelector'
 import InvoiceItemsTable from '../components/billing/InvoiceItemsTable'
 import InvoiceSummaryCard from '../components/billing/InvoiceSummaryCard'
+import type { ProductCodeSearchHandle } from '../components/billing/ProductCodeSearch'
 import { useToast } from '../components/ui/ToastProvider'
+import { useAuth } from '../context/AuthContext'
 import { billingApi } from '../features/billing/api'
+import { calculateGstPreview } from '../features/billing/gstPreview'
 import { invoiceCreateSchema } from '../features/billing/schemas'
 import type {
   CustomerPayload,
   Invoice,
   InvoiceCreatePayload,
+  InvoicePaymentInput,
   LocalInvoiceItem,
+  LocalPaymentLine,
   PaymentMode,
   PaymentStatus,
 } from '../features/billing/types'
@@ -66,9 +71,11 @@ function mapInvoiceItemToLocalItem(item: any): LocalInvoiceItem {
     product_name: item.product_name_snapshot,
     category: item.category_snapshot || '',
     unit: item.unit_snapshot || '',
+    hsn_sac: item.hsn_sac_snapshot || '',
     mrp: Number(item.mrp || 0),
     buy_price: Number(item.buy_price || 0),
     available_stock: Number(item.quantity || 0),
+    gst_rate: Number(item.gst_rate || 0),
     quantity: Number(item.quantity || 0),
     discount_percentage: Number(item.discount_percentage || 0),
     discount_amount_per_unit: Number(item.discount_amount_per_unit || 0),
@@ -81,9 +88,51 @@ function mapInvoiceItemToLocalItem(item: any): LocalInvoiceItem {
   }
 }
 
+function createInvoiceRequestId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+
+  return `invoice-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function createPaymentLine(amount = 0, payment_method: LocalPaymentLine['payment_method'] = 'cash'): LocalPaymentLine {
+  return {
+    id:
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `payment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    amount,
+    payment_method,
+    payment_reference: '',
+    notes: '',
+  }
+}
+
+function friendlyInvoiceError(message: string) {
+  const normalized = message.toLowerCase()
+  if (normalized.includes('insufficient stock') || normalized.includes('stock')) {
+    return message || 'Insufficient stock for one or more products.'
+  }
+  if (normalized.includes('idempotency') || normalized.includes('request key') || normalized.includes('already used')) {
+    return 'This save request was already processed differently. Start a new sale and try again.'
+  }
+  if (normalized.includes('gst') || normalized.includes('state')) {
+    return message || 'GST details are incomplete. Check shop/customer state and GST fields.'
+  }
+  if (normalized.includes('payment') || normalized.includes('remaining')) {
+    return message || 'Payment allocation is invalid. Check paid and remaining amount.'
+  }
+  if (normalized.includes('network') || normalized.includes('failed to fetch')) {
+    return 'Network problem while saving. Please retry; the same request key will be reused safely.'
+  }
+  return message
+}
+
 export default function CreateInvoicePage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { shop } = useAuth()
   const [searchParams] = useSearchParams()
 
   const editParam = searchParams.get('edit')
@@ -93,32 +142,19 @@ export default function CreateInvoicePage() {
   const [customer, setCustomer] = useState<CustomerPayload>(emptyCustomer)
   const [items, setItems] = useState<LocalInvoiceItem[]>([])
 
-  const [paidAmount, setPaidAmount] = useState(0)
+  const [paymentLines, setPaymentLines] = useState<LocalPaymentLine[]>([createPaymentLine()])
   const [totalPayable, setTotalPayable] = useState(0)
   const [isPayableManuallyEdited, setIsPayableManuallyEdited] = useState(false)
 
-  const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>('')
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending')
   const [notes, setNotes] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
 
   const [errorMessage, setErrorMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [isLoadingInvoice, setIsLoadingInvoice] = useState(false)
-
-  const totals = useMemo(() => {
-    const subtotal = items.reduce((sum, item) => sum + item.mrp * item.quantity, 0)
-    const discount = items.reduce((sum, item) => sum + item.total_discount_amount, 0)
-    const tax = 0
-    const final = subtotal - discount + tax
-
-    return {
-      subtotal,
-      discount,
-      tax,
-      final,
-    }
-  }, [items])
+  const [completedInvoice, setCompletedInvoice] = useState<Invoice | null>(null)
+  const invoiceRequestIdRef = useRef(createInvoiceRequestId())
+  const productSearchRef = useRef<ProductCodeSearchHandle | null>(null)
 
   const totalBilledAmount = useMemo(() => {
     return items.reduce(
@@ -126,6 +162,17 @@ export default function CreateInvoicePage() {
       0
     )
   }, [items])
+
+  const gstPreview = useMemo(
+    () =>
+      calculateGstPreview({
+        shop,
+        customer,
+        items,
+        taxablePayableAmount: totalPayable,
+      }),
+    [customer, items, shop, totalPayable],
+  )
 
   useEffect(() => {
     setTotalPayable((currentTotalPayable) => {
@@ -138,33 +185,65 @@ export default function CreateInvoicePage() {
   }, [isPayableManuallyEdited, totalBilledAmount])
 
   useEffect(() => {
-    setPaidAmount((currentPaidAmount) => Math.min(currentPaidAmount, totalPayable))
-  }, [totalPayable])
+    setPaymentLines((currentLines) => {
+      let remaining = gstPreview.grandTotal
+      return currentLines.map((line) => {
+        const nextAmount = Math.min(Math.max(Number(line.amount || 0), 0), Math.max(remaining, 0))
+        remaining -= nextAmount
+        return { ...line, amount: nextAmount }
+      })
+    })
+  }, [gstPreview.grandTotal])
 
   const handleTotalPayableChange = (value: number) => {
     setIsPayableManuallyEdited(Math.abs(totalBilledAmount - value) > 0.009)
     setTotalPayable(value)
   }
 
-  const buildPayload = (): InvoiceCreatePayload => ({
-    customer,
-    items: items.map((item) => ({
-      product_id: item.product_id,
-      product_code: item.product_code,
-      quantity: item.quantity,
-      discount_percentage: item.discount_percentage,
-      discount_amount_per_unit: item.discount_amount_per_unit,
-      selling_price_per_unit: item.selling_price_per_unit,
-    })),
-    invoice_date: invoiceDate,
-    payment_status: paymentStatus,
-    payment_mode: paymentMode || null,
-    paid_amount: paidAmount,
-    total_payable_amount: totalPayable,
-    total_tax_amount: totals.tax,
-    invoice_status: 'saved',
-    notes,
-  })
+  const derivePaymentSummary = () => {
+    const activePayments: InvoicePaymentInput[] = paymentLines
+      .filter((line) => Number(line.amount || 0) > 0)
+      .map((line) => ({
+        amount: Number(line.amount || 0),
+        payment_method: line.payment_method,
+        payment_reference: line.payment_reference || null,
+        notes: line.notes || null,
+      }))
+    const paidAmount = activePayments.reduce((sum, payment) => sum + payment.amount, 0)
+    const remainingAmount = Math.max(gstPreview.grandTotal - paidAmount, 0)
+    const methods = Array.from(new Set(activePayments.map((payment) => payment.payment_method)))
+    const paymentMode: PaymentMode | null =
+      activePayments.length === 0 ? null : methods.length === 1 ? methods[0] : 'mixed'
+    const paymentStatus: PaymentStatus =
+      paidAmount <= 0 ? 'pending' : remainingAmount > 0 ? 'partial' : 'paid'
+
+    return { activePayments, paidAmount, paymentMode, paymentStatus }
+  }
+
+  const buildPayload = (): InvoiceCreatePayload => {
+    const paymentSummary = derivePaymentSummary()
+    return {
+      client_request_id: isEditMode ? null : invoiceRequestIdRef.current,
+      customer,
+      items: items.map((item) => ({
+        product_id: item.product_id,
+        product_code: item.product_code,
+        quantity: item.quantity,
+        discount_percentage: item.discount_percentage,
+        discount_amount_per_unit: item.discount_amount_per_unit,
+        selling_price_per_unit: item.selling_price_per_unit,
+      })),
+      invoice_date: invoiceDate,
+      payment_status: paymentSummary.paymentStatus,
+      payment_mode: paymentSummary.paymentMode,
+      paid_amount: paymentSummary.paidAmount,
+      payments: paymentSummary.activePayments,
+      total_payable_amount: totalPayable,
+      total_tax_amount: gstPreview.totalTaxAmount,
+      invoice_status: 'saved',
+      notes,
+    }
+  }
 
   const normalizePayload = (payload: InvoiceCreatePayload): InvoiceCreatePayload => {
     const parsed = invoiceCreateSchema.parse(payload)
@@ -182,6 +261,7 @@ export default function CreateInvoicePage() {
         pincode: parsed.customer.pincode || null,
         gst_number: parsed.customer.gst_number || null,
       },
+      client_request_id: parsed.client_request_id ?? null,
       items: parsed.items.map((item) => ({
         product_id: item.product_id,
         product_code: item.product_code,
@@ -194,6 +274,13 @@ export default function CreateInvoicePage() {
       payment_status: parsed.payment_status,
       payment_mode: parsed.payment_mode ?? null,
       paid_amount: parsed.paid_amount,
+      payments: (parsed.payments ?? []).map((payment) => ({
+        amount: Number(payment.amount || 0),
+        payment_method: payment.payment_method,
+        payment_reference: payment.payment_reference || null,
+        notes: payment.notes || null,
+        received_at: payment.received_at || null,
+      })),
       total_payable_amount: parsed.total_payable_amount ?? null,
       total_tax_amount: parsed.total_tax_amount,
       invoice_status: parsed.invoice_status,
@@ -213,14 +300,32 @@ export default function CreateInvoicePage() {
       setCustomer(mapInvoiceToCustomer(data))
       setItems((data.items || []).map(mapInvoiceItemToLocalItem))
 
-      const billedAmount = Number(data.billed_amount || data.final_amount || 0)
-      const payableAmount = Number(data.final_amount || billedAmount)
+      const billedAmount = (data.items || []).reduce(
+        (sum, item) => sum + Number(item.total_selling_price || 0),
+        0,
+      )
+      const snapshotTaxableAmount = (data.items || []).reduce(
+        (sum, item) => sum + Number(item.taxable_value || 0),
+        0,
+      )
+      const payableAmount =
+        snapshotTaxableAmount > 0
+          ? snapshotTaxableAmount
+          : Number(data.final_amount || billedAmount)
 
       setTotalPayable(payableAmount)
       setIsPayableManuallyEdited(Math.abs(billedAmount - payableAmount) > 0.009)
-      setPaidAmount(Number(data.paid_amount || 0))
-      setPaymentMode((data.payment_mode as PaymentMode | null) || '')
-      setPaymentStatus((data.payment_status as PaymentStatus) || 'pending')
+      const existingPayments =
+        data.payments && data.payments.length
+          ? data.payments.map((payment) => ({
+              id: String(payment.id),
+              amount: Number(payment.amount || 0),
+              payment_method: payment.payment_method,
+              payment_reference: payment.payment_reference || '',
+              notes: payment.notes || '',
+            }))
+          : [createPaymentLine(Number(data.paid_amount || 0), (data.payment_mode === 'mixed' ? 'cash' : data.payment_mode) || 'cash')]
+      setPaymentLines(existingPayments)
       setNotes(data.notes || '')
       setInvoiceDate(data.invoice_date || new Date().toISOString().slice(0, 10))
     } catch (error) {
@@ -237,6 +342,16 @@ export default function CreateInvoicePage() {
   }, [editInvoiceId])
 
   const saveAndPreview = async () => {
+    if (isSaving) return
+    if (completedInvoice && !isEditMode) {
+      showToast({
+        title: 'Sale already saved',
+        message: 'Use New Sale to start another bill.',
+        variant: 'success',
+      })
+      return
+    }
+
     try {
       setErrorMessage('')
 
@@ -261,13 +376,24 @@ export default function CreateInvoicePage() {
           ? await billingApi.updateInvoice(editInvoiceId, normalizedPayload)
           : await billingApi.createInvoice(normalizedPayload)
 
+      if (!isEditMode) {
+        invoiceRequestIdRef.current = createInvoiceRequestId()
+        setCompletedInvoice(invoice)
+        showToast({
+          title: 'Sale saved',
+          message: `Invoice ${invoice.invoice_number} is ready.`,
+          variant: 'success',
+        })
+        return
+      }
+
       navigate(`/billing/${invoice.id}/preview`)
     } catch (error) {
       showToast({
         title: isEditMode ? 'Unable to update invoice' : 'Unable to create invoice',
         message:
           error instanceof Error
-            ? error.message
+            ? friendlyInvoiceError(error.message)
             : isEditMode
               ? 'Unable to update invoice'
               : 'Unable to create invoice',
@@ -276,6 +402,20 @@ export default function CreateInvoicePage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const startNewSale = () => {
+    setCompletedInvoice(null)
+    setCustomer(emptyCustomer)
+    setItems([])
+    setPaymentLines([createPaymentLine()])
+    setTotalPayable(0)
+    setIsPayableManuallyEdited(false)
+    setNotes('')
+    setInvoiceDate(new Date().toISOString().slice(0, 10))
+    setErrorMessage('')
+    invoiceRequestIdRef.current = createInvoiceRequestId()
+    window.setTimeout(() => productSearchRef.current?.focus(), 100)
   }
 
   const saveDraftLocally = () => {
@@ -376,30 +516,79 @@ export default function CreateInvoicePage() {
             </div>
           )}
 
+          {completedInvoice && !isEditMode && (
+            <div className="mb-6 rounded-[30px] border border-emerald-200 bg-emerald-50 p-5 shadow-[0_18px_44px_rgba(16,185,129,0.12)] dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                    <CheckCircle2 size={22} />
+                  </div>
+                  <div>
+                    <p className="text-lg font-black text-slate-950 dark:text-white">
+                      Sale completed
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                      Invoice {completedInvoice.invoice_number} saved. Stock, payments, GST, and audit records are updated.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/billing/${completedInvoice.id}/preview`)}
+                    className="h-11 rounded-2xl bg-white px-4 text-sm font-black text-slate-800 shadow-sm transition hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    View Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/billing/${completedInvoice.id}/preview?print=true`)}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950"
+                  >
+                    <Printer size={16} />
+                    Print
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="new-sale-button"
+                    onClick={startNewSale}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-700"
+                  >
+                    <PlusCircle size={16} />
+                    New Sale
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-8 xl:grid-cols-[1fr_410px]">
             <div className="space-y-8">
               <CustomerSelector customer={customer} onCustomerChange={setCustomer} />
-              <InvoiceItemsTable items={items} onItemsChange={setItems} />
+              <InvoiceItemsTable items={items} onItemsChange={setItems} searchRef={productSearchRef} />
             </div>
 
             <InvoiceSummaryCard
               items={items}
               totalBilledAmount={totalBilledAmount}
               totalPayable={totalPayable}
+              taxPreview={gstPreview}
               onTotalPayableChange={handleTotalPayableChange}
-              paidAmount={paidAmount}
-              onPaidAmountChange={setPaidAmount}
-              paymentMode={paymentMode}
-              onPaymentModeChange={setPaymentMode}
-              paymentStatus={paymentStatus}
-              onPaymentStatusChange={setPaymentStatus}
+              paymentLines={paymentLines}
+              onPaymentLinesChange={setPaymentLines}
               notes={notes}
               onNotesChange={setNotes}
               onPreview={saveAndPreview}
               onSaveDraft={saveDraftLocally}
               loading={isSaving}
+              disabled={!!completedInvoice && !isEditMode}
               primaryActionLabel={
-                isEditMode ? 'Update & Preview Invoice' : 'Save & Preview Invoice'
+                completedInvoice && !isEditMode
+                  ? 'Sale Completed'
+                  : isEditMode
+                    ? 'Update & Preview Invoice'
+                    : 'Save & Preview Invoice'
               }
               secondaryActionLabel={
                 isEditMode ? 'Save Edited Draft' : 'Save Draft Locally'

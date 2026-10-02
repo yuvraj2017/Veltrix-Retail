@@ -41,6 +41,7 @@ def _create_payload(
     items: list[tuple[Product, int | str | Decimal]],
     *,
     invoice_date: date = date(2026, 9, 27),
+    invoice_status: str = "saved",
 ) -> InvoiceCreate:
     return InvoiceCreate.model_validate(
         {
@@ -63,7 +64,7 @@ def _create_payload(
             "payment_mode": "cash",
             "paid_amount": 0,
             "total_tax_amount": 0,
-            "invoice_status": "saved",
+            "invoice_status": invoice_status,
         }
     )
 
@@ -72,6 +73,7 @@ def _update_payload(
     items: list[tuple[Product, int | str | Decimal]],
     *,
     invoice_date: date = date(2026, 9, 27),
+    invoice_status: str = "draft",
 ) -> InvoiceUpdate:
     return InvoiceUpdate.model_validate(
         {
@@ -94,7 +96,7 @@ def _update_payload(
             "payment_mode": "cash",
             "paid_amount": 0,
             "total_tax_amount": 0,
-            "invoice_status": "saved",
+            "invoice_status": invoice_status,
         }
     )
 
@@ -108,7 +110,7 @@ def test_invoice_with_sufficient_stock_deducts_quantity(db_session, make_user):
     user = make_user(email="stock-basic@example.com")
     product = _make_product(db_session, user.shop_id, sku="BASIC", stock_quantity=5)
 
-    invoice = create_invoice(_create_payload([(product, 2)]), db_session, user)
+    invoice = create_invoice(_create_payload([(product, 2)], invoice_status="draft"), db_session, user)
 
     assert invoice.id
     assert _stock(db_session, product) == 3
@@ -202,7 +204,7 @@ def test_invoice_edit_quantity_increase_and_decrease_adjust_stock(db_session, ma
     user = make_user(email="stock-edit-quantity@example.com")
     product = _make_product(db_session, user.shop_id, sku="EDITQ", stock_quantity=10)
 
-    invoice = create_invoice(_create_payload([(product, 2)]), db_session, user)
+    invoice = create_invoice(_create_payload([(product, 2)], invoice_status="draft"), db_session, user)
     assert _stock(db_session, product) == 8
 
     update_invoice(invoice.id, _update_payload([(product, 4)]), db_session, user)
@@ -217,7 +219,7 @@ def test_invoice_edit_product_replacement_adjusts_both_products(db_session, make
     product_a = _make_product(db_session, user.shop_id, sku="OLD", stock_quantity=10)
     product_b = _make_product(db_session, user.shop_id, sku="NEW", stock_quantity=10)
 
-    invoice = create_invoice(_create_payload([(product_a, 3)]), db_session, user)
+    invoice = create_invoice(_create_payload([(product_a, 3)], invoice_status="draft"), db_session, user)
     assert _stock(db_session, product_a) == 7
     assert _stock(db_session, product_b) == 10
 
@@ -232,7 +234,7 @@ def test_invoice_edit_insufficient_stock_rolls_back(db_session, make_user):
     product_a = _make_product(db_session, user.shop_id, sku="EDITA", stock_quantity=5)
     product_b = _make_product(db_session, user.shop_id, sku="EDITB", stock_quantity=0)
 
-    invoice = create_invoice(_create_payload([(product_a, 2)]), db_session, user)
+    invoice = create_invoice(_create_payload([(product_a, 2)], invoice_status="draft"), db_session, user)
     assert _stock(db_session, product_a) == 3
 
     with pytest.raises(HTTPException):
@@ -253,7 +255,7 @@ def test_repeated_cancellation_does_not_change_stock(db_session, make_user):
     delete_invoice(invoice.id, db_session, user)
     delete_invoice(invoice.id, db_session, user)
 
-    assert _stock(db_session, product) == 3
+    assert _stock(db_session, product) == 5
 
 
 def test_invoice_cannot_sell_other_shop_product(db_session, make_user):

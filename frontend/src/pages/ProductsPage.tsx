@@ -114,6 +114,8 @@ export default function ProductsPage() {
       formData.append('buying_price', String(values.buying_price))
       formData.append('mrp', String(values.mrp))
       formData.append('selling_price', String(values.selling_price))
+      formData.append('hsn_sac', values.hsn_sac || '')
+      formData.append('gst_rate', String(values.gst_rate || 0))
       formData.append('stock_quantity', String(values.stock_quantity))
       formData.append('low_stock_threshold', String(values.low_stock_threshold))
       formData.append('unit', values.unit)

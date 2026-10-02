@@ -7,6 +7,10 @@ export type ShopSettings = {
   whatsapp_number: string | null
   address: string | null
   logo_url: string | null
+  gst_enabled: boolean
+  gstin: string | null
+  state: string | null
+  gst_state_code: string | null
   created_at: string
   updated_at: string
 }
@@ -19,6 +23,10 @@ export type UpdateShopPayload = {
   whatsapp_number: string | null
   address: string | null
   logo_url: string | null
+  gst_enabled: boolean
+  gstin: string | null
+  state: string | null
+  gst_state_code: string | null
 }
 
 export type NotificationPreferences = {

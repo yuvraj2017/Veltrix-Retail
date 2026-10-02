@@ -115,6 +115,7 @@ def _utcnow() -> datetime:
 def ensure_legacy_plan(db: Session) -> Plan:
     plan = db.query(Plan).filter(Plan.code == LEGACY_PLAN_CODE).first()
     if plan:
+        _ensure_default_entitlements_for_plan(db, plan)
         return plan
 
     plan = Plan(
@@ -133,6 +134,13 @@ def ensure_legacy_plan(db: Session) -> Plan:
     db.add(plan)
     db.flush()
 
+    _ensure_default_entitlements_for_plan(db, plan)
+
+    db.flush()
+    return plan
+
+
+def _ensure_default_entitlements_for_plan(db: Session, plan: Plan) -> None:
     for definition_data in DEFAULT_ENTITLEMENTS:
         definition = (
             db.query(EntitlementDefinition)
@@ -152,6 +160,17 @@ def ensure_legacy_plan(db: Session) -> Plan:
             db.add(definition)
             db.flush()
 
+        existing = (
+            db.query(PlanEntitlement)
+            .filter(
+                PlanEntitlement.plan_id == plan.id,
+                PlanEntitlement.entitlement_id == definition.id,
+            )
+            .first()
+        )
+        if existing:
+            continue
+
         if definition.kind == EntitlementKind.LIMIT:
             entitlement = PlanEntitlement(
                 plan_id=plan.id,
@@ -169,9 +188,6 @@ def ensure_legacy_plan(db: Session) -> Plan:
                 feature_enabled=True,
             )
         db.add(entitlement)
-
-    db.flush()
-    return plan
 
 
 def ensure_legacy_subscription_for_shop(

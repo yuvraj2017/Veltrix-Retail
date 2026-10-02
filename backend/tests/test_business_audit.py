@@ -99,7 +99,7 @@ def test_invoice_update_records_before_after_data(db_session, make_user):
 
     update_invoice(
         invoice.id,
-        InvoiceUpdate.model_validate({"paid_amount": Decimal("25.00")}),
+        InvoiceUpdate.model_validate({"notes": "Payment will be collected later"}),
         db_session,
         user,
     )
@@ -109,8 +109,8 @@ def test_invoice_update_records_before_after_data(db_session, make_user):
         .filter(BusinessAuditLog.action == BusinessAuditAction.INVOICE_UPDATED)
         .one()
     )
-    assert entry.before_data["paid_amount"] == "0.00"
-    assert entry.after_data["paid_amount"] == "25.00"
+    assert entry.before_data["notes"] is None
+    assert entry.after_data["notes"] == "Payment will be collected later"
     assert entry.entity_id == invoice.id
 
 

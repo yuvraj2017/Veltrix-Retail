@@ -8,9 +8,16 @@ from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.invoice import (
     InvoiceCreate,
+    InvoiceCancelPayload,
     InvoiceListPaginatedResponse,
     InvoiceMessageResponse,
+    InvoicePaymentCreate,
+    InvoicePaymentResponse,
     InvoicePreviewResponse,
+    InvoiceRefundCreate,
+    InvoiceRefundResponse,
+    InvoiceReturnCreate,
+    InvoiceReturnResponse,
     InvoiceResponse,
     InvoiceSharePayload,
     InvoiceShareResponse,
@@ -18,12 +25,18 @@ from app.schemas.invoice import (
     InvoiceUpdate,
 )
 from app.services.invoice_service import (
+    add_invoice_payment,
+    add_return_refund,
     build_invoice_share_url,
+    cancel_invoice,
     create_invoice,
+    create_invoice_return,
     delete_invoice,
     get_invoice,
     get_invoice_preview,
     get_invoice_stats,
+    list_invoice_payments,
+    list_invoice_returns,
     list_invoices,
     update_invoice,
 )
@@ -99,6 +112,16 @@ def remove_invoice(
     return delete_invoice(invoice_id, db, current_user)
 
 
+@router.post("/{invoice_id}/cancel", response_model=InvoiceMessageResponse)
+def cancel_single_invoice(
+    invoice_id: int,
+    payload: InvoiceCancelPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return cancel_invoice(invoice_id, payload, db, current_user)
+
+
 @router.get("/{invoice_id}/preview", response_model=InvoicePreviewResponse)
 def preview_invoice(
     invoice_id: int,
@@ -106,6 +129,66 @@ def preview_invoice(
     current_user: User = Depends(require_active_shop_access),
 ):
     return get_invoice_preview(invoice_id, db, current_user)
+
+
+@router.get("/{invoice_id}/payments", response_model=list[InvoicePaymentResponse])
+def get_invoice_payments(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return list_invoice_payments(invoice_id, db, current_user)
+
+
+@router.post(
+    "/{invoice_id}/payments",
+    response_model=InvoicePaymentResponse,
+    status_code=201,
+)
+def record_invoice_payment(
+    invoice_id: int,
+    payload: InvoicePaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return add_invoice_payment(invoice_id, payload, db, current_user)
+
+
+@router.get("/{invoice_id}/returns", response_model=list[InvoiceReturnResponse])
+def get_invoice_returns(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return list_invoice_returns(invoice_id, db, current_user)
+
+
+@router.post(
+    "/{invoice_id}/returns",
+    response_model=InvoiceReturnResponse,
+    status_code=201,
+)
+def create_return(
+    invoice_id: int,
+    payload: InvoiceReturnCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return create_invoice_return(invoice_id, payload, db, current_user)
+
+
+@router.post(
+    "/returns/{return_id}/refunds",
+    response_model=InvoiceRefundResponse,
+    status_code=201,
+)
+def create_refund(
+    return_id: int,
+    payload: InvoiceRefundCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_shop_access),
+):
+    return add_return_refund(return_id, payload, db, current_user)
 
 
 @router.get("/{invoice_id}/pdf", response_model=InvoiceMessageResponse)

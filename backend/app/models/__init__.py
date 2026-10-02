@@ -10,6 +10,14 @@ from app.models.customer import Customer
 from app.models.invoice import Invoice
 from app.models.invoice_item import InvoiceItem
 from app.models.invoice_sequence import InvoiceSequence
+from app.models.invoice_idempotency import InvoiceIdempotencyKey
+from app.models.invoice_payment import InvoicePayment
+from app.models.invoice_return import (
+    InvoiceRefund,
+    InvoiceReturn,
+    InvoiceReturnItem,
+    InvoiceReversalSequence,
+)
 from app.models.product_sales_analytics import ProductSalesAnalytics
 from app.models.expense import Expense
 from app.models.password_reset_token import PasswordResetToken
@@ -46,6 +54,12 @@ __all__ = [
     "Invoice",
     "InvoiceItem",
     "InvoiceSequence",
+    "InvoiceIdempotencyKey",
+    "InvoicePayment",
+    "InvoiceRefund",
+    "InvoiceReturn",
+    "InvoiceReturnItem",
+    "InvoiceReversalSequence",
     "ProductSalesAnalytics",
     "Expense",
     "PasswordResetToken",

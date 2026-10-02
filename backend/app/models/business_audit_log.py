@@ -54,6 +54,10 @@ class BusinessAuditAction:
     INVOICE_CREATED = "invoice.created"
     INVOICE_UPDATED = "invoice.updated"
     INVOICE_CANCELLED = "invoice.cancelled"
+    PAYMENT_RECEIVED = "payment.received"
+    RETURN_CREATED = "return.created"
+    REFUND_ISSUED = "refund.issued"
+    CREDIT_NOTE_CREATED = "credit_note.created"
     PRODUCT_CREATED = "product.created"
     PRODUCT_UPDATED = "product.updated"
 
@@ -61,6 +65,10 @@ class BusinessAuditAction:
         INVOICE_CREATED,
         INVOICE_UPDATED,
         INVOICE_CANCELLED,
+        PAYMENT_RECEIVED,
+        RETURN_CREATED,
+        REFUND_ISSUED,
+        CREDIT_NOTE_CREATED,
         PRODUCT_CREATED,
         PRODUCT_UPDATED,
     )

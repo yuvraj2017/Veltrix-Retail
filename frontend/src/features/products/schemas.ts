@@ -9,6 +9,8 @@ export const productSchema = z.object({
   buying_price: z.coerce.number().min(0),
   mrp: z.coerce.number().min(0),
   selling_price: z.coerce.number().min(0),
+  hsn_sac: z.string(),
+  gst_rate: z.coerce.number().min(0).max(100),
 
   stock_quantity: z.coerce.number().int().min(0),
   low_stock_threshold: z.coerce.number().int().min(0),

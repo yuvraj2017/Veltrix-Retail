@@ -28,6 +28,9 @@ type ShopInfo = {
   city?: string | null
   state?: string | null
   pincode?: string | null
+  gst_enabled?: boolean | null
+  gstin?: string | null
+  gst_state_code?: string | null
 }
 
 type LoginPayload = {
@@ -166,6 +169,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           city: shopData.city || null,
           state: shopData.state || null,
           pincode: shopData.pincode || null,
+          gst_enabled: Boolean(shopData.gst_enabled),
+          gstin: shopData.gstin || null,
+          gst_state_code: shopData.gst_state_code || null,
         })
       } catch {
         if (getTabToken() !== savedToken) return
@@ -180,6 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           city: null,
           state: null,
           pincode: null,
+          gst_enabled: false,
+          gstin: null,
+          gst_state_code: null,
         })
       }
     } catch {
