@@ -31,6 +31,7 @@ from app.schemas.auth import (
     ResetTokenValidationResponse,
 )
 from app.services.subscription_service import ensure_legacy_subscription_for_shop
+from app.services.membership_service import create_registration_memberships
 
 PASSWORD_RESET_NEUTRAL_MESSAGE = (
     "If an account exists for this email, a password reset link has been sent."
@@ -160,6 +161,8 @@ def register_shop_owner(
         )
         db.add(user)
         db.flush()
+
+        create_registration_memberships(db, user=user, shop=shop)
 
         # Commercial ownership remains shop-scoped during the compatibility
         # period. Organization-level entitlement migration is intentionally

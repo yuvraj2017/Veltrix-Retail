@@ -12,3 +12,8 @@ class Organization(Base, IDMixin, TimestampMixin):
     status = Column(String(20), nullable=False, default="active", server_default="active")
 
     shops = relationship("Shop", back_populates="organization", passive_deletes=True)
+    memberships = relationship(
+        "OrganizationMembership",
+        back_populates="organization",
+        passive_deletes=True,
+    )

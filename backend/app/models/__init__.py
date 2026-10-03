@@ -1,6 +1,7 @@
 from app.models.organization import Organization
 from app.models.shop import Shop
 from app.models.user import User
+from app.models.membership import BranchMembership, OrganizationMembership
 from app.models.product import Product, ProductImage
 from app.models.stock_movement import StockMovement, StockMovementType
 from app.models.stock_adjustment_request import StockAdjustmentRequest
@@ -60,6 +61,8 @@ __all__ = [
     "Organization",
     "Shop",
     "User",
+    "OrganizationMembership",
+    "BranchMembership",
     "Product",
     "ProductImage",
     "StockMovement",

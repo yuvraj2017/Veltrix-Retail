@@ -11,6 +11,12 @@ class Shop(Base, IDMixin, TimestampMixin):
     __table_args__ = (
         Index("ix_shops_organization_id", "organization_id"),
         Index(
+            "uq_shops_id_organization",
+            "id",
+            "organization_id",
+            unique=True,
+        ),
+        Index(
             "uq_shops_organization_default_branch",
             "organization_id",
             unique=True,
@@ -46,3 +52,9 @@ class Shop(Base, IDMixin, TimestampMixin):
 
     organization = relationship("Organization", back_populates="shops")
     users = relationship("User", back_populates="shop", cascade="all, delete-orphan")
+    branch_memberships = relationship(
+        "BranchMembership",
+        back_populates="shop",
+        passive_deletes=True,
+        overlaps="branch_memberships,organization_membership",
+    )
