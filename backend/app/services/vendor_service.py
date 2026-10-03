@@ -29,6 +29,10 @@ from app.services.business_audit_service import record_business_audit
 
 VALID_BILL_STATUSES = {"pending", "partial", "completed", "overdue"}
 MONEY = Decimal("0.01")
+LEGACY_BILL_INTEGRITY_ERROR = (
+    "Legacy vendor bill financial state requires remediation before payment "
+    "history can be used"
+)
 
 
 def _to_decimal(value) -> Decimal:
@@ -81,23 +85,51 @@ def _get_bill_payments_total(bill_id: int, db: Session) -> Decimal:
 
 
 def _ensure_payment_history_backfilled(bill: VendorBill, db: Session):
-    existing_payments_count = (
-        db.query(func.count(VendorBillPayment.id))
+    total_amount = _to_decimal(bill.total_amount)
+    paid_amount = _to_decimal(bill.paid_amount)
+    remaining_amount = _to_decimal(bill.remaining_amount)
+    expected_remaining = _to_decimal(total_amount - paid_amount)
+
+    if (
+        total_amount < Decimal("0.00")
+        or paid_amount < Decimal("0.00")
+        or paid_amount > total_amount
+        or remaining_amount < Decimal("0.00")
+        or remaining_amount != expected_remaining
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=LEGACY_BILL_INTEGRITY_ERROR,
+        )
+
+    existing_payments_count, existing_payments_total = (
+        db.query(
+            func.count(VendorBillPayment.id),
+            func.coalesce(func.sum(VendorBillPayment.amount), 0),
+        )
         .filter(VendorBillPayment.vendor_bill_id == bill.id)
-        .scalar()
+        .one()
     )
 
-    if existing_payments_count or _to_decimal(bill.paid_amount) <= Decimal("0.00"):
+    if existing_payments_count:
+        if _to_decimal(existing_payments_total) != paid_amount:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=LEGACY_BILL_INTEGRITY_ERROR,
+            )
+        return
+
+    if paid_amount == Decimal("0.00"):
         return
 
     payment = VendorBillPayment(
             shop_id=bill.shop_id,
             vendor_bill_id=bill.id,
             payment_date=bill.bill_date,
-            amount=bill.paid_amount,
+            amount=paid_amount,
             payment_mode=bill.payment_mode,
             reference_number=bill.payment_reference,
-            notes="Backfilled from existing bill paid amount",
+            notes="Imported from validated legacy vendor bill paid balance",
             client_request_id=f"legacy-vendor-bill-{bill.id}",
         )
     payment.request_fingerprint = _payment_fingerprint(

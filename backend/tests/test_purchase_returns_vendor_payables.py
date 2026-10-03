@@ -134,6 +134,37 @@ def _payment(key, amount, method="cash"):
     )
 
 
+def _legacy_bill(
+    db,
+    user,
+    vendor,
+    *,
+    number,
+    total,
+    paid,
+    remaining,
+    status="partial",
+    payment_mode="cash",
+    payment_reference=None,
+):
+    bill = VendorBill(
+        shop_id=user.shop_id,
+        vendor_id=vendor.id,
+        bill_number=number,
+        bill_date=TODAY,
+        total_amount=Decimal(total),
+        paid_amount=Decimal(paid),
+        remaining_amount=Decimal(remaining),
+        status=status,
+        payment_mode=payment_mode,
+        payment_reference=payment_reference,
+    )
+    db.add(bill)
+    db.commit()
+    db.refresh(bill)
+    return bill
+
+
 def test_purchase_return_reduces_stock_creates_movement_credit_and_audit(db_session, make_user):
     user = make_user(email="purchase-return@example.com")
     vendor = _vendor(db_session, user)
@@ -292,6 +323,131 @@ def test_vendor_bill_initial_payment_and_derived_status(db_session, make_user):
     assert db_session.query(BusinessAuditLog).filter_by(
         action=BusinessAuditAction.VENDOR_BILL_CREATED, entity_id=bill.id
     ).count() == 1
+
+
+@pytest.mark.parametrize(
+    ("paid", "remaining", "status"),
+    [
+        ("20000.00", "80000.00", "partial"),
+        ("100000.00", "0.00", "completed"),
+    ],
+)
+def test_valid_legacy_bill_imports_payment_once(
+    db_session, make_user, paid, remaining, status
+):
+    user = make_user(email=f"legacy-valid-{paid}@example.com")
+    vendor = _vendor(db_session, user)
+    bill = _legacy_bill(
+        db_session,
+        user,
+        vendor,
+        number=f"LEGACY-{paid}",
+        total="100000.00",
+        paid=paid,
+        remaining=remaining,
+        status=status,
+        payment_mode="cash",
+        payment_reference="legacy-reference",
+    )
+
+    first = list_bill_payments(bill.id, db_session, user)
+    replay = list_bill_payments(bill.id, db_session, user)
+
+    assert len(first) == len(replay) == 1
+    assert first[0].id == replay[0].id
+    assert first[0].amount == Decimal(paid)
+    assert first[0].payment_date == bill.bill_date
+    assert first[0].payment_mode == "cash"
+    assert first[0].reference_number == "legacy-reference"
+    assert first[0].client_request_id == f"legacy-vendor-bill-{bill.id}"
+    assert "validated legacy" in first[0].notes
+
+
+def test_zero_paid_legacy_bill_does_not_create_payment(db_session, make_user):
+    user = make_user(email="legacy-zero@example.com")
+    vendor = _vendor(db_session, user)
+    bill = _legacy_bill(
+        db_session, user, vendor, number="LEGACY-ZERO",
+        total="100000.00", paid="0.00", remaining="100000.00", status="pending",
+        payment_mode=None,
+    )
+
+    assert list_bill_payments(bill.id, db_session, user) == []
+    assert db_session.query(VendorBillPayment).filter_by(vendor_bill_id=bill.id).count() == 0
+
+
+def test_overpaid_legacy_bill_is_rejected_without_mutation(db_session, make_user):
+    user = make_user(email="legacy-overpaid@example.com")
+    vendor = _vendor(db_session, user)
+    bill = _legacy_bill(
+        db_session, user, vendor, number="345",
+        total="140000.00", paid="200000.00", remaining="0.00", status="completed",
+        payment_mode=None,
+    )
+
+    with pytest.raises(HTTPException, match="requires remediation") as exc:
+        list_bill_payments(bill.id, db_session, user)
+
+    assert exc.value.status_code == 409
+    assert db_session.query(VendorBillPayment).filter_by(vendor_bill_id=bill.id).count() == 0
+    db_session.refresh(bill)
+    assert (bill.total_amount, bill.paid_amount, bill.remaining_amount, bill.status) == (
+        Decimal("140000.00"), Decimal("200000.00"), Decimal("0.00"), "completed"
+    )
+
+
+def test_legacy_bill_remaining_mismatch_is_rejected(db_session, make_user):
+    user = make_user(email="legacy-remaining@example.com")
+    vendor = _vendor(db_session, user)
+    bill = _legacy_bill(
+        db_session, user, vendor, number="LEGACY-REMAINING",
+        total="100000.00", paid="20000.00", remaining="70000.00",
+    )
+
+    with pytest.raises(HTTPException, match="requires remediation") as exc:
+        list_bill_payments(bill.id, db_session, user)
+
+    assert exc.value.status_code == 409
+    assert db_session.query(VendorBillPayment).filter_by(vendor_bill_id=bill.id).count() == 0
+
+
+def test_existing_matching_payment_history_is_not_duplicated(db_session, make_user):
+    user = make_user(email="legacy-existing@example.com")
+    vendor = _vendor(db_session, user)
+    bill = create_vendor_bill(
+        vendor.id, _bill_payload(number="EXISTING-HISTORY", paid="250.00"),
+        db_session, user,
+    )
+
+    assert len(list_bill_payments(bill.id, db_session, user)) == 1
+    assert db_session.query(VendorBillPayment).filter_by(vendor_bill_id=bill.id).count() == 1
+
+
+def test_hybrid_legacy_payment_mismatch_is_rejected(db_session, make_user):
+    user = make_user(email="legacy-hybrid@example.com")
+    vendor = _vendor(db_session, user)
+    bill = _legacy_bill(
+        db_session, user, vendor, number="LEGACY-HYBRID",
+        total="1000.00", paid="500.00", remaining="500.00",
+    )
+    original = VendorBillPayment(
+        shop_id=user.shop_id,
+        vendor_bill_id=bill.id,
+        payment_date=TODAY,
+        amount=Decimal("200.00"),
+        payment_mode="cash",
+        client_request_id="existing-hybrid-payment",
+        request_fingerprint="existing-hybrid-fingerprint",
+    )
+    db_session.add(original)
+    db_session.commit()
+
+    with pytest.raises(HTTPException, match="requires remediation") as exc:
+        list_bill_payments(bill.id, db_session, user)
+
+    assert exc.value.status_code == 409
+    payments = db_session.query(VendorBillPayment).filter_by(vendor_bill_id=bill.id).all()
+    assert [payment.id for payment in payments] == [original.id]
 
 
 def test_vendor_bill_rejects_initial_overpayment_and_duplicate_number(db_session, make_user):
