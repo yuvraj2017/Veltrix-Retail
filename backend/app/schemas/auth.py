@@ -36,6 +36,8 @@ class LoginResponse(BaseModel):
     shop_id: int | None = None
     shop_name: str | None = None
     shop_logo_url: str | None = None
+    organization_id: int | None = None
+    organization_name: str | None = None
 
 
 class RegisterResponse(BaseModel):
@@ -53,6 +55,8 @@ class RegisterResponse(BaseModel):
     status: str
     shop_id: int | None = None
     shop_name: str | None = None
+    organization_id: int | None = None
+    organization_name: str | None = None
     message: str
 
 
@@ -65,3 +69,5 @@ class MeResponse(BaseModel):
     shop_id: int | None = None
     shop_name: str | None = None
     shop_logo_url: str | None = None
+    organization_id: int | None = None
+    organization_name: str | None = None

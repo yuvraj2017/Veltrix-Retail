@@ -16,6 +16,7 @@ from app.core.user_status import (
     login_refusal_message,
 )
 from app.models.admin_audit_log import AdminAuditLog, AuditAction
+from app.models.organization import Organization
 from app.models.password_reset_token import PasswordResetToken
 from app.models.shop import Shop
 from app.models.user import User
@@ -120,63 +121,71 @@ def register_shop_owner(
             detail="User with this email already exists",
         )
 
-    shop = Shop(
-        name=shop_name.strip(),
-        email=normalized_email,
-        phone=phone.strip(),
-        whatsapp_number=whatsapp_number.strip() if whatsapp_number else None,
-        address=shop_address.strip() if shop_address else None,
-        category=category.strip(),
-        logo_url=logo_url,
-    )
-    db.add(shop)
-    db.flush()
+    try:
+        organization = Organization(name=shop_name.strip(), status="active")
+        db.add(organization)
+        db.flush()
 
-    first_name, last_name = _split_name(owner_name)
-
-    # New registrations land in PENDING and are issued no access token. A
-    # super admin has to approve the account before it can authenticate; see
-    # login_user() below and app/api/deps.get_current_user for the two
-    # enforcement points.
-    user = User(
-        shop_id=shop.id,
-        full_name=owner_name.strip() if owner_name else "User",
-        first_name=first_name or None,
-        last_name=last_name or None,
-        email=normalized_email,
-        phone=phone.strip(),
-        role=UserRole.OWNER,
-        password_hash=hash_password(password),
-        profile_image_url=None,
-        status=UserStatus.PENDING,
-        is_active=derive_is_active(UserStatus.PENDING),
-        status_changed_at=_utcnow(),
-    )
-    db.add(user)
-    db.flush()
-
-    # Until paid plan selection is introduced, new shops receive the same
-    # internal compatibility subscription as migrated legacy shops. No license
-    # secret is returned or logged.
-    ensure_legacy_subscription_for_shop(db=db, shop_id=shop.id)
-
-    # Registration is the one audited event with no administrator behind it,
-    # so the actor is the account itself.
-    db.add(
-        AdminAuditLog(
-            actor_user_id=user.id,
-            actor_email=user.email,
-            action=AuditAction.USER_REGISTERED,
-            target_user_id=user.id,
-            target_email=user.email,
-            new_value=UserStatus.PENDING,
-            reason="Self-registration awaiting approval",
+        shop = Shop(
+            organization_id=organization.id,
+            is_default_branch=True,
+            name=shop_name.strip(),
+            email=normalized_email,
+            phone=phone.strip(),
+            whatsapp_number=whatsapp_number.strip() if whatsapp_number else None,
+            address=shop_address.strip() if shop_address else None,
+            category=category.strip(),
+            logo_url=logo_url,
         )
-    )
+        db.add(shop)
+        db.flush()
 
-    db.commit()
+        first_name, last_name = _split_name(owner_name)
+
+        # New registrations land in PENDING and are issued no access token. A
+        # super admin has to approve the account before it can authenticate.
+        user = User(
+            shop_id=shop.id,
+            full_name=owner_name.strip() if owner_name else "User",
+            first_name=first_name or None,
+            last_name=last_name or None,
+            email=normalized_email,
+            phone=phone.strip(),
+            role=UserRole.OWNER,
+            password_hash=hash_password(password),
+            profile_image_url=None,
+            status=UserStatus.PENDING,
+            is_active=derive_is_active(UserStatus.PENDING),
+            status_changed_at=_utcnow(),
+        )
+        db.add(user)
+        db.flush()
+
+        # Commercial ownership remains shop-scoped during the compatibility
+        # period. Organization-level entitlement migration is intentionally
+        # deferred.
+        ensure_legacy_subscription_for_shop(db=db, shop_id=shop.id)
+
+        db.add(
+            AdminAuditLog(
+                actor_user_id=user.id,
+                actor_email=user.email,
+                action=AuditAction.USER_REGISTERED,
+                target_user_id=user.id,
+                target_email=user.email,
+                new_value=UserStatus.PENDING,
+                reason="Self-registration awaiting approval",
+            )
+        )
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(user)
     db.refresh(shop)
+    db.refresh(organization)
 
     return RegisterResponse(
         user_id=user.id,
@@ -186,6 +195,8 @@ def register_shop_owner(
         status=user.status,
         shop_id=user.shop_id,
         shop_name=shop.name,
+        organization_id=organization.id,
+        organization_name=organization.name,
         message=(
             "Registration received. Your account is awaiting administrator "
             "approval and you will be able to sign in once it has been reviewed."
@@ -244,6 +255,8 @@ def login_user(payload: LoginRequest, db: Session):
         shop_id=user.shop_id,
         shop_name=shop.name if shop else None,
         shop_logo_url=shop.logo_url if shop else None,
+        organization_id=shop.organization_id if shop else None,
+        organization_name=shop.organization.name if shop else None,
     )
 
 
@@ -263,6 +276,8 @@ def get_me(current_user: User, db: Session):
         shop_id=current_user.shop_id,
         shop_name=shop.name if shop else None,
         shop_logo_url=shop.logo_url if shop else None,
+        organization_id=shop.organization_id if shop else None,
+        organization_name=shop.organization.name if shop else None,
     )
 
 

@@ -26,6 +26,7 @@ from app.core.database import Base  # noqa: E402
 from app.core.security import hash_password, pwd_context  # noqa: E402
 from app.core.user_status import UserRole, UserStatus  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.organization import Organization  # noqa: E402
 from app.models.shop import Shop  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.subscription_service import ensure_legacy_subscription_for_shop  # noqa: E402
@@ -95,7 +96,15 @@ def make_shop(db_session):
     def _make(name: str | None = None) -> Shop:
         counter["n"] += 1
         index = counter["n"]
+        organization = Organization(
+            name=name or f"Test Shop {index}",
+            status="active",
+        )
+        db_session.add(organization)
+        db_session.flush()
         shop = Shop(
+            organization_id=organization.id,
+            is_default_branch=True,
             name=name or f"Test Shop {index}",
             category="Grocery",
             email=f"shop{index}@example.com",

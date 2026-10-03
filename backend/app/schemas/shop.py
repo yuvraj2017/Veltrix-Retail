@@ -5,6 +5,8 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 class ShopResponse(BaseModel):
     id: int
+    organization_id: int
+    is_default_branch: bool
     name: str
     category: str
     email: EmailStr

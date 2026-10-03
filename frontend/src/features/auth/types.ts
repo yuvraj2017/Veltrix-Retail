@@ -1,5 +1,7 @@
 export type Shop = {
   id: number
+  organization_id: number
+  is_default_branch: boolean
   name: string
   category: string
   email: string
@@ -63,6 +65,8 @@ export type RegisterResponse = {
   status: string
   shop_id: number
   shop_name?: string | null
+  organization_id?: number | null
+  organization_name?: string | null
   message: string
 }
 
@@ -75,6 +79,8 @@ export type AuthUser = {
   shop_id: number
   shop_name?: string | null
   shop_logo_url?: string | null
+  organization_id?: number | null
+  organization_name?: string | null
 }
 
 export type LoginResponse = {
@@ -88,6 +94,8 @@ export type LoginResponse = {
   shop_id: number
   shop_name?: string | null
   shop_logo_url?: string | null
+  organization_id?: number | null
+  organization_name?: string | null
 }
 
 export type MeResponse = {
@@ -99,4 +107,6 @@ export type MeResponse = {
   shop_id: number
   shop_name?: string | null
   shop_logo_url?: string | null
+  organization_id?: number | null
+  organization_name?: string | null
 }

@@ -52,3 +52,11 @@ class User(Base, IDMixin, TimestampMixin):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     shop = relationship("Shop", back_populates="users")
+
+    @property
+    def organization(self):
+        return self.shop.organization if self.shop is not None else None
+
+    @property
+    def organization_id(self):
+        return self.shop.organization_id if self.shop is not None else None

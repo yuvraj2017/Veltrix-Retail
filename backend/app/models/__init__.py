@@ -1,3 +1,4 @@
+from app.models.organization import Organization
 from app.models.shop import Shop
 from app.models.user import User
 from app.models.product import Product, ProductImage
@@ -56,6 +57,7 @@ from app.models.commercial_event import (
 
 
 __all__ = [
+    "Organization",
     "Shop",
     "User",
     "Product",
