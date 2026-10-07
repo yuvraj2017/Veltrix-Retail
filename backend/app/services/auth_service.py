@@ -14,6 +14,7 @@ from app.core.user_status import (
     can_login,
     derive_is_active,
     login_refusal_message,
+    normalize_role,
 )
 from app.models.admin_audit_log import AdminAuditLog, AuditAction
 from app.models.organization import Organization
@@ -32,6 +33,7 @@ from app.schemas.auth import (
 )
 from app.services.subscription_service import ensure_legacy_subscription_for_shop
 from app.services.membership_service import create_registration_memberships
+from app.services.authorization_service import resolve_tenant_authorization_context
 
 PASSWORD_RESET_NEUTRAL_MESSAGE = (
     "If an account exists for this email, a password reset link has been sent."
@@ -235,11 +237,24 @@ def login_user(payload: LoginRequest, db: Session):
             detail=login_refusal_message(user.status),
         )
 
+    try:
+        normalized_role = normalize_role(user.role)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account role is invalid and requires administrator review",
+        )
+
     # A super admin has no shop, so there is nothing to look up.
     shop = (
         db.query(Shop).filter(Shop.id == user.shop_id).first()
         if user.shop_id
         else None
+    )
+    authorization = (
+        None
+        if normalized_role == UserRole.SUPER_ADMIN
+        else resolve_tenant_authorization_context(db, user)
     )
 
     access_token = create_access_token(subject=str(user.id))
@@ -260,6 +275,9 @@ def login_user(payload: LoginRequest, db: Session):
         shop_logo_url=shop.logo_url if shop else None,
         organization_id=shop.organization_id if shop else None,
         organization_name=shop.organization.name if shop else None,
+        active_shop_id=authorization.shop.id if authorization else None,
+        membership_role=authorization.role if authorization else None,
+        permissions=sorted(authorization.permissions) if authorization else [],
     )
 
 
@@ -268,6 +286,12 @@ def get_me(current_user: User, db: Session):
         db.query(Shop).filter(Shop.id == current_user.shop_id).first()
         if current_user.shop_id
         else None
+    )
+    normalized_role = normalize_role(current_user.role)
+    authorization = (
+        None
+        if normalized_role == UserRole.SUPER_ADMIN
+        else resolve_tenant_authorization_context(db, current_user)
     )
 
     return MeResponse(
@@ -281,6 +305,9 @@ def get_me(current_user: User, db: Session):
         shop_logo_url=shop.logo_url if shop else None,
         organization_id=shop.organization_id if shop else None,
         organization_name=shop.organization.name if shop else None,
+        active_shop_id=authorization.shop.id if authorization else None,
+        membership_role=authorization.role if authorization else None,
+        permissions=sorted(authorization.permissions) if authorization else [],
     )
 
 

@@ -15,6 +15,11 @@ type AuthUser = {
   shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
+  organization_id?: number | null
+  organization_name?: string | null
+  active_shop_id?: number | null
+  membership_role?: string | null
+  permissions?: string[]
 }
 
 type ShopInfo = {
@@ -44,6 +49,11 @@ type LoginPayload = {
   shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
+  organization_id?: number | null
+  organization_name?: string | null
+  active_shop_id?: number | null
+  membership_role?: string | null
+  permissions?: string[]
 }
 
 type AuthContextType = {
@@ -56,6 +66,7 @@ type AuthContextType = {
    *  guard. Presentational only -- every admin API call is authorised
    *  server-side regardless of what this says. */
   isSuperAdmin: boolean
+  hasPermission: (permission: string) => boolean
   login: (payload: LoginPayload) => void
   logout: () => void
   refreshMe: () => Promise<void>
@@ -79,6 +90,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       shop_id: payload.shop_id,
       shop_name: payload.shop_name || null,
       shop_logo_url: payload.shop_logo_url || null,
+      organization_id: payload.organization_id ?? null,
+      organization_name: payload.organization_name ?? null,
+      active_shop_id: payload.active_shop_id ?? payload.shop_id,
+      membership_role: payload.membership_role ?? null,
+      permissions: payload.permissions ?? [],
     }
 
     saveTabSession(payload.access_token, authUser)
@@ -136,6 +152,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         shop_id: me.shop_id,
         shop_name: me.shop_name || null,
         shop_logo_url: me.shop_logo_url || null,
+        organization_id: me.organization_id ?? null,
+        organization_name: me.organization_name ?? null,
+        active_shop_id: me.active_shop_id ?? me.shop_id,
+        membership_role: me.membership_role ?? null,
+        permissions: me.permissions ?? [],
       }
 
       saveTabSession(savedToken, authUser)
@@ -203,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (token && !user) {
+    if (token && (!user || !Array.isArray(user.permissions))) {
       refreshMe()
     }
   }, [token, refreshMe])
@@ -216,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       isAuthenticated: !!token && !!user,
       isSuperAdmin: user?.role === 'super_admin',
+      hasPermission: (permission: string) => Boolean(user?.permissions?.includes(permission)),
       login,
       logout,
       refreshMe,

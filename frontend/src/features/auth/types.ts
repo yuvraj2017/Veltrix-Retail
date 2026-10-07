@@ -76,11 +76,14 @@ export type AuthUser = {
   full_name: string
   role: string
   status: string
-  shop_id: number
+  shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
   organization_id?: number | null
   organization_name?: string | null
+  active_shop_id?: number | null
+  membership_role?: string | null
+  permissions: string[]
 }
 
 export type LoginResponse = {
@@ -91,11 +94,14 @@ export type LoginResponse = {
   full_name: string
   role: string
   status: string
-  shop_id: number
+  shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
   organization_id?: number | null
   organization_name?: string | null
+  active_shop_id?: number | null
+  membership_role?: string | null
+  permissions: string[]
 }
 
 export type MeResponse = {
@@ -104,9 +110,12 @@ export type MeResponse = {
   full_name: string
   role: string
   status: string
-  shop_id: number
+  shop_id: number | null
   shop_name?: string | null
   shop_logo_url?: string | null
   organization_id?: number | null
   organization_name?: string | null
+  active_shop_id?: number | null
+  membership_role?: string | null
+  permissions: string[]
 }

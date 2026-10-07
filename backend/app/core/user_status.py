@@ -105,12 +105,11 @@ def normalize_status(value: str | None) -> str:
 
 
 def normalize_role(value: str | None) -> str:
-    """Coerce a stored value into a known role, defaulting to OWNER."""
-    if not value:
-        return UserRole.OWNER
-
+    """Return a known legacy role; malformed values never gain access."""
     candidate = str(value).strip().lower()
-    return candidate if candidate in UserRole.ALL else UserRole.OWNER
+    if candidate not in UserRole.ALL:
+        raise ValueError("Unsupported user role")
+    return candidate
 
 
 def can_login(status: str | None) -> bool:
@@ -144,4 +143,7 @@ def derive_is_active(status: str | None) -> bool:
 
 
 def is_super_admin(role: str | None) -> bool:
-    return normalize_role(role) == UserRole.SUPER_ADMIN
+    try:
+        return normalize_role(role) == UserRole.SUPER_ADMIN
+    except ValueError:
+        return False

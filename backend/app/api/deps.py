@@ -1,16 +1,22 @@
 from jose import JWTError
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.security import decode_access_token
+from app.core.permissions import ENDPOINT_PERMISSION_POLICIES
 from app.core.user_status import (
     can_login,
     is_super_admin,
     login_refusal_message,
+    normalize_role,
 )
 from app.services.entitlement_service import evaluate_shop_access
+from app.services.authorization_service import (
+    TenantAuthorizationContext,
+    resolve_tenant_authorization_context,
+)
 from app.models.user import User
 
 bearer_scheme = HTTPBearer()
@@ -82,59 +88,100 @@ def get_current_user(
             detail=f"{ACCOUNT_INACTIVE_CODE}: {login_refusal_message(user.status)}",
         )
 
+    try:
+        normalize_role(user.role)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account role is invalid and requires administrator review",
+        )
+
     return user
 
 
-def get_shop_user(
+def get_tenant_authorization_context(
     current_user: User = Depends(get_current_user),
-) -> User:
-    """Gate for every shop-scoped route.
-
-    A super admin operates the platform and owns no shop, so `shop_id` is
-    NULL for them. Without this guard those accounts would fall through to
-    the ordinary services, where a `shop_id IS NULL` filter silently returns
-    empty lists on reads and a write would fail a NOT NULL constraint with a
-    500. A clear refusal is better than either.
-
-    This is not a permission check -- it is a "this route needs a shop"
-    check. Shop owners pass it unchanged, so ordinary behaviour is
-    completely unaffected.
-    """
-    if current_user.shop_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "This area belongs to shop accounts. Your administrator "
-                "account does not have a shop."
-            ),
-        )
-
-    return current_user
-
-
-def require_active_shop_access(
-    current_user: User = Depends(get_shop_user),
     db: Session = Depends(get_db),
-) -> User:
-    """Gate for normal tenant business operations.
+) -> TenantAuthorizationContext:
+    return resolve_tenant_authorization_context(db, current_user)
 
-    Authentication and shop membership are handled by get_shop_user. This layer
-    answers the SaaS question: may this shop use the operational app right now?
-    Subscription recovery/payment routes intentionally keep get_shop_user so an
-    expired customer can still renew.
-    """
-    access = evaluate_shop_access(current_user.shop_id, db)
+
+def get_shop_user(
+    context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
+) -> User:
+    """Compatibility gate backed by active organization/branch membership."""
+    return context.user
+
+
+def _enforce_commercial_access(context: TenantAuthorizationContext, db: Session) -> None:
+    access = evaluate_shop_access(context.shop.id, db)
     if not access.allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": access.code,
                 "message": access.message or "This shop does not currently have access.",
-                "details": {"shop_id": current_user.shop_id},
+                "details": {"shop_id": context.shop.id},
             },
         )
 
-    return current_user
+
+def _authorize(
+    *,
+    context: TenantAuthorizationContext,
+    permission: str,
+    db: Session,
+    require_entitlement: bool,
+) -> User:
+    if permission not in context.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to perform this action",
+        )
+    if require_entitlement:
+        _enforce_commercial_access(context, db)
+    return context.user
+
+
+def require_permission(permission: str, *, require_entitlement: bool = True):
+    """Create a reusable capability dependency for non-registered routes."""
+
+    def dependency(
+        context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
+        db: Session = Depends(get_db),
+    ) -> User:
+        return _authorize(
+            context=context,
+            permission=permission,
+            db=db,
+            require_entitlement=require_entitlement,
+        )
+
+    dependency.required_permission = permission
+    dependency.require_entitlement = require_entitlement
+    return dependency
+
+
+def require_active_shop_access(
+    request: Request,
+    context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
+    db: Session = Depends(get_db),
+) -> User:
+    """Apply the explicit policy registered for the selected tenant endpoint."""
+    route = request.scope.get("route")
+    endpoint_name = getattr(route, "name", None)
+    policy = ENDPOINT_PERMISSION_POLICIES.get(endpoint_name)
+    if policy is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint has no tenant authorization policy",
+        )
+    return _authorize(
+        context=context,
+        permission=policy.permission,
+        db=db,
+        require_entitlement=policy.require_entitlement,
+    )
 
 
 def require_super_admin(

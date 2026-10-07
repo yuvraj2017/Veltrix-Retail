@@ -38,6 +38,9 @@ class LoginResponse(BaseModel):
     shop_logo_url: str | None = None
     organization_id: int | None = None
     organization_name: str | None = None
+    active_shop_id: int | None = None
+    membership_role: str | None = None
+    permissions: list[str] = Field(default_factory=list)
 
 
 class RegisterResponse(BaseModel):
@@ -71,3 +74,6 @@ class MeResponse(BaseModel):
     shop_logo_url: str | None = None
     organization_id: int | None = None
     organization_name: str | None = None
+    active_shop_id: int | None = None
+    membership_role: str | None = None
+    permissions: list[str] = Field(default_factory=list)

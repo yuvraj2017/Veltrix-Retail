@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_shop_user
+from app.api.deps import get_db, require_active_shop_access
 from app.models.user import User
 from app.schemas.subscription import (
     CheckoutSessionRequest,
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/subscription", tags=["Subscription"])
 @router.get("/me", response_model=ShopSubscriptionOverviewResponse)
 def get_my_subscription(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_shop_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return commercial_service.build_shop_subscription_overview(db, current_user.shop_id)
 
@@ -28,7 +28,7 @@ def get_my_subscription(
 @router.get("/plans", response_model=list[PublicPlanResponse])
 def list_available_plans(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_shop_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return commercial_service.list_public_plan_catalog(db)
 
@@ -37,7 +37,7 @@ def list_available_plans(
 def create_checkout_session(
     payload: CheckoutSessionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_shop_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return commercial_service.create_checkout_session(
         db,
@@ -50,7 +50,7 @@ def create_checkout_session(
 def verify_razorpay_payment(
     payload: RazorpayVerifyPaymentRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_shop_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return commercial_service.verify_razorpay_payment(
         db,
@@ -63,7 +63,7 @@ def verify_razorpay_payment(
 def submit_upi_payment_reference(
     payload: UpiPaymentReferenceRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_shop_user),
+    current_user: User = Depends(require_active_shop_access),
 ):
     return commercial_service.submit_upi_payment_reference(
         db,

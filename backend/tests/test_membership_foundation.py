@@ -13,6 +13,7 @@ from app.core.membership import (
     normalize_membership_role,
     normalize_membership_status,
 )
+from app.core.security import create_access_token
 from app.models.license import ShopLicense
 from app.models.membership import BranchMembership, OrganizationMembership
 from app.models.organization import Organization
@@ -141,7 +142,7 @@ def test_membership_vocabulary_fails_closed():
 def test_organization_membership_is_unique_per_user_and_organization(
     db_session, make_user
 ):
-    user = make_user(email="membership-unique@example.com")
+    user = make_user(email="membership-unique@example.com", create_membership=False)
     _add_membership(db_session, user=user, shop=user.shop)
     db_session.add(
         OrganizationMembership(
@@ -156,7 +157,7 @@ def test_organization_membership_is_unique_per_user_and_organization(
 
 
 def test_branch_membership_is_unique(db_session, make_user):
-    user = make_user(email="branch-unique@example.com")
+    user = make_user(email="branch-unique@example.com", create_membership=False)
     membership = _add_membership(db_session, user=user, shop=user.shop)
     for _ in range(2):
         db_session.add(
@@ -178,7 +179,10 @@ def test_branch_membership_is_unique(db_session, make_user):
 def test_membership_database_checks_reject_invalid_values(
     db_session, make_user, role, status
 ):
-    user = make_user(email=f"invalid-{role}-{status}@example.com")
+    user = make_user(
+        email=f"invalid-{role}-{status}@example.com",
+        create_membership=False,
+    )
     db_session.add(
         OrganizationMembership(
             organization_id=user.shop.organization_id,
@@ -194,7 +198,7 @@ def test_membership_database_checks_reject_invalid_values(
 def test_cross_organization_branch_membership_is_rejected(
     db_session, make_user, make_shop
 ):
-    user = make_user(email="cross-organization@example.com")
+    user = make_user(email="cross-organization@example.com", create_membership=False)
     other_shop = make_shop("Other Organization")
     membership = _add_membership(db_session, user=user, shop=user.shop)
     db_session.add(
@@ -321,13 +325,20 @@ def test_registration_membership_failure_rolls_back_everything(
     assert db_session.query(ShopLicense).count() == 0
 
 
-def test_existing_shop_authorization_remains_compatible_without_membership(
+def test_existing_shop_authorization_fails_closed_without_membership(
     client, make_user, auth_headers, db_session
 ):
-    user = make_user(email="legacy-auth-compatible@example.com")
+    user = make_user(
+        email="legacy-auth-compatible@example.com",
+        create_membership=False,
+    )
     assert db_session.query(OrganizationMembership).filter_by(user_id=user.id).count() == 0
-    response = client.get("/api/v1/inventory/summary", headers=auth_headers(user.email))
-    assert response.status_code == 200
+    token = create_access_token(subject=str(user.id))
+    response = client.get(
+        "/api/v1/inventory/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
 
 
 def test_registration_memberships_do_not_change_stock(db_session):

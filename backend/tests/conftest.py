@@ -27,8 +27,10 @@ from app.core.security import hash_password, pwd_context  # noqa: E402
 from app.core.user_status import UserRole, UserStatus  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
+from app.models.membership import BranchMembership, OrganizationMembership  # noqa: E402
 from app.models.shop import Shop  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.core.membership import MembershipRole, MembershipStatus  # noqa: E402
 from app.services.subscription_service import ensure_legacy_subscription_for_shop  # noqa: E402
 
 
@@ -135,10 +137,17 @@ def make_user(db_session, make_shop):
         role: str = UserRole.OWNER,
         full_name: str = "Test User",
         shop: Shop | None = None,
+        membership_role: str = MembershipRole.OWNER,
+        create_membership: bool = True,
     ) -> User:
         counter["n"] += 1
+        assigned_shop = (
+            None
+            if role == UserRole.SUPER_ADMIN and shop is None
+            else (shop or make_shop())
+        )
         user = User(
-            shop_id=(shop or make_shop()).id,
+            shop_id=assigned_shop.id if assigned_shop else None,
             full_name=full_name,
             email=email or f"user{counter['n']}@example.com",
             password_hash=hash_password(password),
@@ -148,7 +157,25 @@ def make_user(db_session, make_shop):
         )
         db_session.add(user)
         db_session.flush()
-        if user.shop_id is not None:
+        if assigned_shop is not None and create_membership and role != UserRole.SUPER_ADMIN:
+            organization_membership = OrganizationMembership(
+                organization_id=assigned_shop.organization_id,
+                user_id=user.id,
+                role=membership_role,
+                status=MembershipStatus.ACTIVE,
+            )
+            db_session.add(organization_membership)
+            db_session.flush()
+            db_session.add(
+                BranchMembership(
+                    organization_membership_id=organization_membership.id,
+                    organization_id=assigned_shop.organization_id,
+                    shop_id=assigned_shop.id,
+                    status=MembershipStatus.ACTIVE,
+                )
+            )
+
+        if assigned_shop is not None:
             ensure_legacy_subscription_for_shop(db=db_session, shop_id=user.shop_id)
         db_session.commit()
         db_session.refresh(user)
