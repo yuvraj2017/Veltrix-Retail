@@ -323,6 +323,16 @@ ENDPOINT_PERMISSION_POLICIES: dict[str, EndpointPermissionPolicy] = {
     # Shop settings
     "get_shop_endpoint": _policy(Permission.SETTINGS_VIEW),
     "update_shop_endpoint": _policy(Permission.SETTINGS_MANAGE),
+    # Staff lifecycle
+    "list_current_organization_staff": _policy(Permission.STAFF_VIEW),
+    "create_current_organization_staff": _policy(Permission.STAFF_MANAGE),
+    "get_current_organization_staff_member": _policy(Permission.STAFF_VIEW),
+    "update_current_organization_staff_member": _policy(Permission.STAFF_MANAGE),
+    "grant_current_organization_staff_branch": _policy(Permission.STAFF_MANAGE),
+    "revoke_current_organization_staff_branch": _policy(Permission.STAFF_MANAGE),
+    "transfer_current_organization_ownership": _policy(
+        Permission.OWNERSHIP_TRANSFER
+    ),
     # Subscription recovery intentionally bypasses commercial entitlement only.
     "get_my_subscription": _policy(Permission.SUBSCRIPTION_VIEW, entitlement=False),
     "list_available_plans": _policy(Permission.SUBSCRIPTION_VIEW, entitlement=False),

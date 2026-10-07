@@ -19,6 +19,7 @@ import InvoicePreview from '../components/billing/InvoicePreviewDocument'
 import { billingApi } from '../features/billing/api'
 import type { Invoice, InvoiceReturn, PaymentMethod } from '../features/billing/types'
 import { useAuth } from '../context/AuthContext'
+import { PERMISSIONS } from '../features/staff/constants'
 import { useToast } from '../components/ui/ToastProvider'
 
 const paymentMethods: { value: PaymentMethod; label: string }[] = [
@@ -55,7 +56,7 @@ export default function InvoicePreviewPage() {
   const navigate = useNavigate()
   const { invoiceId } = useParams()
   const [searchParams] = useSearchParams()
-  const { user, shop } = useAuth()
+  const { user, shop, hasPermission } = useAuth()
   const { showToast } = useToast()
 
   const id = Number(invoiceId)
@@ -376,7 +377,9 @@ export default function InvoicePreviewPage() {
   }
 
   const remainingAmount = Number(invoice.remaining_amount || 0)
-  const canRecordPayment = invoice.invoice_status !== 'cancelled' && remainingAmount > 0
+  const canRecordPayment = hasPermission(PERMISSIONS.salesPayment) && invoice.invoice_status !== 'cancelled' && remainingAmount > 0
+  const canCreateReturn = hasPermission(PERMISSIONS.salesReturn)
+  const canCreateRefund = hasPermission(PERMISSIONS.salesRefund)
 
   return (
     <>
@@ -652,7 +655,7 @@ export default function InvoicePreviewPage() {
               </div>
 
               <div className="space-y-4">
-                {returnableItems.length > 0 && invoice.invoice_status !== 'cancelled' ? (
+                {canCreateReturn && returnableItems.length > 0 && invoice.invoice_status !== 'cancelled' ? (
                   <>
                     <div className="space-y-3">
                       {returnableItems.map(({ item, remaining }) => (
@@ -787,7 +790,7 @@ export default function InvoicePreviewPage() {
                             <MiniValue label="Refundable" value={money(remainingRefund)} />
                           </div>
 
-                          {remainingRefund > 0 && (
+                          {canCreateRefund && remainingRefund > 0 && (
                             <div className="mt-3 grid gap-2">
                               <input
                                 type="number"

@@ -70,6 +70,13 @@ class BusinessAuditAction:
     VENDOR_BILL_CREATED = "vendor_bill.created"
     VENDOR_BILL_UPDATED = "vendor_bill.updated"
     VENDOR_PAYMENT_CREATED = "vendor_payment.created"
+    STAFF_CREATED = "staff.created"
+    STAFF_ROLE_CHANGED = "staff.role_changed"
+    STAFF_ACTIVATED = "staff.activated"
+    STAFF_DEACTIVATED = "staff.deactivated"
+    STAFF_BRANCH_GRANTED = "staff.branch_granted"
+    STAFF_BRANCH_REVOKED = "staff.branch_revoked"
+    OWNERSHIP_TRANSFERRED = "ownership.transferred"
 
     ALL = (
         INVOICE_CREATED,
@@ -91,4 +98,11 @@ class BusinessAuditAction:
         VENDOR_BILL_CREATED,
         VENDOR_BILL_UPDATED,
         VENDOR_PAYMENT_CREATED,
+        STAFF_CREATED,
+        STAFF_ROLE_CHANGED,
+        STAFF_ACTIVATED,
+        STAFF_DEACTIVATED,
+        STAFF_BRANCH_GRANTED,
+        STAFF_BRANCH_REVOKED,
+        OWNERSHIP_TRANSFERRED,
     )

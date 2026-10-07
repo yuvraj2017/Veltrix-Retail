@@ -65,6 +65,7 @@ test('inventory workspace remains usable across supported viewport widths', asyn
     sessionStorage.setItem('auth_user', JSON.stringify({
       id: 1, email: 'owner@example.test', full_name: 'Test Owner', role: 'owner',
       status: 'active', shop_id: 1, shop_name: 'Inventory Test Shop',
+      membership_role: 'owner', permissions: ['inventory.view', 'purchasing.view'],
     }))
   })
   for (const width of [375, 768, 1024, 1440]) {
@@ -105,6 +106,7 @@ test('purchase-order reference opens the linked order even when it is not in the
     sessionStorage.setItem('auth_user', JSON.stringify({
       id: 1, email: 'owner@example.test', full_name: 'Test Owner', role: 'owner',
       status: 'active', shop_id: 1, shop_name: 'Inventory Test Shop',
+      membership_role: 'owner', permissions: ['purchasing.view'],
     }))
   })
   await page.goto('/purchase-orders?selected=88')

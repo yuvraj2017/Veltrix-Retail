@@ -25,6 +25,8 @@ import type {
   VendorSummary,
   VendorCredit,
 } from '../features/vendors/types'
+import { useAuth } from '../context/AuthContext'
+import { PERMISSIONS } from '../features/staff/constants'
 
 const money = (value: string | number) => {
   const amount = Number(value || 0)
@@ -37,6 +39,10 @@ const money = (value: string | number) => {
 
 export default function VendorDetailsPage() {
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
+  const canManageVendors = hasPermission(PERMISSIONS.vendorsManage)
+  const canManageBills = hasPermission(PERMISSIONS.payablesManage)
+  const canRecordPayment = hasPermission(PERMISSIONS.payablesPayment)
   const { vendorId } = useParams()
 
   const id = Number(vendorId)
@@ -169,19 +175,19 @@ export default function VendorDetailsPage() {
 
             {/* Action buttons */}
             <div className="flex flex-col gap-3 sm:flex-row">
-              <button className="inline-flex h-14 items-center justify-center gap-2 rounded-[22px] bg-slate-100 px-5 text-sm font-black text-slate-800 transition hover:-translate-y-[1px] hover:bg-slate-200
+              {canManageVendors && <button className="inline-flex h-14 items-center justify-center gap-2 rounded-[22px] bg-slate-100 px-5 text-sm font-black text-slate-800 transition hover:-translate-y-[1px] hover:bg-slate-200
                 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
                 <Edit3 size={17} />
                 Edit Vendor
-              </button>
+              </button>}
 
-              <button
+              {canManageBills && <button
                 onClick={() => navigate(`/vendors/${vendor.id}/bills/new`)}
                 className="inline-flex h-14 items-center justify-center gap-2 rounded-[22px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] px-6 text-sm font-black text-white shadow-[0_20px_48px_rgba(79,70,229,0.30)] transition-all duration-300 hover:-translate-y-[1px]"
               >
                 <Plus size={18} />
                 Add Bill
-              </button>
+              </button>}
             </div>
           </div>
         </motion.div>
@@ -220,6 +226,8 @@ export default function VendorDetailsPage() {
             onAddPayment={(bill) => setSelectedBill(bill)}
             onEditBill={(bill) => navigate(`/vendors/${vendor.id}/bills/${bill.id}/edit`)}
             onViewPaymentHistory={(bill) => setHistoryBill(bill)}
+            canManageBills={canManageBills}
+            canRecordPayment={canRecordPayment}
           />
         </div>
 

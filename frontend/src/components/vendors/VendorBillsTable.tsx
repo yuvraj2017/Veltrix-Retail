@@ -12,6 +12,8 @@ type VendorBillsTableProps = {
   onAddPayment: (bill: VendorBill) => void;
   onEditBill: (bill: VendorBill) => void;
   onViewPaymentHistory: (bill: VendorBill) => void;
+  canManageBills: boolean;
+  canRecordPayment: boolean;
 };
 
 const money = (value: string | number) => {
@@ -40,21 +42,25 @@ function BillActionsDropdown({
   onHistory,
   onPay,
   onClose,
+  canEdit,
+  canPay,
 }: {
   position: DropdownPosition;
   onEdit: () => void;
   onHistory: () => void;
   onPay: () => void;
   onClose: () => void;
+  canEdit: boolean;
+  canPay: boolean;
 }) {
   const dropdownStyle: React.CSSProperties = position.openUpward
     ? { position: "fixed", bottom: window.innerHeight - position.top + 8, right: window.innerWidth - position.right, zIndex: 99999 }
     : { position: "fixed", top: position.top + 8, right: window.innerWidth - position.right, zIndex: 99999 };
 
   const actions = [
-    { label: "Edit Bill", icon: Pencil, onClick: onEdit },
+    ...(canEdit ? [{ label: "Edit Bill", icon: Pencil, onClick: onEdit }] : []),
     { label: "Payment History", icon: History, onClick: onHistory },
-    { label: "Add Payment", icon: CreditCard, onClick: onPay },
+    ...(canPay ? [{ label: "Add Payment", icon: CreditCard, onClick: onPay }] : []),
   ];
 
   return createPortal(
@@ -106,11 +112,15 @@ function BillActions({
   onEdit,
   onHistory,
   onPay,
+  canEdit,
+  canPay,
 }: {
   bill: VendorBill;
   onEdit: (bill: VendorBill) => void;
   onHistory: (bill: VendorBill) => void;
   onPay: (bill: VendorBill) => void;
+  canEdit: boolean;
+  canPay: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<DropdownPosition | null>(null);
@@ -168,6 +178,8 @@ function BillActions({
           onHistory={() => onHistory(bill)}
           onPay={() => onPay(bill)}
           onClose={() => setOpen(false)}
+          canEdit={canEdit}
+          canPay={canPay}
         />
       )}
     </div>
@@ -181,6 +193,8 @@ export default function VendorBillsTable({
   onAddPayment,
   onEditBill,
   onViewPaymentHistory,
+  canManageBills,
+  canRecordPayment,
 }: VendorBillsTableProps) {
   return (
     <section className="overflow-hidden rounded-[24px] bg-white dark:bg-slate-900 shadow-[0_18px_50px_rgba(17,18,28,0.05)] dark:shadow-[0_18px_50px_rgba(0,0,0,0.25)] border border-transparent dark:border-slate-800">
@@ -200,13 +214,13 @@ export default function VendorBillsTable({
           <button className="rounded-xl bg-[#f1f1f4] dark:bg-slate-800 p-3 text-[#171821] dark:text-slate-300 transition hover:bg-[#e8e8ef] dark:hover:bg-slate-700">
             <Filter size={18} />
           </button>
-          <button
+          {canManageBills && <button
             onClick={onAddBill}
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#4f46e5] to-[#2f20d6] px-4 py-3 text-sm font-black text-white shadow-[0_14px_34px_rgba(79,70,229,0.18)]"
           >
             <Plus size={17} />
             Add Bill
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -246,12 +260,12 @@ export default function VendorBillsTable({
             Add your first vendor bill to start tracking due amount and payment
             reminders.
           </p>
-          <button
+          {canManageBills && <button
             onClick={onAddBill}
             className="mt-6 rounded-xl bg-gradient-to-r from-[#4f46e5] to-[#2f20d6] px-5 py-3 text-sm font-black text-white"
           >
             Add Bill
-          </button>
+          </button>}
         </div>
       ) : (
         <div>
@@ -302,6 +316,8 @@ export default function VendorBillsTable({
                     onEdit={onEditBill}
                     onHistory={onViewPaymentHistory}
                     onPay={onAddPayment}
+                    canEdit={canManageBills}
+                    canPay={canRecordPayment}
                   />
                 </div>
               </div>
@@ -320,6 +336,8 @@ export default function VendorBillsTable({
                       onEdit={onEditBill}
                       onHistory={onViewPaymentHistory}
                       onPay={onAddPayment}
+                      canEdit={canManageBills}
+                      canPay={canRecordPayment}
                     />
                   </div>
                 </div>

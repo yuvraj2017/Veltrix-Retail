@@ -24,6 +24,9 @@ type InvoiceTableProps = {
   onShare: (invoiceId: number) => void
   onDelete: (invoiceId: number) => void
   deletingInvoiceId?: number | null
+  canCreate: boolean
+  canEdit: boolean
+  canCancel: boolean
 }
 
 const money = (value: string | number) => {
@@ -239,7 +242,7 @@ function InvoiceActionsDropdown({
 }
 
 function InvoiceActions({
-  invoiceId, onView, onEdit, onPrint, onDownload, onShare, onDelete, deletingInvoiceId,
+  invoiceId, onView, onEdit, onPrint, onDownload, onShare, onDelete, deletingInvoiceId, canEdit, canCancel,
 }: {
   invoiceId: number
   onView: (id: number) => void
@@ -249,6 +252,8 @@ function InvoiceActions({
   onShare: (id: number) => void
   onDelete: (id: number) => void
   deletingInvoiceId?: number | null
+  canEdit: boolean
+  canCancel: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<DropdownPosition | null>(null)
@@ -257,18 +262,18 @@ function InvoiceActions({
 
   const actions = [
     { label: 'View Invoice',  icon: Eye,     onClick: () => onView(invoiceId)     },
-    { label: 'Edit Invoice',  icon: Pencil,  onClick: () => onEdit(invoiceId)     },
+    ...(canEdit ? [{ label: 'Edit Invoice', icon: Pencil, onClick: () => onEdit(invoiceId) }] : []),
     { label: 'Print Invoice', icon: Printer, onClick: () => onPrint(invoiceId)    },
     { label: 'Download PDF',  icon: Download,onClick: () => onDownload(invoiceId) },
     { label: 'Share Invoice', icon: Share2,  onClick: () => onShare(invoiceId)    },
-    {
+    ...(canCancel ? [{
       label: isDeleting ? 'Deleting...' : 'Delete Invoice',
       icon: isDeleting ? Loader2 : Trash2,
       onClick: () => onDelete(invoiceId),
       destructive: true,
       disabled: isDeleting,
       spinning: isDeleting,
-    },
+    }] : []),
   ]
 
   const handleOpen = useCallback((e: React.MouseEvent) => {
@@ -318,7 +323,7 @@ function InvoiceActions({
 export default function InvoiceTable({
   invoices, totalInvoices, isLoading, search, onSearchChange,
   paymentStatus, onPaymentStatusChange, onView, onEdit, onCreate,
-  onPrint, onDownload, onShare, onDelete, deletingInvoiceId,
+  onPrint, onDownload, onShare, onDelete, deletingInvoiceId, canCreate, canEdit, canCancel,
 }: InvoiceTableProps) {
   return (
     <section className="overflow-hidden rounded-[34px] bg-white dark:bg-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.06)] dark:shadow-[0_24px_70px_rgba(0,0,0,0.3)] border border-transparent dark:border-slate-800">
@@ -347,7 +352,7 @@ export default function InvoiceTable({
 
           <PaymentFilterDropdown value={paymentStatus} onChange={onPaymentStatusChange} />
 
-          <motion.button
+          {canCreate && <motion.button
             whileTap={{ scale: 0.98 }}
             whileHover={{ y: -2 }}
             onClick={onCreate}
@@ -355,7 +360,7 @@ export default function InvoiceTable({
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/16 transition-transform duration-300 group-hover:rotate-90">+</span>
             Create Invoice
-          </motion.button>
+          </motion.button>}
         </div>
       </div>
 
@@ -484,6 +489,8 @@ export default function InvoiceTable({
                   onShare={onShare}
                   onDelete={onDelete}
                   deletingInvoiceId={deletingInvoiceId}
+                  canEdit={canEdit}
+                  canCancel={canCancel}
                 />
               </div>
             </motion.div>

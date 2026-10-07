@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '../context/AuthContext'
+import { PERMISSIONS } from '../features/staff/constants'
 import { useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -57,6 +59,10 @@ function requestId() {
 
 export default function PurchaseOrdersPage() {
   const queryClient = useQueryClient()
+  const { hasPermission } = useAuth()
+  const canManagePurchasing = hasPermission(PERMISSIONS.purchasingManage)
+  const canReceivePurchasing = hasPermission(PERMISSIONS.purchasingReceive)
+  const canReturnPurchasing = hasPermission(PERMISSIONS.purchasingReturn)
   const [searchParams, setSearchParams] = useSearchParams()
   const linkedPurchaseOrderId = Number(searchParams.get('selected')) || null
   const [selectedId, setSelectedId] = useState<number | null>(linkedPurchaseOrderId)
@@ -378,7 +384,7 @@ export default function PurchaseOrdersPage() {
 
       {message && <p role="status" className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200">{message}</p>}
 
-      <section className="border-y border-slate-200 py-6 dark:border-slate-700">
+      {canManagePurchasing && <section className="border-y border-slate-200 py-6 dark:border-slate-700">
         <div className="mb-5 flex items-center gap-2">
           <ShoppingCart size={20} className="text-indigo-600" />
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{editingId ? 'Edit Draft Order' : 'New Purchase Order'}</h2>
@@ -444,7 +450,7 @@ export default function PurchaseOrdersPage() {
             <button type="button" onClick={saveOrder} disabled={saving} className="flex h-11 items-center gap-2 rounded-lg bg-indigo-600 px-5 text-sm font-semibold text-white disabled:opacity-50"><Save size={17} />{saving ? 'Saving...' : 'Save Order'}</button>
           </div>
         </div>
-      </section>
+      </section>}
 
       <div className="grid gap-7 xl:grid-cols-[360px_1fr]">
         <section>
@@ -465,8 +471,8 @@ export default function PurchaseOrdersPage() {
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-700">
                 <div><p className="text-sm font-semibold uppercase text-indigo-600">{selected.status.replace('_', ' ')}</p><h2 className="mt-1 text-2xl font-bold dark:text-slate-100">{selected.purchase_order_number}</h2><p className="mt-1 text-sm text-slate-500">Order {selected.order_date} · Expected {selected.expected_date || 'Not set'}</p></div>
                 <div className="flex gap-2">
-                  {selected.status === 'draft' && <button type="button" onClick={() => loadDraft(selected)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-600 dark:text-slate-200">Edit Draft</button>}
-                  {['draft', 'ordered'].includes(selected.status) && <button type="button" onClick={cancelSelected} className="flex items-center gap-2 rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 dark:border-rose-800 dark:text-rose-300"><XCircle size={16} />Cancel</button>}
+                  {canManagePurchasing && selected.status === 'draft' && <button type="button" onClick={() => loadDraft(selected)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-600 dark:text-slate-200">Edit Draft</button>}
+                  {canManagePurchasing && ['draft', 'ordered'].includes(selected.status) && <button type="button" onClick={cancelSelected} className="flex items-center gap-2 rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 dark:border-rose-800 dark:text-rose-300"><XCircle size={16} />Cancel</button>}
                 </div>
               </div>
 
@@ -477,7 +483,7 @@ export default function PurchaseOrdersPage() {
                 </table>
               </div>
 
-              {['ordered', 'partially_received'].includes(selected.status) && (
+              {canReceivePurchasing && ['ordered', 'partially_received'].includes(selected.status) && (
                 <div className="border-y border-emerald-200 py-5 dark:border-emerald-900">
                   <div className="mb-4 flex items-center gap-2"><PackageCheck size={20} className="text-emerald-600" /><h3 className="text-lg font-bold dark:text-slate-100">Receive Goods</h3></div>
                   <div className="space-y-3">{selected.items.filter((item) => item.received_quantity < item.ordered_quantity).map((item) => (
@@ -495,7 +501,7 @@ export default function PurchaseOrdersPage() {
                 </div>
               )}
 
-              {(returnEligibilityQuery.data ?? []).some((item) => item.remaining_returnable_quantity > 0) && (
+              {canReturnPurchasing && (returnEligibilityQuery.data ?? []).some((item) => item.remaining_returnable_quantity > 0) && (
                 <div className="border-y border-amber-200 py-5 dark:border-amber-900">
                   <div className="mb-4 flex items-center gap-2">
                     <RotateCcw size={20} className="text-amber-700" />

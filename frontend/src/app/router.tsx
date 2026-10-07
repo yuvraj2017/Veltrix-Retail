@@ -12,6 +12,8 @@ import { ProtectedRoute } from "../routes/ProtectedRoute";
 import { AdminRoute } from "../routes/AdminRoute";
 import { ShopOwnerRoute } from "../routes/ShopOwnerRoute";
 import { PublicOnlyRoute } from "../routes/PublicOnlyRoute";
+import { PermissionRoute } from "../routes/PermissionRoute";
+import { PERMISSIONS } from "../features/staff/constants";
 
 /* ---------------------------------------------------------------- *
  * Lazy route chunks
@@ -49,6 +51,7 @@ const CustomerDetailsPage = lazy(() =>
 
 const ReportsPage = lazy(() => import("../pages/ReportsPage"));
 const SubscriptionPage = lazy(() => import("../pages/SubscriptionPage"));
+const StaffPage = lazy(() => import("../pages/StaffPage"));
 
 // Super Admin. Lazy like every other non-landing route, so the chunk is
 // never downloaded by a regular user who cannot reach these screens.
@@ -69,6 +72,10 @@ const ProfilePage = lazy(() => import("../pages/ProfilePage"));
 /** Public routes render standalone, so they get a full-viewport skeleton. */
 const publicRoute = (node: ReactNode) => (
   <Suspense fallback={<PublicRouteFallback />}>{node}</Suspense>
+);
+
+const permitted = (permission: string, node: ReactNode) => (
+  <PermissionRoute permission={permission}>{node}</PermissionRoute>
 );
 
 /**
@@ -100,31 +107,32 @@ export const router = createBrowserRouter([
           {
             element: <ShopOwnerRoute />,
             children: [
-          { path: "/dashboard", element: <DashboardPage /> },
+          { path: "/dashboard", element: permitted(PERMISSIONS.dashboardView, <DashboardPage />) },
 
-          { path: "/products", element: <ProductsPage /> },
-          { path: "/products/new", element: <AddProductPage /> },
+          { path: "/products", element: permitted(PERMISSIONS.productsView, <ProductsPage />) },
+          { path: "/products/new", element: permitted(PERMISSIONS.productsManage, <AddProductPage />) },
 
-          { path: "/vendors", element: <VendorsPage /> },
-          { path: "/vendors/new", element: <AddVendorPage /> },
-          { path: "/vendors/:vendorId", element: <VendorDetailsPage /> },
-          { path: "/vendors/:vendorId/bills/new", element: <AddVendorBillPage /> },
-          { path: "/vendors/:vendorId/bills/:billId/edit", element: <AddVendorBillPage /> },
-          { path: "/purchase-orders", element: <PurchaseOrdersPage /> },
-          { path: "/inventory", element: <InventoryPage /> },
+          { path: "/vendors", element: permitted(PERMISSIONS.vendorsView, <VendorsPage />) },
+          { path: "/vendors/new", element: permitted(PERMISSIONS.vendorsManage, <AddVendorPage />) },
+          { path: "/vendors/:vendorId", element: permitted(PERMISSIONS.vendorsView, <VendorDetailsPage />) },
+          { path: "/vendors/:vendorId/bills/new", element: permitted(PERMISSIONS.payablesManage, <AddVendorBillPage />) },
+          { path: "/vendors/:vendorId/bills/:billId/edit", element: permitted(PERMISSIONS.payablesManage, <AddVendorBillPage />) },
+          { path: "/purchase-orders", element: permitted(PERMISSIONS.purchasingView, <PurchaseOrdersPage />) },
+          { path: "/inventory", element: permitted(PERMISSIONS.inventoryView, <InventoryPage />) },
 
-          { path: "/billing", element: <BillingPage /> },
-          { path: "/billing/new", element: <CreateInvoicePage /> },
-          { path: "/billing/:invoiceId/preview", element: <InvoicePreviewPage /> },
+          { path: "/billing", element: permitted(PERMISSIONS.salesView, <BillingPage />) },
+          { path: "/billing/new", element: permitted(PERMISSIONS.salesCreate, <CreateInvoicePage />) },
+          { path: "/billing/:invoiceId/preview", element: permitted(PERMISSIONS.salesView, <InvoicePreviewPage />) },
 
-          { path: "/expenses", element: <ExpensesPage /> },
+          { path: "/expenses", element: permitted(PERMISSIONS.expensesView, <ExpensesPage />) },
 
-          { path: "/customers", element: <CustomersPage /> },
-          { path: "/customers/:customerId", element: <CustomerDetailsPage /> },
+          { path: "/customers", element: permitted(PERMISSIONS.customersView, <CustomersPage />) },
+          { path: "/customers/:customerId", element: permitted(PERMISSIONS.customersView, <CustomerDetailsPage />) },
 
-          { path: "/reports", element: <ReportsPage /> },
-          { path: "/subscription", element: <SubscriptionPage /> },
-          { path: "/settings", element: <SettingsPage /> },
+          { path: "/reports", element: permitted(PERMISSIONS.reportsView, <ReportsPage />) },
+          { path: "/subscription", element: permitted(PERMISSIONS.subscriptionView, <SubscriptionPage />) },
+          { path: "/settings", element: permitted(PERMISSIONS.settingsView, <SettingsPage />) },
+          { path: "/staff", element: permitted(PERMISSIONS.staffView, <StaffPage />) },
             ],
           },
 

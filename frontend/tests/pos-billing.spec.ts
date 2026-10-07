@@ -10,6 +10,10 @@ const owner = {
   status: 'active',
   shop_id: 2,
   shop_name: 'Owner Test Shop',
+  organization_id: 2,
+  active_shop_id: 2,
+  membership_role: 'owner',
+  permissions: ['sales.view', 'sales.create', 'customers.view'],
 }
 
 const product = {
@@ -116,7 +120,7 @@ test('POS split payment, cash change, save protection, and new-sale reset', asyn
   await expect(page.getByTestId('change-due-value')).toContainText('100')
 
   await page.getByTestId('save-invoice-button').click()
-  await expect(page.getByText('Sale completed')).toBeVisible()
+  await expect(page.locator('p').getByText('Sale completed', { exact: true })).toBeVisible()
   await page.getByTestId('save-invoice-button').click({ force: true })
   expect(invoiceRequests).toHaveLength(1)
   expect(invoiceRequests[0].payment_mode).toBe('mixed')
@@ -124,7 +128,7 @@ test('POS split payment, cash change, save protection, and new-sale reset', asyn
 
   const firstRequestKey = invoiceRequests[0].client_request_id
   await page.getByTestId('new-sale-button').click()
-  await expect(page.getByText('Sale completed')).toHaveCount(0)
+  await expect(page.locator('p').getByText('Sale completed', { exact: true })).toHaveCount(0)
   await expect(page.getByText('POS Test Product')).toHaveCount(0)
 
   await page.getByPlaceholder('Customer first name').fill('Walk-in')
@@ -132,7 +136,7 @@ test('POS split payment, cash change, save protection, and new-sale reset', asyn
   await page.getByTestId('product-search-input').press('Enter')
   await page.getByTestId('payment-preset-full').click()
   await page.getByTestId('save-invoice-button').click()
-  await expect(page.getByText('Sale completed')).toBeVisible()
+  await expect(page.locator('p').getByText('Sale completed', { exact: true })).toBeVisible()
 
   expect(invoiceRequests).toHaveLength(2)
   expect(invoiceRequests[1].client_request_id).not.toBe(firstRequestKey)

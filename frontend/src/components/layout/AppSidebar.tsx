@@ -20,19 +20,21 @@ import {
 import { Link, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { PERMISSIONS } from '../../features/staff/constants'
 
 const navItems = [
-  { name: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  { name: 'Products', to: '/products', icon: Package },
-  { name: 'Inventory', to: '/inventory', icon: Warehouse },
-  { name: 'Vendors', to: '/vendors', icon: Handshake },
-  { name: 'Purchasing', to: '/purchase-orders', icon: ClipboardList },
-  { name: 'Billing', to: '/billing', icon: ReceiptText },
-  { name: 'Customers', to: '/customers', icon: Users },
-  { name: 'Expenses', to: '/expenses', icon: Wallet },
-  { name: 'Reports', to: '/reports', icon: BarChart3 },
-  { name: 'Subscription', to: '/subscription', icon: CreditCard },
-  { name: 'Settings', to: '/settings', icon: Settings },
+  { name: 'Dashboard', to: '/dashboard', icon: LayoutDashboard, permission: PERMISSIONS.dashboardView },
+  { name: 'Products', to: '/products', icon: Package, permission: PERMISSIONS.productsView },
+  { name: 'Inventory', to: '/inventory', icon: Warehouse, permission: PERMISSIONS.inventoryView },
+  { name: 'Vendors', to: '/vendors', icon: Handshake, permission: PERMISSIONS.vendorsView },
+  { name: 'Purchasing', to: '/purchase-orders', icon: ClipboardList, permission: PERMISSIONS.purchasingView },
+  { name: 'Billing', to: '/billing', icon: ReceiptText, permission: PERMISSIONS.salesView },
+  { name: 'Customers', to: '/customers', icon: Users, permission: PERMISSIONS.customersView },
+  { name: 'Expenses', to: '/expenses', icon: Wallet, permission: PERMISSIONS.expensesView },
+  { name: 'Reports', to: '/reports', icon: BarChart3, permission: PERMISSIONS.reportsView },
+  { name: 'Staff', to: '/staff', icon: UserCheck, permission: PERMISSIONS.staffView },
+  { name: 'Subscription', to: '/subscription', icon: CreditCard, permission: PERMISSIONS.subscriptionView },
+  { name: 'Settings', to: '/settings', icon: Settings, permission: PERMISSIONS.settingsView },
 ]
 
 // Rendered only for super admins. A regular user sees no trace of this
@@ -68,7 +70,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
-  const { user, shop, isSuperAdmin } = useAuth()
+  const { user, shop, isSuperAdmin, hasPermission } = useAuth()
 
   useEffect(() => {
     if (window.innerWidth < MOBILE_BREAKPOINT) onClose()
@@ -135,7 +137,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
           isSuperAdmin ? 'hidden' : ''
         }`}
       >
-        {navItems.map((item) => {
+        {navItems.filter((item) => hasPermission(item.permission)).map((item) => {
           const Icon = item.icon
           return (
             <NavLink
@@ -211,7 +213,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
       )}
 
       <div className={`mt-auto space-y-4 pb-6 ${isOpen ? 'px-5' : 'px-2'}`}>
-        <Link
+        {hasPermission(PERMISSIONS.salesCreate) && <Link
           to="/billing/new"
           title={!isOpen ? 'New Transaction' : undefined}
           className={`flex w-full items-center gap-2 rounded-2xl bg-indigo-600 dark:bg-indigo-700 py-4 text-base font-semibold text-white shadow-md transition hover:bg-indigo-700 dark:hover:bg-indigo-600 ${
@@ -226,7 +228,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
           >
             New Transaction
           </span>
-        </Link>
+        </Link>}
 
         <Link
           to="/profile"

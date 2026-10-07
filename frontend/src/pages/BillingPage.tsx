@@ -12,6 +12,8 @@ import InvoiceTable from '../components/billing/InvoiceTable'
 import { useToast } from '../components/ui/ToastProvider'
 import { billingApi } from '../features/billing/api'
 import type { InvoiceListItem, InvoiceStats, PaymentStatus } from '../features/billing/types'
+import { useAuth } from '../context/AuthContext'
+import { PERMISSIONS } from '../features/staff/constants'
 
 const emptyInvoiceStats: InvoiceStats = {
   total_invoices: 0, total_sales_amount: 0, total_discount_given: 0,
@@ -71,6 +73,9 @@ function DeleteInvoiceModal({
 }
 
 export default function BillingPage() {
+  const { hasPermission } = useAuth()
+  const canCreateSales = hasPermission(PERMISSIONS.salesCreate)
+  const canCancelSales = hasPermission(PERMISSIONS.salesCancel)
   const navigate = useNavigate()
   const { showToast } = useToast()
 
@@ -246,7 +251,7 @@ export default function BillingPage() {
                 <span className="hidden xs:inline">Advanced Filters</span>
               </button>
 
-              <motion.button
+              {canCreateSales && <motion.button
                 whileTap={{ scale: 0.98 }}
                 whileHover={{ y: -2 }}
                 type="button"
@@ -255,7 +260,7 @@ export default function BillingPage() {
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/16 transition-transform duration-300 group-hover:rotate-90 sm:h-8 sm:w-8">+</span>
                 Create New
-              </motion.button>
+              </motion.button>}
             </div>
           </div>
 
@@ -302,6 +307,9 @@ export default function BillingPage() {
               onShare={handleShare}
               onDelete={handleRequestDelete}
               deletingInvoiceId={isDeletingInvoice ? invoiceToDelete?.id ?? null : null}
+              canCreate={canCreateSales}
+              canEdit={canCreateSales}
+              canCancel={canCancelSales}
             />
           </div>
 

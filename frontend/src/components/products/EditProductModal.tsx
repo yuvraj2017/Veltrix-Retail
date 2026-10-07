@@ -20,6 +20,8 @@ import {
 } from '../../features/products/api'
 import { productSchema, type ProductFormValues } from '../../features/products/schemas'
 import type { Product, StockMovement } from '../../features/products/types'
+import { useAuth } from '../../context/AuthContext'
+import { PERMISSIONS } from '../../features/staff/constants'
 
 const categories = ['Apparel', 'Electronics', 'Accessories', 'Footwear', 'Home Decor', 'Other']
 const MAX_IMAGES = 5
@@ -121,6 +123,9 @@ export function EditProductModal({
   onStockChanged?: () => void | Promise<void>
   loading: boolean
 }) {
+  const { hasPermission } = useAuth()
+  const canAdjustStock = hasPermission(PERMISSIONS.inventoryAdjust)
+  const canCountStock = hasPermission(PERMISSIONS.inventoryCount)
   const [newImages, setNewImages] = useState<PreviewImage[]>([])
   const [existingImages, setExistingImages] = useState<Product['images']>([])
   const [removingImageId, setRemovingImageId] = useState<number | null>(null)
@@ -136,6 +141,10 @@ export function EditProductModal({
   const [inventoryRequestId, setInventoryRequestId] = useState<string | null>(null)
   const [inventorySubmitting, setInventorySubmitting] = useState(false)
   const [inventoryMessage, setInventoryMessage] = useState('')
+
+  useEffect(() => {
+    if (!canAdjustStock && canCountStock) setInventoryMode('physical_count')
+  }, [canAdjustStock, canCountStock])
 
   const {
     register,
@@ -204,6 +213,10 @@ export function EditProductModal({
   }
 
   const submitInventoryOperation = async () => {
+    if ((inventoryMode === 'adjustment' && !canAdjustStock) || (inventoryMode === 'physical_count' && !canCountStock)) {
+      setInventoryMessage('Your current role does not allow this inventory operation.')
+      return
+    }
     const quantity = Number(adjustmentQuantity)
     const countedQuantity = Number(physicalCount)
     if (adjustmentReason === 'other' && !adjustmentNotes.trim()) {
@@ -447,7 +460,7 @@ export function EditProductModal({
               </div>
             </div>
 
-            <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
+            {(canAdjustStock || canCountStock) && <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className={sectionHeadingClass}>CONTROLLED INVENTORY</p>
@@ -456,7 +469,7 @@ export function EditProductModal({
                   </p>
                 </div>
                 <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-                  <button
+                  {canAdjustStock && <button
                     type="button"
                     onClick={() => {
                       setInventoryMode('adjustment')
@@ -466,8 +479,8 @@ export function EditProductModal({
                     className={`px-3 py-2 text-sm font-semibold transition ${inventoryMode === 'adjustment' ? 'rounded-md bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300'}`}
                   >
                     Adjust Stock
-                  </button>
-                  <button
+                  </button>}
+                  {canCountStock && <button
                     type="button"
                     onClick={() => {
                       setInventoryMode('physical_count')
@@ -477,7 +490,7 @@ export function EditProductModal({
                     className={`px-3 py-2 text-sm font-semibold transition ${inventoryMode === 'physical_count' ? 'rounded-md bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300'}`}
                   >
                     Physical Count
-                  </button>
+                  </button>}
                 </div>
               </div>
 
@@ -590,7 +603,7 @@ export function EditProductModal({
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
 
             <div>
               <div className="mb-4 flex items-center gap-2">

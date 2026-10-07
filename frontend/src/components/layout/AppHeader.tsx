@@ -3,6 +3,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import ThemeToggle from "../ThemeToggle";
+import { PERMISSIONS } from "../../features/staff/constants";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -21,7 +22,7 @@ function getInitial(name?: string | null) {
 export function AppHeader() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, shop, isSuperAdmin } = useAuth();
+  const { user, shop, isSuperAdmin, hasPermission } = useAuth();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -54,6 +55,10 @@ export function AppHeader() {
     if (location.pathname.startsWith("/products")) return "/products/new";
     return "/products/new";
   }, [location.pathname]);
+
+  const canQuickAdd = location.pathname.startsWith("/vendors")
+    ? hasPermission(PERMISSIONS.vendorsManage)
+    : hasPermission(PERMISSIONS.productsManage);
 
   useEffect(() => {
     if (searchOpen) setTimeout(() => searchRef.current?.focus(), 50);
@@ -123,14 +128,14 @@ export function AppHeader() {
               <Bell size={18} className="transition-transform group-hover:scale-110" />
             </button>
 
-            <button
+            {canQuickAdd && <button
               type="button"
               onClick={() => navigate(quickAddRoute)}
               className="group inline-flex items-center gap-1.5 rounded-[18px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] px-3 py-2.5 text-[13px] font-semibold text-white shadow-[0_16px_40px_rgba(79,70,229,0.28)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_22px_48px_rgba(79,70,229,0.36)] sm:px-4 sm:py-3 sm:text-[14px]"
             >
               <Plus size={16} className="transition-transform group-hover:rotate-90" />
               <span>Quick Add</span>
-            </button>
+            </button>}
 
             <div className="flex items-center rounded-[16px] bg-white/75 dark:bg-slate-700/75 p-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.2)]">
               <Avatar size="sm" />
@@ -169,14 +174,14 @@ export function AppHeader() {
             <CircleHelp size={20} className="transition-transform group-hover:rotate-6" />
           </button>
 
-          <button
+          {canQuickAdd && <button
             type="button"
             onClick={() => navigate(quickAddRoute)}
             className="group inline-flex items-center gap-2 rounded-[20px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] px-5 py-3.5 text-[15px] font-semibold text-white shadow-[0_16px_40px_rgba(79,70,229,0.28)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_22px_48px_rgba(79,70,229,0.36)]"
           >
             <Plus size={18} className="transition-transform group-hover:rotate-90" />
             Quick Add
-          </button>
+          </button>}
 
           {/* User card */}
           <div className="flex items-center gap-3 rounded-[20px] bg-white/75 dark:bg-slate-700/75 px-3 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.2)]">

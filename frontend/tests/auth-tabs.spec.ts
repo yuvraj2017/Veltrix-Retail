@@ -9,6 +9,8 @@ const owner = {
   access_token: 'test-owner-token', token_type: 'bearer', user_id: 2,
   email: 'owner@example.test', full_name: 'Test Shop Owner',
   role: 'owner', status: 'active', shop_id: 2, shop_name: 'Owner Test Shop',
+  organization_id: 2, active_shop_id: 2, membership_role: 'owner',
+  permissions: ['dashboard.view'],
 }
 const accounts = [admin, owner]
 type Client = 'axios' | 'billing' | 'vendors' | 'analytics'

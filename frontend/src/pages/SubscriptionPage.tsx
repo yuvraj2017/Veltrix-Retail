@@ -30,6 +30,8 @@ import { createCheckoutSession, getAvailablePlans, getMySubscription, submitUpiP
 import type { Plan, PlanEntitlement, UsageLimit } from '../features/admin/types'
 import { getApiErrorMessage } from '../lib/api-error'
 import { useToast } from '../components/ui/ToastProvider'
+import { useAuth } from '../context/AuthContext'
+import { PERMISSIONS } from '../features/staff/constants'
 
 type BillingInterval = 'monthly' | 'annual'
 type MatrixFilter = 'all' | 'limits' | 'features'
@@ -220,6 +222,8 @@ function UsageMeter({ limit }: { limit: UsageLimit }) {
 export default function SubscriptionPage() {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
+  const { hasPermission } = useAuth()
+  const canManageSubscription = hasPermission(PERMISSIONS.subscriptionManage)
   const [copied, setCopied] = useState(false)
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('annual')
   const [matrixFilter, setMatrixFilter] = useState<MatrixFilter>('all')
@@ -613,7 +617,7 @@ export default function SubscriptionPage() {
                       <button
                         type="button"
                         onClick={() => startCheckout(plan.id, billingInterval)}
-                        disabled={isCurrent || !paid}
+                        disabled={isCurrent || !paid || !canManageSubscription}
                         className={`mt-4 inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black transition ${
                           isCurrent
                             ? 'bg-indigo-50 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
@@ -627,7 +631,7 @@ export default function SubscriptionPage() {
                             <BadgeCheck size={17} />
                             Current Plan
                           </>
-                        ) : paid ? (
+                        ) : paid && canManageSubscription ? (
                           <>
                             <span className="min-w-0 truncate">Choose {plan.name}</span>
                             <ArrowRight size={17} className="shrink-0" />
@@ -635,7 +639,7 @@ export default function SubscriptionPage() {
                         ) : (
                           <>
                             <Mail size={17} />
-                            Contact Admin
+                            {paid ? 'Owner approval required' : 'Contact Admin'}
                           </>
                         )}
                       </button>

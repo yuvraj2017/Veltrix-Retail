@@ -15,6 +15,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 
 import { useAuth } from '../context/AuthContext'
+import { PERMISSIONS } from '../features/staff/constants'
 import { useTheme } from '../context/ThemeContext'
 import { useToast } from '../components/ui/ToastProvider'
 import { changeMyPassword, getMyProfile, updateMyProfile } from '../features/profile/api'
@@ -231,7 +232,8 @@ function Banner({ state }: { state: BannerState }) {
 }
 
 export default function SettingsPage() {
-  const { user, refreshMe } = useAuth()
+  const { user, refreshMe, hasPermission } = useAuth()
+  const canManageSettings = hasPermission(PERMISSIONS.settingsManage)
   const { darkMode, setDarkMode } = useTheme()
   const { showToast } = useToast()
 
@@ -561,7 +563,7 @@ export default function SettingsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
                   Shop-wide setting
                 </p>
-                <button
+                {canManageSettings && <button
                   type="button"
                   onClick={handleSaveStore}
                   disabled={savingStore}
@@ -569,7 +571,7 @@ export default function SettingsPage() {
                 >
                   <Save size={15} />
                   {savingStore ? 'Saving...' : 'Save Store Settings'}
-                </button>
+                </button>}
               </div>
             </div>
           </SectionCard>
