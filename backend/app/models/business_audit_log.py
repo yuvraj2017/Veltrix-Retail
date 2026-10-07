@@ -77,6 +77,11 @@ class BusinessAuditAction:
     STAFF_BRANCH_GRANTED = "staff.branch_granted"
     STAFF_BRANCH_REVOKED = "staff.branch_revoked"
     OWNERSHIP_TRANSFERRED = "ownership.transferred"
+    BRANCH_CREATED = "branch.created"
+    BRANCH_UPDATED = "branch.updated"
+    BRANCH_ACTIVATED = "branch.activated"
+    BRANCH_DEACTIVATED = "branch.deactivated"
+    BRANCH_DEFAULT_CHANGED = "branch.default_changed"
 
     ALL = (
         INVOICE_CREATED,
@@ -105,4 +110,9 @@ class BusinessAuditAction:
         STAFF_BRANCH_GRANTED,
         STAFF_BRANCH_REVOKED,
         OWNERSHIP_TRANSFERRED,
+        BRANCH_CREATED,
+        BRANCH_UPDATED,
+        BRANCH_ACTIVATED,
+        BRANCH_DEACTIVATED,
+        BRANCH_DEFAULT_CHANGED,
     )

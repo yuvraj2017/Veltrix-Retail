@@ -1,6 +1,16 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Index, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import relationship
 
+from app.core.shop_status import ShopStatus
 from app.core.database import Base
 from app.models.base import IDMixin, TimestampMixin
 
@@ -9,7 +19,12 @@ class Shop(Base, IDMixin, TimestampMixin):
     __tablename__ = "shops"
 
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'active', 'inactive')",
+            name="ck_shops_status",
+        ),
         Index("ix_shops_organization_id", "organization_id"),
+        Index("ix_shops_organization_status", "organization_id", "status"),
         Index(
             "uq_shops_id_organization",
             "id",
@@ -36,6 +51,12 @@ class Shop(Base, IDMixin, TimestampMixin):
     )
     is_default_branch = Column(
         Boolean, nullable=False, default=False, server_default="false"
+    )
+    status = Column(
+        String(20),
+        nullable=False,
+        default=ShopStatus.ACTIVE,
+        server_default=ShopStatus.ACTIVE,
     )
 
     name = Column(String(150), nullable=False)

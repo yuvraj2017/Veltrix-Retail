@@ -178,6 +178,10 @@ def update_product_endpoint(
     current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
+    # Authorize the target before persisting uploaded files. The service still
+    # reloads it for the locked mutation path, but a foreign-branch ID cannot
+    # leave orphaned files behind.
+    get_product(product_id, current_user, db)
     image_urls = save_uploaded_product_images(images)
 
     payload = ProductUpdate(

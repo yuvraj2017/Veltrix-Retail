@@ -1,5 +1,7 @@
+import logging
+
 from jose import JWTError
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -15,11 +17,13 @@ from app.core.user_status import (
 from app.services.entitlement_service import evaluate_shop_access
 from app.services.authorization_service import (
     TenantAuthorizationContext,
+    TenantRequestUser,
     resolve_tenant_authorization_context,
 )
 from app.models.user import User
 
 bearer_scheme = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 # Marker prefix on account-status refusals. The frontend axios interceptor keys
 # off this to clear the stored session and return the person to the login page,
@@ -102,15 +106,40 @@ def get_current_user(
 def get_tenant_authorization_context(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_branch_id: str | None = Header(default=None, alias="X-Branch-ID"),
 ) -> TenantAuthorizationContext:
-    return resolve_tenant_authorization_context(db, current_user)
+    requested_shop_id = None
+    if x_branch_id is not None:
+        normalized = x_branch_id.strip()
+        if not normalized.isascii() or not normalized.isdigit():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-Branch-ID must be a positive integer",
+            )
+        requested_shop_id = int(normalized)
+        if requested_shop_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-Branch-ID must be a positive integer",
+            )
+    else:
+        logger.debug(
+            "Tenant request used preferred-branch compatibility fallback",
+            extra={"user_id": current_user.id, "shop_id": current_user.shop_id},
+        )
+
+    return resolve_tenant_authorization_context(
+        db,
+        current_user,
+        requested_shop_id=requested_shop_id,
+    )
 
 
 def get_shop_user(
     context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
-) -> User:
+) -> TenantRequestUser:
     """Compatibility gate backed by active organization/branch membership."""
-    return context.user
+    return context.scoped_user()
 
 
 def _enforce_commercial_access(context: TenantAuthorizationContext, db: Session) -> None:
@@ -132,7 +161,7 @@ def _authorize(
     permission: str,
     db: Session,
     require_entitlement: bool,
-) -> User:
+) -> TenantRequestUser:
     if permission not in context.permissions:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -140,7 +169,7 @@ def _authorize(
         )
     if require_entitlement:
         _enforce_commercial_access(context, db)
-    return context.user
+    return context.scoped_user()
 
 
 def require_permission(permission: str, *, require_entitlement: bool = True):
@@ -149,7 +178,7 @@ def require_permission(permission: str, *, require_entitlement: bool = True):
     def dependency(
         context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
         db: Session = Depends(get_db),
-    ) -> User:
+    ) -> TenantRequestUser:
         return _authorize(
             context=context,
             permission=permission,
@@ -166,7 +195,7 @@ def require_active_shop_access(
     request: Request,
     context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
     db: Session = Depends(get_db),
-) -> User:
+) -> TenantRequestUser:
     """Apply the explicit policy registered for the selected tenant endpoint."""
     route = request.scope.get("route")
     endpoint_name = getattr(route, "name", None)

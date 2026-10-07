@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.membership import MembershipStatus, normalize_membership_role
 from app.core.permissions import permissions_for_role
 from app.core.user_status import UserRole, normalize_role
+from app.core.shop_status import ShopStatus
 from app.models.membership import BranchMembership, OrganizationMembership
 from app.models.organization import Organization
 from app.models.shop import Shop
@@ -26,6 +27,46 @@ class TenantAuthorizationContext:
     role: str
     permissions: frozenset[str]
 
+    @property
+    def active_shop(self) -> Shop:
+        return self.shop
+
+    @property
+    def active_shop_id(self) -> int:
+        return self.shop.id
+
+    @property
+    def effective_role(self) -> str:
+        return self.role
+
+    def scoped_user(self) -> "TenantRequestUser":
+        return TenantRequestUser(user=self.user, active_shop_id=self.shop.id)
+
+
+@dataclass(frozen=True, slots=True)
+class TenantRequestUser:
+    """Compatibility principal whose shop_id is the validated request branch.
+
+    Existing domain services accept a User-shaped actor and scope their work by
+    ``shop_id``. This adapter keeps that API stable while ensuring the value is
+    supplied by TenantAuthorizationContext rather than the persisted preferred
+    branch. It never mutates the SQLAlchemy User object.
+    """
+
+    user: User
+    active_shop_id: int
+
+    @property
+    def shop_id(self) -> int:
+        return self.active_shop_id
+
+    @property
+    def preferred_shop_id(self) -> int | None:
+        return self.user.shop_id
+
+    def __getattr__(self, name: str):
+        return getattr(self.user, name)
+
 
 def _deny(detail: str = "Tenant membership is inactive or unavailable") -> None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
@@ -34,12 +75,10 @@ def _deny(detail: str = "Tenant membership is inactive or unavailable") -> None:
 def resolve_tenant_authorization_context(
     db: Session,
     user: User,
+    *,
+    requested_shop_id: int | None = None,
 ) -> TenantAuthorizationContext:
-    """Resolve the current compatibility shop into an effective tenant role.
-
-    User.shop_id remains the active-branch selector in Phase 4C. The membership
-    rows, not that scalar alone, are the authorization source.
-    """
+    """Resolve an explicit or preferred branch through the same fail-closed path."""
     try:
         legacy_role = normalize_role(user.role)
     except ValueError:
@@ -47,7 +86,8 @@ def resolve_tenant_authorization_context(
 
     if legacy_role == UserRole.SUPER_ADMIN:
         _deny("Platform administrators do not have access to shop tenant routes")
-    if user.shop_id is None:
+    active_shop_id = requested_shop_id if requested_shop_id is not None else user.shop_id
+    if active_shop_id is None:
         _deny()
 
     row = (
@@ -65,7 +105,8 @@ def resolve_tenant_authorization_context(
             & (BranchMembership.shop_id == Shop.id),
         )
         .filter(
-            Shop.id == user.shop_id,
+            Shop.id == active_shop_id,
+            Shop.status == ShopStatus.ACTIVE,
             Organization.status == "active",
             OrganizationMembership.status == MembershipStatus.ACTIVE,
             BranchMembership.status == MembershipStatus.ACTIVE,

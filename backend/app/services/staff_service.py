@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.membership import MembershipRole, MembershipStatus
 from app.core.security import hash_password
 from app.core.user_status import UserRole, UserStatus, can_login
+from app.core.shop_status import ShopStatus
 from app.models.business_audit_log import BusinessAuditAction
 from app.models.membership import BranchMembership, OrganizationMembership
 from app.models.organization import Organization
@@ -179,7 +180,11 @@ def _load_valid_branches(
         raise HTTPException(status_code=422, detail="Branch assignments must be unique")
     branches = (
         db.query(Shop)
-        .filter(Shop.organization_id == organization_id, Shop.id.in_(unique_ids))
+        .filter(
+            Shop.organization_id == organization_id,
+            Shop.id.in_(unique_ids),
+            Shop.status == ShopStatus.ACTIVE,
+        )
         .order_by(Shop.id)
         .all()
     )

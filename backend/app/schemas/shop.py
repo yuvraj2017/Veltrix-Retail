@@ -7,6 +7,7 @@ class ShopResponse(BaseModel):
     id: int
     organization_id: int
     is_default_branch: bool
+    status: str
     name: str
     category: str
     email: EmailStr

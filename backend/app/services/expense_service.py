@@ -58,7 +58,7 @@ def _apply_expense_filters(
     category: str | None = None,
     payment_mode: str | None = None,
 ):
-    query = query.filter(Expense.user_id == current_user.id)
+    query = query.filter(Expense.shop_id == current_user.shop_id)
 
     start_date, end_date = _get_range_bounds(range_key)
     if start_date and end_date:
@@ -227,7 +227,7 @@ def list_expenses(
 def get_expense(expense_id: int, current_user: User, db: Session):
     expense = (
         db.query(Expense)
-        .filter(Expense.id == expense_id, Expense.user_id == current_user.id)
+        .filter(Expense.id == expense_id, Expense.shop_id == current_user.shop_id)
         .first()
     )
 

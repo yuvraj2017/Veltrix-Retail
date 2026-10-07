@@ -57,6 +57,9 @@ class Permission:
     SUBSCRIPTION_VIEW = "subscription.view"
     SUBSCRIPTION_MANAGE = "subscription.manage"
 
+    BRANCHES_VIEW = "branches.view"
+    BRANCHES_MANAGE = "branches.manage"
+
     OWNERSHIP_TRANSFER = "ownership.transfer"
 
     ALL = (
@@ -95,6 +98,8 @@ class Permission:
         STAFF_MANAGE,
         SUBSCRIPTION_VIEW,
         SUBSCRIPTION_MANAGE,
+        BRANCHES_VIEW,
+        BRANCHES_MANAGE,
         OWNERSHIP_TRANSFER,
     )
 
@@ -103,6 +108,7 @@ _ALL = frozenset(Permission.ALL)
 _OPERATIONAL_ADMIN = _ALL - {
     Permission.OWNERSHIP_TRANSFER,
     Permission.SUBSCRIPTION_MANAGE,
+    Permission.BRANCHES_MANAGE,
 }
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
@@ -141,6 +147,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             Permission.AUDIT_VIEW,
             Permission.SETTINGS_VIEW,
             Permission.SUBSCRIPTION_VIEW,
+            Permission.BRANCHES_VIEW,
         }
     ),
     MembershipRole.CASHIER: frozenset(
@@ -333,6 +340,19 @@ ENDPOINT_PERMISSION_POLICIES: dict[str, EndpointPermissionPolicy] = {
     "transfer_current_organization_ownership": _policy(
         Permission.OWNERSHIP_TRANSFER
     ),
+    # Branch discovery is needed by every tenant role and does not itself
+    # perform a commercial operation. Explicit branch membership still gates
+    # both the current context and every returned row.
+    "list_accessible_branches": _policy(
+        Permission.DASHBOARD_VIEW, entitlement=False
+    ),
+    "list_organization_branch_directory": _policy(Permission.BRANCHES_VIEW),
+    "get_organization_branch_detail": _policy(Permission.BRANCHES_VIEW),
+    "create_organization_branch": _policy(Permission.BRANCHES_MANAGE),
+    "update_organization_branch": _policy(Permission.BRANCHES_MANAGE),
+    "activate_organization_branch": _policy(Permission.BRANCHES_MANAGE),
+    "deactivate_organization_branch": _policy(Permission.BRANCHES_MANAGE),
+    "make_organization_branch_default": _policy(Permission.BRANCHES_MANAGE),
     # Subscription recovery intentionally bypasses commercial entitlement only.
     "get_my_subscription": _policy(Permission.SUBSCRIPTION_VIEW, entitlement=False),
     "list_available_plans": _policy(Permission.SUBSCRIPTION_VIEW, entitlement=False),
