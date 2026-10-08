@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import ThemeToggle from "../ThemeToggle";
 import { PERMISSIONS } from "../../features/staff/constants";
+import { useBranch } from "../../context/BranchContext";
+import { BranchSelector } from "../branches/BranchSelector";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -23,6 +25,7 @@ export function AppHeader() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, shop, isSuperAdmin, hasPermission } = useAuth();
+  const { selectedBranch, activeShop } = useBranch();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -30,10 +33,10 @@ export function AppHeader() {
   // Administrators are labelled by their role, not by a shop they do not own.
   const shopName = isSuperAdmin
     ? "Platform Admin"
-    : shop?.name || user?.shop_name || "Veltrix Retail";
+    : selectedBranch?.name || shop?.name || user?.shop_name || "Veltrix Retail";
   const logoUrl =
-    resolveImageUrl(shop?.logo_url) ||
-    resolveImageUrl(user?.shop_logo_url) ||
+    resolveImageUrl(activeShop?.logo_url) ||
+    resolveImageUrl(selectedBranch?.id === shop?.id ? shop?.logo_url || user?.shop_logo_url : null) ||
     null;
 
   const userLabel = user?.full_name || user?.role || "Store Admin";
@@ -118,13 +121,14 @@ export function AppHeader() {
           </div>
         ) : (
           <div className="flex items-center justify-end gap-2 px-3 py-3 sm:gap-3 sm:px-5 sm:py-4">
-            <button type="button" onClick={() => setSearchOpen(true)} className={iconBtn}>
+            {!isSuperAdmin && <div className="min-w-0 flex-1"><BranchSelector /></div>}
+            <button type="button" onClick={() => setSearchOpen(true)} className={`${iconBtn} hidden sm:flex`}>
               <Search size={18} className="transition-transform group-hover:scale-110" />
             </button>
 
             <ThemeToggle />
 
-            <button type="button" className={iconBtn}>
+            <button type="button" className={`${iconBtn} hidden md:flex`}>
               <Bell size={18} className="transition-transform group-hover:scale-110" />
             </button>
 
@@ -134,7 +138,7 @@ export function AppHeader() {
               className="group inline-flex items-center gap-1.5 rounded-[18px] bg-gradient-to-r from-[#7c6cff] via-[#5b43f3] to-[#3b2be4] px-3 py-2.5 text-[13px] font-semibold text-white shadow-[0_16px_40px_rgba(79,70,229,0.28)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_22px_48px_rgba(79,70,229,0.36)] sm:px-4 sm:py-3 sm:text-[14px]"
             >
               <Plus size={16} className="transition-transform group-hover:rotate-90" />
-              <span>Quick Add</span>
+              <span className="hidden sm:inline">Quick Add</span>
             </button>}
 
             <div className="flex items-center rounded-[16px] bg-white/75 dark:bg-slate-700/75 p-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.06)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.2)]">
@@ -146,6 +150,8 @@ export function AppHeader() {
 
       {/* ── DESKTOP ── */}
       <div className="hidden lg:flex lg:items-center lg:gap-4 lg:px-8 lg:py-4 mb-1">
+
+        {!isSuperAdmin && <div className="w-56 shrink-0 xl:w-64"><BranchSelector /></div>}
 
         {/* Search bar */}
         <div className="relative flex-1">

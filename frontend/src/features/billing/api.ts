@@ -192,6 +192,24 @@ export const billingApi = {
     return handleResponse<InvoicePreviewResponse>(response)
   },
 
+  downloadInvoice: async (invoiceId: number): Promise<Blob> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}/download`, {
+      method: 'GET',
+    })
+
+    if (!response.ok) {
+      let message = response.statusText || 'Unable to download invoice'
+      try {
+        message = getErrorMessage(await response.json(), message)
+      } catch {
+        // A non-JSON failure still gets a controlled fallback message.
+      }
+      throw new Error(message)
+    }
+
+    return response.blob()
+  },
+
   getInvoicePayments: async (invoiceId: number): Promise<InvoicePayment[]> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/invoices/${invoiceId}/payments`, {
       method: 'GET',

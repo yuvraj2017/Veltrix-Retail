@@ -8,7 +8,7 @@ import InvoiceItemsTable from '../components/billing/InvoiceItemsTable'
 import InvoiceSummaryCard from '../components/billing/InvoiceSummaryCard'
 import type { ProductCodeSearchHandle } from '../components/billing/ProductCodeSearch'
 import { useToast } from '../components/ui/ToastProvider'
-import { useAuth } from '../context/AuthContext'
+import { useBranch } from '../context/BranchContext'
 import { billingApi } from '../features/billing/api'
 import { calculateGstPreview } from '../features/billing/gstPreview'
 import { invoiceCreateSchema } from '../features/billing/schemas'
@@ -132,7 +132,7 @@ function friendlyInvoiceError(message: string) {
 export default function CreateInvoicePage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { shop } = useAuth()
+  const { activeShop: shop } = useBranch()
   const [searchParams] = useSearchParams()
 
   const editParam = searchParams.get('edit')

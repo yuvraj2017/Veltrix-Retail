@@ -31,8 +31,16 @@ async function mockApi(context: BrowserContext) {
     }
     if (!account) return route.fulfill({ status: 401, json: { detail: 'Invalid token' } })
     if (path === '/api/v1/auth/me') return route.fulfill({ json: account })
+    if (path === '/api/v1/branches') return route.fulfill({ json: { items: account.shop_id == null ? [] : [
+      { id: account.shop_id, name: account.shop_name, status: 'active', is_default_branch: true, is_preferred: true },
+    ] } })
     if (path.startsWith('/api/v1/shops/')) {
-      return route.fulfill({ json: { id: account.shop_id, name: account.shop_name } })
+      return route.fulfill({ json: {
+        id: account.shop_id, organization_id: account.organization_id, is_default_branch: true,
+        status: 'active', name: account.shop_name, category: 'Retail', email: account.email,
+        phone: '9000000000', gst_enabled: false, created_at: '2026-10-01T00:00:00Z',
+        updated_at: '2026-10-01T00:00:00Z',
+      } })
     }
     if (path === '/api/v1/profile/me') {
       return route.fulfill({ json: { ...account, id: account.user_id, language: 'English (US)', is_active: true } })

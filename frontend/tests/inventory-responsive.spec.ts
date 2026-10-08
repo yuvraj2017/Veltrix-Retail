@@ -7,6 +7,14 @@ test.setTimeout(120_000)
 async function mockInventory(context: BrowserContext) {
   await context.route(/\/api\/v1\//, async (route) => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/branches') return route.fulfill({ json: { items: [
+      { id: 1, name: 'Inventory Test Shop', status: 'active', is_default_branch: true, is_preferred: true },
+    ] } })
+    if (path === '/api/v1/shops/1') return route.fulfill({ json: {
+      id: 1, organization_id: 1, is_default_branch: true, status: 'active', name: 'Inventory Test Shop',
+      category: 'Retail', email: 'owner@example.test', phone: '9000000000', gst_enabled: false,
+      created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+    } })
     if (path === '/api/v1/inventory/summary') return route.fulfill({ json: {
       active_products: 12, total_sellable_units: 84, low_stock_products: 2,
       out_of_stock_products: 1, current_inventory_value: '24500.00',
@@ -65,6 +73,7 @@ test('inventory workspace remains usable across supported viewport widths', asyn
     sessionStorage.setItem('auth_user', JSON.stringify({
       id: 1, email: 'owner@example.test', full_name: 'Test Owner', role: 'owner',
       status: 'active', shop_id: 1, shop_name: 'Inventory Test Shop',
+      organization_id: 1, active_shop_id: 1,
       membership_role: 'owner', permissions: ['inventory.view', 'purchasing.view'],
     }))
   })
@@ -106,6 +115,7 @@ test('purchase-order reference opens the linked order even when it is not in the
     sessionStorage.setItem('auth_user', JSON.stringify({
       id: 1, email: 'owner@example.test', full_name: 'Test Owner', role: 'owner',
       status: 'active', shop_id: 1, shop_name: 'Inventory Test Shop',
+      organization_id: 1, active_shop_id: 1,
       membership_role: 'owner', permissions: ['purchasing.view'],
     }))
   })

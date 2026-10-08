@@ -21,6 +21,7 @@ import type { Invoice, InvoiceReturn, PaymentMethod } from '../features/billing/
 import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
 import { useToast } from '../components/ui/ToastProvider'
+import { useBranch } from '../context/BranchContext'
 
 const paymentMethods: { value: PaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -56,7 +57,8 @@ export default function InvoicePreviewPage() {
   const navigate = useNavigate()
   const { invoiceId } = useParams()
   const [searchParams] = useSearchParams()
-  const { user, shop, hasPermission } = useAuth()
+  const { user, hasPermission } = useAuth()
+  const { activeShop: shop } = useBranch()
   const { showToast } = useToast()
 
   const id = Number(invoiceId)
@@ -86,9 +88,9 @@ export default function InvoicePreviewPage() {
       email: shop?.email || user?.email || null,
       phone: shop?.phone || shop?.whatsapp_number || null,
       address: shop?.address || null,
-      city: shop?.city || null,
+      city: null,
       state: shop?.state || null,
-      pincode: shop?.pincode || null,
+      pincode: null,
       ownerName: user?.full_name || null,
     }
   }, [shop, user])

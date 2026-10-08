@@ -13,6 +13,8 @@ import {
 } from '../features/products/api'
 import type { Product, ProductStats as ProductStatsType } from '../features/products/types'
 import type { ProductFormValues } from '../features/products/schemas'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 
 const PAGE_SIZE = 50
 
@@ -25,6 +27,7 @@ const emptyStats: ProductStatsType = {
 
 export default function ProductsPage() {
   const navigate = useNavigate()
+  const { selectedBranchId } = useBranch()
 
   const queryClient = useQueryClient()
 
@@ -52,19 +55,19 @@ export default function ProductsPage() {
   // Categories come from their own endpoint now. Deriving them in the browser
   // required downloading the whole product table a second time on every mount.
   const categoriesQuery = useQuery({
-    queryKey: ['products', 'categories'],
+    queryKey: branchQueryKey(selectedBranchId, 'products', 'categories'),
     queryFn: getProductCategories,
   })
 
   const statsQuery = useQuery({
-    queryKey: ['products', 'stats'],
+    queryKey: branchQueryKey(selectedBranchId, 'products', 'stats'),
     queryFn: getProductStats,
   })
 
   // Sorting and paging are applied by the server. With paginated results,
   // sorting only the current page in the browser would order the wrong rows.
   const productsQuery = useQuery({
-    queryKey: ['products', 'list', debouncedSearch, category, stockStatus, sortBy, page],
+    queryKey: branchQueryKey(selectedBranchId, 'products', 'list', debouncedSearch, category, stockStatus, sortBy, page),
     queryFn: () =>
       getProducts({
         search: debouncedSearch || undefined,
@@ -86,7 +89,7 @@ export default function ProductsPage() {
   // Mutations invalidate the whole 'products' key: list, stats, and categories
   // can all change when a product is edited or removed.
   const refreshProducts = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['products'] })
+    await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'products') })
   }
 
   const handleDelete = async (product: Product) => {

@@ -43,7 +43,14 @@ async function mockStaffApi(context: BrowserContext) {
     const request = route.request()
     const path = new URL(request.url()).pathname
     if (path === '/api/v1/auth/me') return route.fulfill({ json: currentAuth })
-    if (path === '/api/v1/shops/1') return route.fulfill({ json: { id: 1, name: 'Main Branch' } })
+    if (path === '/api/v1/branches') return route.fulfill({ json: { items: [
+      { id: 1, name: 'Main Branch', status: 'active', is_default_branch: true, is_preferred: true },
+    ] } })
+    if (path === '/api/v1/shops/1') return route.fulfill({ json: {
+      id: 1, organization_id: 1, is_default_branch: true, status: 'active', name: 'Main Branch',
+      category: 'Retail', email: 'owner@example.test', phone: '9000000000', gst_enabled: false,
+      created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+    } })
     if (path === '/api/v1/organizations/current/staff' && request.method() === 'GET') return route.fulfill({ json: staff })
     if (path === '/api/v1/organizations/current/staff' && request.method() === 'POST') {
       const body = request.postDataJSON()

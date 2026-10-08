@@ -36,4 +36,8 @@ export function saveTabSession(token: string, user: unknown) {
 export function clearTabSession() {
   sessionStorage.removeItem(TOKEN_KEY)
   sessionStorage.removeItem(USER_KEY)
+  clearAllStoredBranchIds()
+  setActiveBranchId(null)
 }
+import { setActiveBranchId } from './branch-runtime'
+import { clearAllStoredBranchIds } from './branch-session'

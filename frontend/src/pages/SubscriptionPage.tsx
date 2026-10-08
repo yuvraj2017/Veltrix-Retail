@@ -32,6 +32,8 @@ import { getApiErrorMessage } from '../lib/api-error'
 import { useToast } from '../components/ui/ToastProvider'
 import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 
 type BillingInterval = 'monthly' | 'annual'
 type MatrixFilter = 'all' | 'limits' | 'features'
@@ -221,6 +223,7 @@ function UsageMeter({ limit }: { limit: UsageLimit }) {
 
 export default function SubscriptionPage() {
   const queryClient = useQueryClient()
+  const { selectedBranchId } = useBranch()
   const { showToast } = useToast()
   const { hasPermission } = useAuth()
   const canManageSubscription = hasPermission(PERMISSIONS.subscriptionManage)
@@ -233,11 +236,11 @@ export default function SubscriptionPage() {
   const [upiCheckout, setUpiCheckout] = useState<UpiCheckout | null>(null)
 
   const query = useQuery({
-    queryKey: ['subscription', 'me'],
+    queryKey: branchQueryKey(selectedBranchId, 'subscription', 'me'),
     queryFn: getMySubscription,
   })
   const plansQuery = useQuery({
-    queryKey: ['subscription', 'plans'],
+    queryKey: branchQueryKey(selectedBranchId, 'subscription', 'plans'),
     queryFn: getAvailablePlans,
   })
 
@@ -357,7 +360,7 @@ export default function SubscriptionPage() {
             message: 'Your subscription is active.',
             variant: 'success',
           })
-          await queryClient.invalidateQueries({ queryKey: ['subscription'] })
+          await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'subscription') })
         },
         theme: { color: '#4f46e5' },
       })
@@ -384,7 +387,7 @@ export default function SubscriptionPage() {
         variant: 'success',
       })
       setUpiCheckout(null)
-      await queryClient.invalidateQueries({ queryKey: ['subscription'] })
+      await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'subscription') })
       return true
     } catch (err) {
       showToast({

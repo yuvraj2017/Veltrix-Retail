@@ -19,6 +19,8 @@ import {
 
 import { inventoryApi } from '../features/inventory/api'
 import type { InventoryProduct } from '../features/inventory/types'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey } from '../lib/branch-query-keys'
 
 type Tab = 'overview' | 'low-stock' | 'movements' | 'reconciliation' | 'purchasing'
 
@@ -105,8 +107,9 @@ function Metric({ label, value, detail, icon: Icon }: { label: string; value: st
 
 function ProductDetail({ productId, onClose, onViewHistory }: { productId: number; onClose: () => void; onViewHistory: (sku: string) => void }) {
   const navigate = useNavigate()
+  const { selectedBranchId } = useBranch()
   const query = useQuery({
-    queryKey: ['inventory', 'product-detail', productId],
+    queryKey: branchQueryKey(selectedBranchId, 'inventory', 'product-detail', productId),
     queryFn: () => inventoryApi.productDetail(productId),
   })
   const detail = query.data
@@ -163,6 +166,7 @@ function ProductDetail({ productId, onClose, onViewHistory }: { productId: numbe
 }
 
 export default function InventoryPage() {
+  const { selectedBranchId } = useBranch()
   const [tab, setTab] = useState<Tab>('overview')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -184,30 +188,30 @@ export default function InventoryPage() {
   useEffect(() => setPage(1), [tab, debouncedSearch, movementType, direction, poStatus, mismatchesOnly, dateFrom, dateTo])
 
   const commonParams = useMemo(() => ({ search: debouncedSearch || undefined, page, page_size: PAGE_SIZE }), [debouncedSearch, page])
-  const summary = useQuery({ queryKey: ['inventory', 'summary'], queryFn: inventoryApi.summary })
-  const activity = useQuery({ queryKey: ['inventory', 'activity', dateFrom, dateTo], queryFn: () => inventoryApi.activity(dateFrom, dateTo), enabled: tab === 'overview' })
+  const summary = useQuery({ queryKey: branchQueryKey(selectedBranchId, 'inventory', 'summary'), queryFn: inventoryApi.summary })
+  const activity = useQuery({ queryKey: branchQueryKey(selectedBranchId, 'inventory', 'activity', dateFrom, dateTo), queryFn: () => inventoryApi.activity(dateFrom, dateTo), enabled: tab === 'overview' })
   const products = useQuery({
-    queryKey: ['inventory', 'low-stock', commonParams],
+    queryKey: branchQueryKey(selectedBranchId, 'inventory', 'low-stock', commonParams),
     queryFn: () => inventoryApi.products({ ...commonParams, stock_status: 'actionable' }),
     enabled: tab === 'low-stock',
   })
   const movements = useQuery({
-    queryKey: ['inventory', 'movements', commonParams, movementType, direction, dateFrom, dateTo],
+    queryKey: branchQueryKey(selectedBranchId, 'inventory', 'movements', commonParams, movementType, direction, dateFrom, dateTo),
     queryFn: () => inventoryApi.movements({ ...commonParams, movement_type: movementType || undefined, direction: direction || undefined, date_from: dateFrom, date_to: dateTo }),
     enabled: tab === 'movements',
   })
   const reconciliation = useQuery({
-    queryKey: ['inventory', 'reconciliation', commonParams, mismatchesOnly],
+    queryKey: branchQueryKey(selectedBranchId, 'inventory', 'reconciliation', commonParams, mismatchesOnly),
     queryFn: () => inventoryApi.reconciliation({ ...commonParams, mismatches_only: mismatchesOnly }),
     enabled: tab === 'reconciliation',
   })
   const purchasing = useQuery({
-    queryKey: ['inventory', 'purchasing', commonParams, poStatus, dateFrom, dateTo],
+    queryKey: branchQueryKey(selectedBranchId, 'inventory', 'purchasing', commonParams, poStatus, dateFrom, dateTo),
     queryFn: () => inventoryApi.purchasing({ ...commonParams, status: poStatus || undefined, date_from: dateFrom, date_to: dateTo }),
     enabled: tab === 'purchasing',
   })
   const vendorInsights = useQuery({
-    queryKey: ['inventory', 'vendor-insights', debouncedSearch],
+    queryKey: branchQueryKey(selectedBranchId, 'inventory', 'vendor-insights', debouncedSearch),
     queryFn: () => inventoryApi.vendorInsights({ search: debouncedSearch || undefined, page: 1, page_size: 10 }),
     enabled: tab === 'purchasing',
   })

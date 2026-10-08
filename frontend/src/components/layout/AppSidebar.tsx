@@ -20,6 +20,7 @@ import {
 import { Link, NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useBranch } from '../../context/BranchContext'
 import { PERMISSIONS } from '../../features/staff/constants'
 
 const navItems = [
@@ -71,6 +72,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
   const { user, shop, isSuperAdmin, hasPermission } = useAuth()
+  const { selectedBranch, activeShop } = useBranch()
 
   useEffect(() => {
     if (window.innerWidth < MOBILE_BREAKPOINT) onClose()
@@ -85,10 +87,10 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
   // they are rather than borrowing a shop identity.
   const shopName = isSuperAdmin
     ? 'Platform Admin'
-    : shop?.name || user?.shop_name || 'Editorial Merchant'
+    : selectedBranch?.name || shop?.name || user?.shop_name || 'Editorial Merchant'
   const shopLogoUrl =
-    resolveImageUrl(shop?.logo_url) ||
-    resolveImageUrl(user?.shop_logo_url) ||
+    resolveImageUrl(activeShop?.logo_url) ||
+    resolveImageUrl(selectedBranch?.id === shop?.id ? shop?.logo_url || user?.shop_logo_url : null) ||
     null
   const bottomCardSubtitle = user?.full_name || user?.role || 'owner'
 

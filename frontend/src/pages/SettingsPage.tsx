@@ -36,6 +36,7 @@ import type {
   WorkspacePreferences,
 } from '../features/settings/types'
 import { getApiErrorMessage } from '../lib/api-error'
+import { useBranch } from '../context/BranchContext'
 
 const languageOptions = ['English (US)', 'English (UK)', 'Hindi', 'French']
 const timezoneOptions = [
@@ -233,6 +234,7 @@ function Banner({ state }: { state: BannerState }) {
 
 export default function SettingsPage() {
   const { user, refreshMe, hasPermission } = useAuth()
+  const { selectedBranchId } = useBranch()
   const canManageSettings = hasPermission(PERMISSIONS.settingsManage)
   const { darkMode, setDarkMode } = useTheme()
   const { showToast } = useToast()
@@ -281,7 +283,7 @@ export default function SettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false)
 
   useEffect(() => {
-    if (!user?.shop_id) return
+    if (!selectedBranchId) return
 
     let cancelled = false
 
@@ -290,7 +292,7 @@ export default function SettingsPage() {
         setLoading(true)
         const [profileData, shopData] = await Promise.all([
           getMyProfile(),
-          getShopSettings(user.shop_id),
+          getShopSettings(selectedBranchId),
         ])
 
         if (cancelled) return
@@ -336,7 +338,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [user?.shop_id])
+  }, [selectedBranchId])
 
   const blueprintCards = useMemo(
     () => [
@@ -349,12 +351,12 @@ export default function SettingsPage() {
   )
 
   const handleSaveStore = async () => {
-    if (!user?.shop_id) return
+    if (!selectedBranchId) return
 
     try {
       setSavingStore(true)
       setStoreBanner({ error: '', success: '' })
-      const updated = await updateShopSettings(user.shop_id, {
+      const updated = await updateShopSettings(selectedBranchId, {
         ...shopForm,
         whatsapp_number: shopForm.whatsapp_number || null,
         address: shopForm.address || null,

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 import { useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -58,6 +60,7 @@ function requestId() {
 }
 
 export default function PurchaseOrdersPage() {
+  const { selectedBranchId } = useBranch()
   const queryClient = useQueryClient()
   const { hasPermission } = useAuth()
   const canManagePurchasing = hasPermission(PERMISSIONS.purchasingManage)
@@ -92,12 +95,12 @@ export default function PurchaseOrdersPage() {
   const [message, setMessage] = useState('')
 
   const ordersQuery = useQuery({
-    queryKey: ['purchase-orders'],
+    queryKey: branchQueryKey(selectedBranchId, 'purchase-orders'),
     queryFn: () => getPurchaseOrders(),
   })
-  const vendorsQuery = useQuery({ queryKey: ['vendors', 'list'], queryFn: vendorsApi.getVendors })
+  const vendorsQuery = useQuery({ queryKey: branchQueryKey(selectedBranchId, 'vendors', 'list'), queryFn: vendorsApi.getVendors })
   const productsQuery = useQuery({
-    queryKey: ['products', 'purchase-picker', productSearch],
+    queryKey: branchQueryKey(selectedBranchId, 'products', 'purchase-picker', productSearch),
     queryFn: () => getProducts({
       search: productSearch.trim() || undefined,
       page: 1,
@@ -106,22 +109,22 @@ export default function PurchaseOrdersPage() {
     }),
   })
   const detailQuery = useQuery({
-    queryKey: ['purchase-orders', selectedId],
+    queryKey: branchQueryKey(selectedBranchId, 'purchase-orders', selectedId),
     queryFn: () => getPurchaseOrder(selectedId as number),
     enabled: selectedId !== null,
   })
   const receiptsQuery = useQuery({
-    queryKey: ['purchase-orders', selectedId, 'receipts'],
+    queryKey: branchQueryKey(selectedBranchId, 'purchase-orders', selectedId, 'receipts'),
     queryFn: () => getGoodsReceipts(selectedId as number),
     enabled: selectedId !== null,
   })
   const returnEligibilityQuery = useQuery({
-    queryKey: ['purchase-orders', selectedId, 'return-eligibility'],
+    queryKey: branchQueryKey(selectedBranchId, 'purchase-orders', selectedId, 'return-eligibility'),
     queryFn: () => getPurchaseReturnEligibility(selectedId as number),
     enabled: selectedId !== null,
   })
   const returnsQuery = useQuery({
-    queryKey: ['purchase-orders', selectedId, 'returns'],
+    queryKey: branchQueryKey(selectedBranchId, 'purchase-orders', selectedId, 'returns'),
     queryFn: () => getPurchaseReturns(selectedId as number),
     enabled: selectedId !== null,
   })
@@ -232,7 +235,7 @@ export default function PurchaseOrdersPage() {
       const result = editingId
         ? await updatePurchaseOrder(editingId, payload)
         : await createPurchaseOrder(payload)
-      await queryClient.invalidateQueries({ queryKey: ['purchase-orders'] })
+      await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'purchase-orders') })
       selectPurchaseOrder(result.id)
       resetOrderForm()
       setMessage(`${result.purchase_order_number} saved.`)
@@ -282,8 +285,8 @@ export default function PurchaseOrdersPage() {
       setReceiptCosts({})
       setReceiptNotes('')
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['products'] }),
+        queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'purchase-orders') }),
+        queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'products') }),
       ])
       setMessage(`${receipt.receipt_number} posted. Inventory is updated.`)
     } catch (error) {
@@ -297,7 +300,7 @@ export default function PurchaseOrdersPage() {
     if (!selected || !window.confirm(`Cancel ${selected.purchase_order_number}?`)) return
     try {
       await cancelPurchaseOrder(selected.id)
-      await queryClient.invalidateQueries({ queryKey: ['purchase-orders'] })
+      await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'purchase-orders') })
       setMessage('Purchase order cancelled. Inventory was not changed.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to cancel purchase order.')
@@ -351,8 +354,8 @@ export default function PurchaseOrdersPage() {
       setReturnQuantities({})
       setReturnNotes('')
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['products'] }),
+        queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'purchase-orders') }),
+        queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'products') }),
       ])
       setMessage(`${result.return_number} posted. Vendor credit ${money(result.total_amount)} is unapplied.`)
     } catch (error) {

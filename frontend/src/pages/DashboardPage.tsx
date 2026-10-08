@@ -7,6 +7,8 @@ import { StatCard } from '../components/dashboard/StatCard'
 import { getDashboardOverview } from '../features/dashboard/api'
 import type { DashboardOverview } from '../features/dashboard/types'
 import { getApiErrorMessage } from '../lib/api-error'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey } from '../lib/branch-query-keys'
 
 const emptyDashboard: DashboardOverview = {
   greeting_name: 'Merchant',
@@ -19,11 +21,12 @@ const emptyDashboard: DashboardOverview = {
 }
 
 export default function DashboardPage() {
+  const { selectedBranchId } = useBranch()
   // Replaces the bespoke TTL map in lib/resourceCache. React Query gives the
   // same instant-render-from-cache behaviour plus background revalidation,
   // request dedup, and shared invalidation with the rest of the app.
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard', 'overview'],
+    queryKey: branchQueryKey(selectedBranchId, 'dashboard', 'overview'),
     queryFn: getDashboardOverview,
     staleTime: 2 * 60 * 1000, // matches the previous 2 minute TTL
   })

@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 
 const owner = {
+  id: 2,
   access_token: 'test-owner-token',
   token_type: 'bearer',
   user_id: 2,
@@ -73,15 +74,24 @@ async function mockBillingApi(context: BrowserContext, requests: any[]) {
 
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204 })
     if (path === '/api/v1/auth/me') return route.fulfill({ json: owner })
+    if (path === '/api/v1/branches') return route.fulfill({ json: { items: [
+      { id: 2, name: owner.shop_name, status: 'active', is_default_branch: true, is_preferred: true },
+    ] } })
     if (path === '/api/v1/shops/2') {
       return route.fulfill({
         json: {
           id: owner.shop_id,
+          organization_id: owner.organization_id,
+          is_default_branch: true,
+          status: 'active',
           name: owner.shop_name,
+          category: 'Retail',
           email: owner.email,
           gst_enabled: false,
           state: 'Gujarat',
           gst_state_code: '24',
+          created_at: '2026-10-01T00:00:00Z',
+          updated_at: '2026-10-01T00:00:00Z',
         },
       })
     }

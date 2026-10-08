@@ -7,6 +7,8 @@ import { AlertCircle, ArrowUpRight, Building2 } from 'lucide-react'
 import VendorStats from '../components/vendors/VendorStats'
 import VendorTable from '../components/vendors/VendorTable'
 import { vendorsApi } from '../features/vendors/api'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 import type { Vendor, VendorStatsResponse } from '../features/vendors/types'
 
 const emptyVendorStats: VendorStatsResponse = {
@@ -27,17 +29,18 @@ const emptyVendorStats: VendorStatsResponse = {
 const VENDORS_STALE_MS = 2 * 60 * 1000
 
 export default function VendorsPage() {
+  const { selectedBranchId } = useBranch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const vendorsQuery = useQuery({
-    queryKey: ['vendors', 'list'],
+    queryKey: branchQueryKey(selectedBranchId, 'vendors', 'list'),
     queryFn: vendorsApi.getVendors,
     staleTime: VENDORS_STALE_MS,
   })
 
   const statsQuery = useQuery({
-    queryKey: ['vendors', 'stats'],
+    queryKey: branchQueryKey(selectedBranchId, 'vendors', 'stats'),
     queryFn: vendorsApi.getVendorStats,
     staleTime: VENDORS_STALE_MS,
   })
@@ -92,7 +95,7 @@ export default function VendorsPage() {
 
   // Invalidating the 'vendors' key refetches both the list and the stats.
   const refreshVendorsPage = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['vendors'] })
+    await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'vendors') })
   }
 
   return (

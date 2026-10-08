@@ -43,6 +43,7 @@ import type {
   StaffMember,
 } from '../features/staff/types'
 import { getApiErrorMessage } from '../lib/api-error'
+import { useBranch } from '../context/BranchContext'
 
 const STAFF_QUERY_KEY = ['organization', 'current', 'staff'] as const
 
@@ -101,6 +102,7 @@ export default function StaffPage() {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const { user, shop, hasPermission, refreshMe } = useAuth()
+  const { selectedBranch } = useBranch()
   const canManage = hasPermission(PERMISSIONS.staffManage)
   const canTransfer = hasPermission(PERMISSIONS.ownershipTransfer)
   const assignableRoles = assignableRolesFor(user?.membership_role)
@@ -122,9 +124,10 @@ export default function StaffPage() {
     for (const member of staff) {
       for (const branch of member.branches) values.set(branch.shop_id, branch.shop_name)
     }
-    if (shop?.id) values.set(shop.id, shop.name || user?.shop_name || `Branch ${shop.id}`)
+    if (selectedBranch) values.set(selectedBranch.id, selectedBranch.name)
+    else if (shop?.id) values.set(shop.id, shop.name || user?.shop_name || `Branch ${shop.id}`)
     return Array.from(values, ([shop_id, shop_name]) => ({ shop_id, shop_name })).sort((a, b) => a.shop_name.localeCompare(b.shop_name))
-  }, [shop, staff, user?.shop_name])
+  }, [selectedBranch, shop, staff, user?.shop_name])
 
   const filteredStaff = useMemo(() => {
     const needle = search.trim().toLowerCase()

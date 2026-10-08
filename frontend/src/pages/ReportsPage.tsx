@@ -30,6 +30,8 @@ import type {
 } from '../features/reports/types'
 import { loadActiveReportsPeriod, saveActiveReportsPeriod } from '../features/settings/storage'
 import { getApiErrorMessage } from '../lib/api-error'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 
 const periodOptions: { value: ReportPeriod; label: string; shortLabel: string; initial: string }[] = [
   { value: 'weekly', label: 'Weekly', shortLabel: 'Week', initial: 'W' },
@@ -67,11 +69,12 @@ function formatPercent(value: number) {
 
 export default function ReportsPage() {
   const queryClient = useQueryClient()
+  const { selectedBranchId } = useBranch()
 
   // Refresh invalidates every report query at once. Anything currently on
   // screen keeps rendering while the refetch runs in the background.
   const handleRefresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['reports'] })
+    void queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'reports') })
   }
 
   const [salesPeriod, setSalesPeriod] = useState<ReportPeriod>(() => loadActiveReportsPeriod() as ReportPeriod)
@@ -84,27 +87,27 @@ export default function ReportsPage() {
   // that was already viewed renders instantly from cache instead of refetching,
   // and returning to this page at all no longer re-runs six requests.
   const summaryQuery = useQuery({
-    queryKey: ['reports', 'summary'],
+    queryKey: branchQueryKey(selectedBranchId, 'reports', 'summary'),
     queryFn: getReportSummary,
   })
   const salesQuery = useQuery({
-    queryKey: ['reports', 'sales-profit', salesPeriod],
+    queryKey: branchQueryKey(selectedBranchId, 'reports', 'sales-profit', salesPeriod),
     queryFn: () => getSalesProfitReport(salesPeriod),
   })
   const cashflowQuery = useQuery({
-    queryKey: ['reports', 'cashflow', cashflowPeriod],
+    queryKey: branchQueryKey(selectedBranchId, 'reports', 'cashflow', cashflowPeriod),
     queryFn: () => getCashflowReport(cashflowPeriod),
   })
   const categoryQuery = useQuery({
-    queryKey: ['reports', 'category-performance', categoryPeriod],
+    queryKey: branchQueryKey(selectedBranchId, 'reports', 'category-performance', categoryPeriod),
     queryFn: () => getCategoryPerformanceReport(categoryPeriod),
   })
   const customerQuery = useQuery({
-    queryKey: ['reports', 'customer-insights', customerPeriod],
+    queryKey: branchQueryKey(selectedBranchId, 'reports', 'customer-insights', customerPeriod),
     queryFn: () => getCustomerInsightsReport(customerPeriod),
   })
   const paymentQuery = useQuery({
-    queryKey: ['reports', 'payment-insights', paymentPeriod],
+    queryKey: branchQueryKey(selectedBranchId, 'reports', 'payment-insights', paymentPeriod),
     queryFn: () => getPaymentInsightsReport(paymentPeriod),
   })
 

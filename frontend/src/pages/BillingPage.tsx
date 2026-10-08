@@ -14,6 +14,8 @@ import { billingApi } from '../features/billing/api'
 import type { InvoiceListItem, InvoiceStats, PaymentStatus } from '../features/billing/types'
 import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
+import { useBranch } from '../context/BranchContext'
+import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 
 const emptyInvoiceStats: InvoiceStats = {
   total_invoices: 0, total_sales_amount: 0, total_discount_given: 0,
@@ -74,6 +76,7 @@ function DeleteInvoiceModal({
 
 export default function BillingPage() {
   const { hasPermission } = useAuth()
+  const { selectedBranchId } = useBranch()
   const canCreateSales = hasPermission(PERMISSIONS.salesCreate)
   const canCancelSales = hasPermission(PERMISSIONS.salesCancel)
   const navigate = useNavigate()
@@ -95,7 +98,7 @@ export default function BillingPage() {
   }, [search])
 
   const invoicesQuery = useQuery({
-    queryKey: ['invoices', 'list', debouncedSearch, paymentStatus],
+    queryKey: branchQueryKey(selectedBranchId, 'invoices', 'list', debouncedSearch, paymentStatus),
     queryFn: () =>
       billingApi.getInvoices({
         search: debouncedSearch || undefined,
@@ -107,7 +110,7 @@ export default function BillingPage() {
   })
 
   const statsQuery = useQuery({
-    queryKey: ['invoices', 'stats'],
+    queryKey: branchQueryKey(selectedBranchId, 'invoices', 'stats'),
     queryFn: billingApi.getInvoiceStats,
   })
 
@@ -137,11 +140,27 @@ export default function BillingPage() {
   }, [stats])
 
   const refreshBillingPage = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    await queryClient.invalidateQueries({ queryKey: branchQueryPrefix(selectedBranchId, 'invoices') })
   }
 
-  const handleDownload = (invoiceId: number) => {
-    window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'}/api/v1/invoices/${invoiceId}/download`, '_blank')
+  const handleDownload = async (invoiceId: number) => {
+    try {
+      const blob = await billingApi.downloadInvoice(invoiceId)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `invoice-${invoiceId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      showToast({
+        title: 'Unable to download invoice',
+        message: error instanceof Error ? error.message : 'Unable to download invoice',
+        variant: 'error',
+      })
+    }
   }
   const handlePrint = (invoiceId: number) => navigate(`/billing/${invoiceId}/preview?print=true`)
   const handleShare = async (invoiceId: number) => {

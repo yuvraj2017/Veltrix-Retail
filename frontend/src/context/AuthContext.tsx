@@ -97,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       permissions: payload.permissions ?? [],
     }
 
+    clearTabSession()
     saveTabSession(payload.access_token, authUser)
     queryClient.clear()
 
