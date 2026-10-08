@@ -71,6 +71,10 @@ python -m alembic -c alembic.ini history
 
 Do not run `alembic stamp` or `alembic upgrade head` against an important populated database until the migration plan has been reviewed and backed up.
 
+The Phase 4 tenant, branch, RBAC, lifecycle, provisioning, switching, and
+release procedures are documented in
+[`docs/phase4-multi-branch-release.md`](docs/phase4-multi-branch-release.md).
+
 ## Backend Development
 
 Start the backend locally:
