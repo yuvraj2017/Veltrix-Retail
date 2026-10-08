@@ -94,6 +94,7 @@ ADMIN_MANUAL_PROVIDER = "manual"
 SUPPORTED_PAYMENT_PROVIDERS = (RAZORPAY_PROVIDER, UPI_MANUAL_PROVIDER)
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
 UPI_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{2,256}@[A-Za-z0-9.-]{2,64}$")
+RECONCILIATION_REQUIRED_PREFIX = "RECONCILIATION_REQUIRED:"
 
 
 def _utcnow() -> datetime:
@@ -142,15 +143,15 @@ def _same_payment_request(existing: SubscriptionPayment, payload: PaymentCreateR
     )
 
 
-def _reject_unsupported_plan_change(
+def _requires_cross_plan_reconciliation(
     subscription: ShopSubscription | None,
     plan_id: int,
-) -> None:
+) -> bool:
     if subscription is None or subscription.plan_id == plan_id:
-        return
+        return False
 
     paid_expiry = as_utc(subscription.current_period_end)
-    has_remaining_paid_term = (
+    return (
         subscription.billing_interval != BillingInterval.LEGACY
         and subscription.status
         in {
@@ -162,7 +163,13 @@ def _reject_unsupported_plan_change(
         and paid_expiry is not None
         and paid_expiry > _utcnow()
     )
-    if has_remaining_paid_term:
+
+
+def _reject_unsupported_plan_change(
+    subscription: ShopSubscription | None,
+    plan_id: int,
+) -> None:
+    if _requires_cross_plan_reconciliation(subscription, plan_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -174,6 +181,14 @@ def _reject_unsupported_plan_change(
                 "details": {},
             },
         )
+
+
+def _payment_requires_reconciliation(payment: SubscriptionPayment) -> bool:
+    return bool(
+        payment.status == SubscriptionPaymentStatus.SUCCEEDED
+        and payment.failure_reason
+        and payment.failure_reason.startswith(RECONCILIATION_REQUIRED_PREFIX)
+    )
 
 
 def _require_shop(db: Session, shop_id: int) -> Shop:
@@ -1211,10 +1226,11 @@ def record_payment(
             detail="Payment identifier is already in use",
         ) from exc
 
+    reconciliation_required = False
     try:
         if payload.status == SubscriptionPaymentStatus.SUCCEEDED:
             transition_payment(payment, SubscriptionPaymentStatus.SUCCEEDED, effective_at=now)
-            _activate_paid_subscription(
+            _subscription, reconciliation_required = _activate_paid_subscription(
                 db=db,
                 payment=payment,
                 reason=normalized_reason,
@@ -1235,6 +1251,7 @@ def record_payment(
                 "amount": str(payment.amount),
                 "currency": payment.currency,
                 "provider": payment.provider,
+                "reconciliation_required": reconciliation_required,
             },
             reason=normalized_reason,
             ip_address=ip_address,
@@ -1753,10 +1770,15 @@ def submit_upi_payment_reference(
     if not payment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI payment request not found.")
     if payment.status == SubscriptionPaymentStatus.SUCCEEDED:
+        reconciliation_required = _payment_requires_reconciliation(payment)
         return PaymentVerificationResponse(
-            status="already_verified",
-            message="This payment was already approved.",
-            subscription=payment.subscription,
+            status="reconciliation_required" if reconciliation_required else "already_verified",
+            message=(
+                "Payment is confirmed and requires commercial reconciliation."
+                if reconciliation_required
+                else "This payment was already approved."
+            ),
+            subscription=None if reconciliation_required else payment.subscription,
             payment=payment,
         )
     if payment.status == SubscriptionPaymentStatus.FAILED:
@@ -1816,7 +1838,7 @@ def _activate_paid_subscription(
     payment: SubscriptionPayment,
     provider_event_id: str | None = None,
     reason: str = "Verified payment",
-) -> ShopSubscription:
+) -> tuple[ShopSubscription, bool]:
     if not payment.plan_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
     if payment.status != SubscriptionPaymentStatus.SUCCEEDED:
@@ -1833,7 +1855,36 @@ def _activate_paid_subscription(
     _lock_shop(db, payment.shop_id)
 
     subscription = _latest_subscription_for_update(db, payment.shop_id)
-    _reject_unsupported_plan_change(subscription, plan.id)
+    if _requires_cross_plan_reconciliation(subscription, plan.id):
+        payment.failure_reason = (
+            f"{RECONCILIATION_REQUIRED_PREFIX} verified payment for plan {plan.id} "
+            f"cannot replace unexpired paid plan {subscription.plan_id}"
+        )
+        db.add(
+            SubscriptionEvent(
+                subscription_id=subscription.id,
+                shop_id=payment.shop_id,
+                event_type="payment_reconciliation_required",
+                previous_value=_json(
+                    {
+                        "plan_id": subscription.plan_id,
+                        "current_period_end": subscription.current_period_end,
+                    }
+                ),
+                new_value=_json(
+                    {
+                        "payment_id": payment.id,
+                        "requested_plan_id": plan.id,
+                        "entitlement_applied": False,
+                    }
+                ),
+                provider=payment.provider,
+                provider_event_id=provider_event_id or payment.provider_event_id,
+                reason="Verified cross-plan payment requires manual reconciliation",
+            )
+        )
+        return subscription, True
+
     previous = None
     event_type = "payment_activated"
     renewal_start = now
@@ -1957,7 +2008,8 @@ def _activate_paid_subscription(
             reason=reason,
         )
     )
-    return subscription
+    payment.failure_reason = None
+    return subscription, False
 
 
 def review_upi_payment(
@@ -1980,10 +2032,15 @@ def review_upi_payment(
     if not payment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI payment not found.")
     if payment.status == SubscriptionPaymentStatus.SUCCEEDED:
+        reconciliation_required = _payment_requires_reconciliation(payment)
         return PaymentVerificationResponse(
-            status="already_verified",
-            message="This payment was already approved.",
-            subscription=payment.subscription,
+            status="reconciliation_required" if reconciliation_required else "already_verified",
+            message=(
+                "Payment is confirmed and requires commercial reconciliation."
+                if reconciliation_required
+                else "This payment was already approved."
+            ),
+            subscription=None if reconciliation_required else payment.subscription,
             payment=payment,
         )
     if payment.status != SubscriptionPaymentStatus.SUBMITTED:
@@ -2007,6 +2064,7 @@ def review_upi_payment(
     payment.reviewed_at = _utcnow()
     payment.reviewed_by_user_id = actor.id
     subscription = None
+    reconciliation_required = False
     try:
         if payload.status == SubscriptionPaymentStatus.SUCCEEDED:
             transition_payment(
@@ -2015,7 +2073,7 @@ def review_upi_payment(
                 effective_at=payment.reviewed_at,
             )
             payment.failure_reason = None
-            subscription = _activate_paid_subscription(
+            subscription, reconciliation_required = _activate_paid_subscription(
                 db=db,
                 payment=payment,
                 reason=normalized_reason,
@@ -2036,7 +2094,12 @@ def review_upi_payment(
             entity_type="subscription_payment",
             entity_id=payment.id,
             previous={"status": previous_status},
-            new={"status": payment.status, "provider": payment.provider, "shop_id": payment.shop_id},
+            new={
+                "status": payment.status,
+                "provider": payment.provider,
+                "shop_id": payment.shop_id,
+                "reconciliation_required": reconciliation_required,
+            },
             reason=normalized_reason,
             ip_address=ip_address,
         )
@@ -2048,9 +2111,21 @@ def review_upi_payment(
     if subscription:
         db.refresh(subscription)
     return PaymentVerificationResponse(
-        status="verified" if payment.status == SubscriptionPaymentStatus.SUCCEEDED else "rejected",
-        message="Payment approved and subscription activated." if subscription else "Payment was rejected.",
-        subscription=subscription,
+        status=(
+            "reconciliation_required"
+            if reconciliation_required
+            else "verified"
+            if payment.status == SubscriptionPaymentStatus.SUCCEEDED
+            else "rejected"
+        ),
+        message=(
+            "Payment is confirmed and requires commercial reconciliation."
+            if reconciliation_required
+            else "Payment approved and subscription activated."
+            if subscription
+            else "Payment was rejected."
+        ),
+        subscription=None if reconciliation_required else subscription,
         payment=payment,
     )
 
@@ -2091,15 +2166,20 @@ def verify_razorpay_payment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment order not found")
 
     if payment.status == SubscriptionPaymentStatus.SUCCEEDED:
+        reconciliation_required = _payment_requires_reconciliation(payment)
         subscription = (
             db.query(ShopSubscription)
             .filter(ShopSubscription.id == payment.subscription_id)
             .first()
         )
         return PaymentVerificationResponse(
-            status="already_verified",
-            message="Payment was already verified.",
-            subscription=subscription,
+            status="reconciliation_required" if reconciliation_required else "already_verified",
+            message=(
+                "Payment is confirmed and requires commercial reconciliation."
+                if reconciliation_required
+                else "Payment was already verified."
+            ),
+            subscription=None if reconciliation_required else subscription,
             payment=payment,
         )
 
@@ -2116,7 +2196,7 @@ def verify_razorpay_payment(
     try:
         payment.provider_payment_id = payload.razorpay_payment_id
         transition_payment(payment, SubscriptionPaymentStatus.SUCCEEDED)
-        subscription = _activate_paid_subscription(
+        subscription, reconciliation_required = _activate_paid_subscription(
             db=db,
             payment=payment,
             reason="Razorpay checkout signature verified",
@@ -2128,9 +2208,13 @@ def verify_razorpay_payment(
     db.refresh(payment)
     db.refresh(subscription)
     return PaymentVerificationResponse(
-        status="verified",
-        message="Payment verified and subscription activated.",
-        subscription=subscription,
+        status="reconciliation_required" if reconciliation_required else "verified",
+        message=(
+            "Payment is confirmed and requires commercial reconciliation."
+            if reconciliation_required
+            else "Payment verified and subscription activated."
+        ),
+        subscription=None if reconciliation_required else subscription,
         payment=payment,
     )
 
@@ -2169,6 +2253,11 @@ def handle_razorpay_webhook(
         .first()
     )
     if existing_event:
+        if existing_event.payment and _payment_requires_reconciliation(existing_event.payment):
+            return {
+                "status": "reconciliation_required",
+                "message": "Payment is confirmed and requires commercial reconciliation",
+            }
         return {"status": "duplicate", "message": "Webhook already processed"}
 
     webhook_event = PaymentWebhookEvent(
@@ -2235,6 +2324,11 @@ def handle_razorpay_webhook(
         webhook_event.payment_id = payment.id
         webhook_event.status = "applied"
         db.commit()
+        if _payment_requires_reconciliation(payment):
+            return {
+                "status": "reconciliation_required",
+                "message": "Payment is confirmed and requires commercial reconciliation",
+            }
         return {"status": "duplicate", "message": "Payment already processed"}
 
     if payment.status != SubscriptionPaymentStatus.PENDING:
@@ -2248,7 +2342,7 @@ def handle_razorpay_webhook(
         payment.provider_payment_id = payment_id
         payment.provider_event_id = event_id
         transition_payment(payment, SubscriptionPaymentStatus.SUCCEEDED)
-        _activate_paid_subscription(
+        _subscription, reconciliation_required = _activate_paid_subscription(
             db=db,
             payment=payment,
             provider_event_id=event_id,
@@ -2260,4 +2354,9 @@ def handle_razorpay_webhook(
     except Exception:
         db.rollback()
         raise
+    if reconciliation_required:
+        return {
+            "status": "reconciliation_required",
+            "message": "Payment is confirmed and requires commercial reconciliation",
+        }
     return {"status": "processed", "message": "Payment webhook processed"}

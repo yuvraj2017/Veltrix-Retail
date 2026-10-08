@@ -265,6 +265,113 @@ def test_concurrent_verify_and_webhook_apply_one_commercial_term(pg):
     assert duplicate["status"] == "duplicate"
 
 
+def test_concurrent_cross_plan_confirmation_requires_one_reconciliation(pg):
+    _engine, Session = pg
+    ids = _setup_commercial(Session, with_subscription=True)
+    with Session() as db:
+        requested_plan = Plan(
+            code=f"phase5b-cross-plan-{ids['unique']}",
+            name="Phase 5B Cross Plan",
+            monthly_price=Decimal("100.00"),
+            annual_price=Decimal("1000.00"),
+            currency="INR",
+            is_active=True,
+            is_archived=False,
+        )
+        db.add(requested_plan)
+        db.flush()
+        requested_plan_id = requested_plan.id
+        order_id = f"cross-order-{ids['unique']}"
+        provider_payment_id = f"cross-payment-{ids['unique']}"
+        event_id = f"cross-event-{ids['unique']}"
+        key_secret = f"cross-key-{ids['unique']}"
+        webhook_secret = f"cross-webhook-{ids['unique']}"
+        _configure_razorpay(
+            db,
+            key_secret=key_secret,
+            webhook_secret=webhook_secret,
+        )
+        db.add(
+            SubscriptionPayment(
+                shop_id=ids["shop_id"],
+                plan_id=requested_plan_id,
+                provider="razorpay",
+                provider_payment_id=order_id,
+                provider_order_id=order_id,
+                status=SubscriptionPaymentStatus.PENDING,
+                amount=Decimal("100.00"),
+                currency="INR",
+                billing_interval=BillingInterval.MONTHLY,
+            )
+        )
+        db.commit()
+
+    checkout_signature = hmac.new(
+        key_secret.encode(),
+        f"{order_id}|{provider_payment_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    body = _webhook(event_id, order_id, provider_payment_id)
+    webhook_signature = hmac.new(
+        webhook_secret.encode(), body, hashlib.sha256
+    ).hexdigest()
+    barrier = threading.Barrier(2)
+
+    def verify():
+        with Session() as db:
+            barrier.wait(timeout=10)
+            return commercial_service.verify_razorpay_payment(
+                db,
+                ids["shop_id"],
+                RazorpayVerifyPaymentRequest(
+                    razorpay_order_id=order_id,
+                    razorpay_payment_id=provider_payment_id,
+                    razorpay_signature=checkout_signature,
+                ),
+            ).status
+
+    def webhook():
+        with Session() as db:
+            barrier.wait(timeout=10)
+            return commercial_service.handle_razorpay_webhook(
+                db=db,
+                raw_body=body,
+                signature=webhook_signature,
+            )["status"]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = [
+            future.result(timeout=20)
+            for future in (executor.submit(verify), executor.submit(webhook))
+        ]
+
+    with Session() as db:
+        payment = db.query(SubscriptionPayment).filter_by(
+            provider_order_id=order_id
+        ).one()
+        subscription = db.get(ShopSubscription, ids["subscription_id"])
+        assert payment.status == SubscriptionPaymentStatus.SUCCEEDED
+        assert payment.subscription_id is None
+        assert payment.failure_reason.startswith(
+            commercial_service.RECONCILIATION_REQUIRED_PREFIX
+        )
+        assert subscription.plan_id == ids["plan_id"]
+        assert as_utc(subscription.current_period_end) == as_utc(ids["expiry"])
+        assert (
+            db.query(SubscriptionEvent)
+            .filter_by(
+                subscription_id=subscription.id,
+                event_type="payment_reconciliation_required",
+            )
+            .count()
+            == 1
+        )
+        assert db.query(PaymentWebhookEvent).filter_by(
+            provider_event_id=event_id
+        ).count() == 1
+    assert outcomes == ["reconciliation_required", "reconciliation_required"]
+
+
 def test_concurrent_same_plan_renewals_preserve_both_terms(pg):
     _engine, Session = pg
     ids = _setup_commercial(Session, with_subscription=True)

@@ -20,8 +20,12 @@ from app.models.commercial_event import (
 from app.models.license import ShopLicense
 from app.models.plan import Plan
 from app.models.subscription import ShopSubscription
-from app.schemas.subscription import PaymentCreateRequest
-from app.schemas.subscription import CheckoutSessionRequest
+from app.schemas.subscription import (
+    CheckoutSessionRequest,
+    PaymentCreateRequest,
+    RazorpayVerifyPaymentRequest,
+    UpiPaymentReferenceRequest,
+)
 from app.services import commercial_service
 from app.services.commercial_transition_service import (
     ADMIN_SUBSCRIPTION_TRANSITIONS,
@@ -203,7 +207,7 @@ def test_early_same_plan_renewal_preserves_remaining_term_and_is_idempotent(
     )
 
 
-def test_cross_plan_payment_is_rejected_without_commercial_mutation(
+def test_confirmed_cross_plan_payment_requires_reconciliation_without_entitlement_mutation(
     db_session, make_shop, super_admin
 ):
     shop = make_shop("Cross Plan Payment Shop")
@@ -220,15 +224,20 @@ def test_cross_plan_payment_is_rejected_without_commercial_mutation(
         subscription_id=subscription.id
     ).one()
 
-    with pytest.raises(HTTPException) as exc:
-        commercial_service.record_payment(
-            db_session,
-            _manual_payment(shop.id, requested_plan.id, "cross-plan-payment"),
-            super_admin,
-        )
+    request = _manual_payment(shop.id, requested_plan.id, "cross-plan-payment")
+    payment = commercial_service.record_payment(
+        db_session,
+        request,
+        super_admin,
+    )
+    replay = commercial_service.record_payment(db_session, request, super_admin)
 
-    assert exc.value.status_code == 409
-    assert exc.value.detail["code"] == "PLAN_CHANGE_NOT_SUPPORTED"
+    assert replay.id == payment.id
+    assert payment.status == SubscriptionPaymentStatus.SUCCEEDED
+    assert payment.subscription_id is None
+    assert payment.failure_reason.startswith(
+        commercial_service.RECONCILIATION_REQUIRED_PREFIX
+    )
     db_session.expire_all()
     persisted = db_session.get(ShopSubscription, subscription.id)
     persisted_license = db_session.get(ShopLicense, license_row.id)
@@ -236,8 +245,87 @@ def test_cross_plan_payment_is_rejected_without_commercial_mutation(
     assert as_utc(persisted.current_period_end) == as_utc(original_expiry)
     assert persisted_license.status == LicenseStatus.ACTIVE
     assert as_utc(persisted_license.expires_at) == as_utc(original_expiry)
-    assert db_session.query(SubscriptionPayment).count() == 0
-    assert db_session.query(SubscriptionEvent).count() == 0
+    assert db_session.query(SubscriptionPayment).count() == 1
+    assert (
+        db_session.query(SubscriptionEvent)
+        .filter_by(event_type="payment_reconciliation_required")
+        .count()
+        == 1
+    )
+
+
+def test_reconciled_upi_payment_replay_surfaces_controlled_outcome(
+    db_session, make_shop
+):
+    shop = make_shop("Reconciled UPI Replay Shop")
+    plan = _plan(db_session, "reconciled-upi-replay")
+    payment = SubscriptionPayment(
+        shop_id=shop.id,
+        plan_id=plan.id,
+        provider=commercial_service.UPI_MANUAL_PROVIDER,
+        provider_payment_id="upi-reconciled-payment",
+        provider_order_id="upi-reconciled-payment",
+        status=SubscriptionPaymentStatus.SUCCEEDED,
+        amount=Decimal("100.00"),
+        currency="INR",
+        billing_interval=BillingInterval.MONTHLY,
+        failure_reason=(
+            f"{commercial_service.RECONCILIATION_REQUIRED_PREFIX} test fixture"
+        ),
+    )
+    db_session.add(payment)
+    db_session.commit()
+
+    response = commercial_service.submit_upi_payment_reference(
+        db_session,
+        shop.id,
+        UpiPaymentReferenceRequest(
+            payment_id=payment.provider_payment_id,
+            customer_reference="123456789012",
+        ),
+    )
+
+    assert response.status == "reconciliation_required"
+    assert response.subscription is None
+    assert response.payment.id == payment.id
+
+
+def test_cross_plan_payment_after_expiry_activates_requested_plan(
+    db_session, make_shop, super_admin
+):
+    shop = make_shop("Expired Cross Plan Shop")
+    expired_plan = _plan(db_session, "expired-plan")
+    requested_plan = _plan(db_session, "expired-recovery-plan")
+    expired_at = _now() - timedelta(days=1)
+    subscription = _subscription(
+        db_session,
+        shop.id,
+        expired_plan,
+        expires_at=expired_at,
+    )
+    license_row = db_session.query(ShopLicense).filter_by(
+        subscription_id=subscription.id
+    ).one()
+    subscription.status = SubscriptionStatus.EXPIRED
+    license_row.status = LicenseStatus.EXPIRED
+    db_session.commit()
+
+    payment = commercial_service.record_payment(
+        db_session,
+        _manual_payment(shop.id, requested_plan.id, "expired-cross-plan"),
+        super_admin,
+    )
+
+    db_session.refresh(subscription)
+    db_session.refresh(license_row)
+    assert payment.status == SubscriptionPaymentStatus.SUCCEEDED
+    assert payment.failure_reason is None
+    assert payment.subscription_id == subscription.id
+    assert subscription.plan_id == requested_plan.id
+    assert subscription.status == SubscriptionStatus.ACTIVE
+    assert as_utc(subscription.current_period_end) > _now()
+    assert license_row.status == LicenseStatus.ACTIVE
+    assert as_utc(license_row.expires_at) == as_utc(subscription.current_period_end)
 
 
 def test_cross_plan_checkout_is_rejected_before_gateway_access(
@@ -408,6 +496,73 @@ def _razorpay_setup(db, shop_id: int, plan: Plan, order_id: str):
     db.commit()
     db.refresh(payment)
     return payment, secret
+
+
+def test_confirmed_cross_plan_razorpay_payment_is_replay_safe(
+    db_session, make_shop
+):
+    shop = make_shop("Razorpay Cross Plan Shop")
+    current_plan = _plan(db_session, "razorpay-current")
+    requested_plan = _plan(db_session, "razorpay-requested")
+    original_expiry = _now() + timedelta(days=90)
+    subscription = _subscription(
+        db_session,
+        shop.id,
+        current_plan,
+        expires_at=original_expiry,
+    )
+    order_id = "order-cross-plan"
+    provider_payment_id = "payment-cross-plan"
+    payment, _webhook_secret = _razorpay_setup(
+        db_session,
+        shop.id,
+        requested_plan,
+        order_id,
+    )
+    key_secret = "phase5b-checkout-secret"
+    config = db_session.query(PaymentGatewayConfig).one()
+    config.key_secret_encrypted = encrypt_secret(key_secret)
+    db_session.commit()
+    signature = hmac.new(
+        key_secret.encode(),
+        f"{order_id}|{provider_payment_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    payload = RazorpayVerifyPaymentRequest(
+        razorpay_order_id=order_id,
+        razorpay_payment_id=provider_payment_id,
+        razorpay_signature=signature,
+    )
+
+    first = commercial_service.verify_razorpay_payment(
+        db_session,
+        shop.id,
+        payload,
+    )
+    replay = commercial_service.verify_razorpay_payment(
+        db_session,
+        shop.id,
+        payload,
+    )
+
+    assert first.status == "reconciliation_required"
+    assert replay.status == "reconciliation_required"
+    assert first.subscription is None
+    db_session.refresh(payment)
+    db_session.refresh(subscription)
+    assert payment.status == SubscriptionPaymentStatus.SUCCEEDED
+    assert payment.subscription_id is None
+    assert payment.failure_reason.startswith(
+        commercial_service.RECONCILIATION_REQUIRED_PREFIX
+    )
+    assert subscription.plan_id == current_plan.id
+    assert as_utc(subscription.current_period_end) == as_utc(original_expiry)
+    assert (
+        db_session.query(SubscriptionEvent)
+        .filter_by(event_type="payment_reconciliation_required")
+        .count()
+        == 1
+    )
 
 
 def test_webhook_event_is_durable_and_duplicate_does_not_reapply(
