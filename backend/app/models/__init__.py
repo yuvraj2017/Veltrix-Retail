@@ -50,6 +50,7 @@ from app.models.subscription import ShopSubscription
 from app.models.license import ShopLicense
 from app.models.commercial_event import (
     LicenseEvent,
+    PaymentWebhookEvent,
     PaymentGatewayConfig,
     SubscriptionEvent,
     SubscriptionPayment,
@@ -109,5 +110,6 @@ __all__ = [
     "SubscriptionPaymentStatus",
     "SubscriptionEvent",
     "LicenseEvent",
+    "PaymentWebhookEvent",
     "PaymentGatewayConfig",
 ]

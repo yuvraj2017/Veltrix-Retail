@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -10,6 +10,15 @@ class ShopSubscription(Base, IDMixin, TimestampMixin):
     __table_args__ = (
         Index("ix_shop_subscriptions_shop_status", "shop_id", "status"),
         Index("ix_shop_subscriptions_provider_subscription", "provider", "provider_subscription_id"),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'past_due', 'grace_period', "
+            "'suspended', 'expired', 'cancelled')",
+            name="ck_shop_subscriptions_status",
+        ),
+        CheckConstraint(
+            "billing_interval IN ('monthly', 'annual', 'legacy')",
+            name="ck_shop_subscriptions_billing_interval",
+        ),
     )
 
     shop_id = Column(ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)

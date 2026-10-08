@@ -658,6 +658,7 @@ def test_admin_plan_entitlement_subscription_and_overview_api(
             "plan_id": plan["id"],
             "status": "active",
             "billing_interval": "monthly",
+            "reason": "Provision tested commercial plan",
         },
     )
     assert assign_response.status_code == 200, assign_response.text
@@ -702,13 +703,14 @@ def test_payment_recording_is_idempotent_and_activates_subscription(
     request = PaymentCreateRequest(
         shop_id=shop.id,
         plan_id=plan.id,
-        amount=Decimal("999.00"),
+        amount=Decimal("100.00"),
         currency="INR",
         billing_interval="monthly",
         provider="manual",
         provider_payment_id="pay_123",
         provider_event_id="evt_123",
         status="succeeded",
+        reason="Bank settlement reconciled",
     )
 
     first = commercial_service.record_payment(db_session, request, super_admin)

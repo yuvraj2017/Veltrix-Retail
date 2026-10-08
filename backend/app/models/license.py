@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -9,6 +9,10 @@ class ShopLicense(Base, IDMixin, TimestampMixin):
     __tablename__ = "shop_licenses"
     __table_args__ = (
         Index("ix_shop_licenses_shop_status", "shop_id", "status"),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'suspended', 'expired', 'revoked')",
+            name="ck_shop_licenses_status",
+        ),
     )
 
     shop_id = Column(ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)

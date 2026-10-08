@@ -1,4 +1,16 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -27,6 +39,24 @@ class SubscriptionPayment(Base, IDMixin, TimestampMixin):
             "provider",
             "customer_reference",
             name="uq_subscription_payments_provider_customer_reference",
+        ),
+        UniqueConstraint(
+            "provider",
+            "provider_order_id",
+            name="uq_subscription_payments_provider_order",
+        ),
+        UniqueConstraint(
+            "provider",
+            "provider_event_id",
+            name="uq_subscription_payments_provider_event",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'submitted', 'succeeded', 'failed', 'refunded')",
+            name="ck_subscription_payments_status",
+        ),
+        CheckConstraint(
+            "billing_interval IS NULL OR billing_interval IN ('monthly', 'annual', 'legacy')",
+            name="ck_subscription_payments_billing_interval",
         ),
         Index("ix_subscription_payments_shop_status", "shop_id", "status"),
         Index("ix_subscription_payments_provider_event", "provider", "provider_event_id"),
@@ -65,6 +95,35 @@ class SubscriptionPayment(Base, IDMixin, TimestampMixin):
     plan = relationship("Plan")
     subscription = relationship("ShopSubscription")
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
+
+
+class PaymentWebhookEvent(Base, IDMixin, TimestampMixin):
+    __tablename__ = "payment_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "provider_event_id",
+            name="uq_payment_webhook_events_provider_event",
+        ),
+        CheckConstraint(
+            "status IN ('processing', 'applied', 'duplicate')",
+            name="ck_payment_webhook_events_status",
+        ),
+        Index("ix_payment_webhook_events_provider_created", "provider", "created_at"),
+    )
+
+    provider = Column(String(50), nullable=False)
+    provider_event_id = Column(String(150), nullable=False)
+    event_type = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False, default="processing", server_default="processing")
+    payment_id = Column(
+        ForeignKey("subscription_payments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    payload_sha256 = Column(String(64), nullable=False)
+
+    payment = relationship("SubscriptionPayment")
 
 
 class PaymentGatewayConfig(Base, IDMixin, TimestampMixin):

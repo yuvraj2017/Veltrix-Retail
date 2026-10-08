@@ -729,11 +729,11 @@ export default function AdminPlansPage() {
               <Field name="amount" label="Amount (INR)" placeholder="999" required />
               <Field name="currency" label="Currency" placeholder="INR" />
               <SelectBox name="billing_interval" label="Billing Interval" options={['monthly', 'annual']} />
-              <SelectBox name="status" label="Status" options={['succeeded', 'failed', 'pending', 'refunded']} />
-              <Field name="provider" label="Method" placeholder="manual" />
+              <SelectBox name="status" label="Status" options={['succeeded', 'failed', 'pending']} />
+              <input type="hidden" name="provider" value="manual" />
               <Field name="provider_payment_id" label="Payment Ref" placeholder="NEFT_991820" required />
             </div>
-            <Field name="reason" label="Notes / Ledger Reason" placeholder="Direct bank deposit confirmed." />
+            <Field name="reason" label="Notes / Ledger Reason" placeholder="Direct bank deposit confirmed." required />
             <button className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 dark:shadow-none">
               <BadgeIndianRupee size={16} />
               Record Payment
@@ -957,7 +957,7 @@ export default function AdminPlansPage() {
                 />
                 <SelectBox name="status" label="Status" options={['active', 'past_due', 'grace_period', 'suspended', 'expired', 'cancelled']} />
                 <SelectBox name="billing_interval" label="Cycle" options={['monthly', 'annual', 'legacy']} />
-                <Field name="reason" label="Reason" placeholder="Administrative plan change" />
+                <Field name="reason" label="Reason" placeholder="Administrative plan change" required />
                 <button className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 dark:shadow-none md:col-span-2">
                   <Save size={16} />
                   Assign Subscription

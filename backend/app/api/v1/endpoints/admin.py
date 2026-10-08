@@ -34,6 +34,7 @@ from app.schemas.subscription import (
     EntitlementDefinitionUpdateRequest,
     EntitlementValuePayload,
     LicenseResponse,
+    LicenseReplacementRequest,
     LicenseStatusUpdateRequest,
     PaymentCreateRequest,
     PaymentGatewayConfigRequest,
@@ -453,6 +454,27 @@ def update_license_status(
         db,
         license_id,
         payload.status,
+        current_user,
+        reason=payload.reason,
+        ip_address=_client_ip(request),
+    )
+
+
+@router.post(
+    "/subscriptions/{subscription_id}/licenses/replacement",
+    response_model=LicenseResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def issue_replacement_license(
+    subscription_id: int,
+    payload: LicenseReplacementRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return commercial_service.issue_replacement_license(
+        db,
+        subscription_id,
         current_user,
         reason=payload.reason,
         ip_address=_client_ip(request),

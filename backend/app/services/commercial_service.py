@@ -25,6 +25,7 @@ from app.core.subscription_status import (
 )
 from app.models.admin_audit_log import AuditAction
 from app.models.commercial_event import (
+    PaymentWebhookEvent,
     PaymentGatewayConfig,
     LicenseEvent,
     SubscriptionEvent,
@@ -78,9 +79,18 @@ from app.services.entitlement_service import (
 )
 from app.services.license_service import create_license_for_subscription
 from app.services.secret_service import decrypt_secret, encrypt_secret, mask_secret
+from app.services.commercial_transition_service import (
+    CommercialTransitionError,
+    as_utc,
+    purchased_term,
+    require_reason,
+    transition_payment,
+    transition_subscription,
+)
 
 RAZORPAY_PROVIDER = "razorpay"
 UPI_MANUAL_PROVIDER = "upi_manual"
+ADMIN_MANUAL_PROVIDER = "manual"
 SUPPORTED_PAYMENT_PROVIDERS = (RAZORPAY_PROVIDER, UPI_MANUAL_PROVIDER)
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
 UPI_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{2,256}@[A-Za-z0-9.-]{2,64}$")
@@ -98,8 +108,83 @@ def _normalize_code(value: str) -> str:
     return value.strip().lower().replace(" ", "-")
 
 
+def _transition_conflict(exc: CommercialTransitionError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+def _validate_paid_amount(plan: Plan, amount: Decimal, currency: str, billing_interval: str) -> None:
+    try:
+        purchased_term(billing_interval)
+    except CommercialTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    expected = _plan_amount(plan, billing_interval)
+    if Decimal(amount) != expected:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment amount does not match the selected plan price",
+        )
+    if currency.strip().upper() != plan.currency.upper():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment currency does not match the selected plan currency",
+        )
+
+
+def _same_payment_request(existing: SubscriptionPayment, payload: PaymentCreateRequest) -> bool:
+    return (
+        existing.shop_id == payload.shop_id
+        and existing.plan_id == payload.plan_id
+        and Decimal(existing.amount) == Decimal(payload.amount)
+        and existing.currency.upper() == payload.currency.upper()
+        and existing.billing_interval == payload.billing_interval
+        and existing.status == payload.status
+    )
+
+
+def _reject_unsupported_plan_change(
+    subscription: ShopSubscription | None,
+    plan_id: int,
+) -> None:
+    if subscription is None or subscription.plan_id == plan_id:
+        return
+
+    paid_expiry = as_utc(subscription.current_period_end)
+    has_remaining_paid_term = (
+        subscription.billing_interval != BillingInterval.LEGACY
+        and subscription.status
+        in {
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.PAST_DUE,
+            SubscriptionStatus.GRACE_PERIOD,
+            SubscriptionStatus.SUSPENDED,
+        }
+        and paid_expiry is not None
+        and paid_expiry > _utcnow()
+    )
+    if has_remaining_paid_term:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PLAN_CHANGE_NOT_SUPPORTED",
+                "message": (
+                    "Changing plans through payment is not supported yet. "
+                    "Renew the current plan or contact support."
+                ),
+                "details": {},
+            },
+        )
+
+
 def _require_shop(db: Session, shop_id: int) -> Shop:
     shop = db.query(Shop).filter(Shop.id == shop_id).first()
+    if not shop:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shop not found")
+    return shop
+
+
+def _lock_shop(db: Session, shop_id: int) -> Shop:
+    shop = db.query(Shop).filter(Shop.id == shop_id).with_for_update().first()
     if not shop:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shop not found")
     return shop
@@ -155,6 +240,26 @@ def _latest_license(db: Session, subscription_id: int) -> ShopLicense | None:
         db.query(ShopLicense)
         .filter(ShopLicense.subscription_id == subscription_id)
         .order_by(ShopLicense.created_at.desc(), ShopLicense.id.desc())
+        .first()
+    )
+
+
+def _latest_subscription_for_update(db: Session, shop_id: int) -> ShopSubscription | None:
+    return (
+        db.query(ShopSubscription)
+        .filter(ShopSubscription.shop_id == shop_id)
+        .order_by(ShopSubscription.created_at.desc(), ShopSubscription.id.desc())
+        .with_for_update()
+        .first()
+    )
+
+
+def _latest_license_for_update(db: Session, subscription_id: int) -> ShopLicense | None:
+    return (
+        db.query(ShopLicense)
+        .filter(ShopLicense.subscription_id == subscription_id)
+        .order_by(ShopLicense.created_at.desc(), ShopLicense.id.desc())
+        .with_for_update()
         .first()
     )
 
@@ -650,7 +755,12 @@ def assign_shop_subscription(
     if payload.billing_interval not in BillingInterval.ALL:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid billing interval")
 
-    subscription = _latest_subscription(db, shop_id)
+    try:
+        normalized_reason = require_reason(payload.reason)
+    except CommercialTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    subscription = _latest_subscription_for_update(db, shop_id)
     previous = None
     if subscription:
         previous = {
@@ -658,13 +768,27 @@ def assign_shop_subscription(
             "status": subscription.status,
             "billing_interval": subscription.billing_interval,
         }
+        if subscription.status != payload.status:
+            try:
+                transition_subscription(
+                    subscription,
+                    payload.status,
+                    reason=normalized_reason,
+                )
+            except CommercialTransitionError as exc:
+                raise _transition_conflict(exc) from exc
     else:
-        subscription = ShopSubscription(shop_id=shop_id)
+        subscription = ShopSubscription(
+            shop_id=shop_id,
+            status=payload.status,
+            billing_interval=payload.billing_interval,
+        )
         db.add(subscription)
 
     now = _utcnow()
     subscription.plan_id = plan.id
-    subscription.status = payload.status
+    if previous is None:
+        subscription.status = payload.status
     subscription.billing_interval = payload.billing_interval
     subscription.current_period_start = payload.current_period_start or subscription.current_period_start or now
     subscription.current_period_end = payload.current_period_end
@@ -683,7 +807,7 @@ def assign_shop_subscription(
                 shop_id=shop_id,
                 event_type="created",
                 new_value="license created for subscription",
-                reason=payload.reason,
+                reason=normalized_reason,
             )
         )
 
@@ -694,7 +818,7 @@ def assign_shop_subscription(
             event_type="assigned",
             previous_value=_json(previous) if previous is not None else None,
             new_value=_json({"plan_id": plan.id, "status": payload.status}),
-            reason=payload.reason,
+            reason=normalized_reason,
         )
     )
     _audit(
@@ -705,7 +829,7 @@ def assign_shop_subscription(
         entity_id=subscription.id,
         previous=previous,
         new={"shop_id": shop_id, "plan_id": plan.id, "status": payload.status},
-        reason=payload.reason,
+        reason=normalized_reason,
         ip_address=ip_address,
     )
     db.commit()
@@ -724,13 +848,38 @@ def update_subscription_status(
 ) -> ShopSubscription:
     if new_status not in SubscriptionStatus.ALL:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid subscription status")
-    subscription = db.query(ShopSubscription).filter(ShopSubscription.id == subscription_id).first()
-    if not subscription:
+    existing = (
+        db.query(ShopSubscription)
+        .filter(ShopSubscription.id == subscription_id)
+        .first()
+    )
+    if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+    _lock_shop(db, existing.shop_id)
+    subscription = (
+        db.query(ShopSubscription)
+        .filter(ShopSubscription.id == subscription_id)
+        .with_for_update()
+        .one()
+    )
     previous = subscription.status
-    subscription.status = new_status
-    if new_status == SubscriptionStatus.CANCELLED:
-        subscription.cancelled_at = _utcnow()
+    try:
+        normalized_reason = transition_subscription(
+            subscription,
+            new_status,
+            reason=reason,
+        )
+    except CommercialTransitionError as exc:
+        raise _transition_conflict(exc) from exc
+
+    if new_status == SubscriptionStatus.ACTIVE:
+        access_end = as_utc(subscription.current_period_end or subscription.trial_end_at)
+        if access_end is not None and access_end < _utcnow():
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Expired subscription time cannot be reactivated without renewal",
+            )
     db.add(
         SubscriptionEvent(
             subscription_id=subscription.id,
@@ -738,7 +887,7 @@ def update_subscription_status(
             event_type="status_changed",
             previous_value=previous,
             new_value=new_status,
-            reason=reason,
+            reason=normalized_reason,
         )
     )
     _audit(
@@ -749,7 +898,7 @@ def update_subscription_status(
         entity_id=subscription.id,
         previous=previous,
         new=new_status,
-        reason=reason,
+        reason=normalized_reason,
         ip_address=ip_address,
     )
     db.commit()
@@ -768,9 +917,20 @@ def update_license_status(
 ) -> ShopLicense:
     if new_status not in LicenseStatus.ALL:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid license status")
-    license_row = db.query(ShopLicense).filter(ShopLicense.id == license_id).first()
-    if not license_row:
+    existing = (
+        db.query(ShopLicense)
+        .filter(ShopLicense.id == license_id)
+        .first()
+    )
+    if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="License not found")
+    _lock_shop(db, existing.shop_id)
+    license_row = (
+        db.query(ShopLicense)
+        .filter(ShopLicense.id == license_id)
+        .with_for_update()
+        .one()
+    )
 
     normalized_reason = (reason or "").strip()
     if not normalized_reason:
@@ -897,6 +1057,77 @@ def update_license_status(
     return license_row
 
 
+def issue_replacement_license(
+    db: Session,
+    subscription_id: int,
+    actor: User,
+    *,
+    reason: str,
+    ip_address: str | None = None,
+) -> ShopLicense:
+    try:
+        normalized_reason = require_reason(reason)
+    except CommercialTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    existing_subscription = (
+        db.query(ShopSubscription)
+        .filter(ShopSubscription.id == subscription_id)
+        .first()
+    )
+    if not existing_subscription:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+    _lock_shop(db, existing_subscription.shop_id)
+    subscription = (
+        db.query(ShopSubscription)
+        .filter(ShopSubscription.id == subscription_id)
+        .with_for_update()
+        .one()
+    )
+
+    latest = _latest_license_for_update(db, subscription.id)
+    if not latest or latest.status != LicenseStatus.REVOKED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A replacement may only be issued after an explicit license revocation",
+        )
+
+    replacement, _raw_key = create_license_for_subscription(
+        db=db,
+        subscription=subscription,
+        status=LicenseStatus.PENDING,
+    )
+    db.flush()
+    db.add(
+        LicenseEvent(
+            license_id=replacement.id,
+            shop_id=subscription.shop_id,
+            event_type="replacement_issued",
+            previous_value=str(latest.id),
+            new_value=LicenseStatus.PENDING,
+            reason=normalized_reason,
+        )
+    )
+    _audit(
+        db,
+        actor=actor,
+        action=AuditAction.LICENSE_CHANGED,
+        entity_type="shop_license",
+        entity_id=replacement.id,
+        previous={"revoked_license_id": latest.id},
+        new={"status": replacement.status, "masked_key": replacement.masked_key},
+        reason=normalized_reason,
+        ip_address=ip_address,
+    )
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(replacement)
+    return replacement
+
+
 def record_payment(
     db: Session,
     payload: PaymentCreateRequest,
@@ -904,144 +1135,114 @@ def record_payment(
     *,
     ip_address: str | None = None,
 ) -> SubscriptionPayment:
-    _require_shop(db, payload.shop_id)
+    # Acquire the commercial aggregate lock before inserting a payment row.
+    # PostgreSQL otherwise takes an FK key-share lock during INSERT and two
+    # concurrent renewals can deadlock when both later request this row lock.
+    _lock_shop(db, payload.shop_id)
     plan = _require_assignable_plan(db, payload.plan_id)
+    if payload.provider.strip().lower() != ADMIN_MANUAL_PROVIDER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrative payment records must use the manual provider",
+        )
+    if payload.status not in {
+        SubscriptionPaymentStatus.PENDING,
+        SubscriptionPaymentStatus.SUCCEEDED,
+        SubscriptionPaymentStatus.FAILED,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid initial manual payment status",
+        )
+    try:
+        normalized_reason = require_reason(payload.reason)
+    except CommercialTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    _validate_paid_amount(plan, payload.amount, payload.currency, payload.billing_interval)
+
     existing = (
         db.query(SubscriptionPayment)
         .filter(
-            SubscriptionPayment.provider == payload.provider,
+            SubscriptionPayment.provider == ADMIN_MANUAL_PROVIDER,
             SubscriptionPayment.provider_payment_id == payload.provider_payment_id,
         )
         .first()
     )
     if existing:
+        if not _same_payment_request(existing, payload):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Payment identifier is already used for different commercial data",
+            )
         return existing
 
-    if payload.status not in SubscriptionPaymentStatus.ALL:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment status")
-
-    subscription = _latest_subscription(db, payload.shop_id)
     now = _utcnow()
-    if payload.status == SubscriptionPaymentStatus.SUCCEEDED:
-        current_period_end = (
-            now + timedelta(days=365)
-            if payload.billing_interval == BillingInterval.ANNUAL
-            else now + timedelta(days=30)
-        )
-        previous_subscription = None
-        if subscription:
-            previous_subscription = {
-                "plan_id": subscription.plan_id,
-                "status": subscription.status,
-                "billing_interval": subscription.billing_interval,
-            }
-        else:
-            subscription = ShopSubscription(shop_id=payload.shop_id)
-            db.add(subscription)
-
-        subscription.plan_id = plan.id
-        subscription.status = SubscriptionStatus.ACTIVE
-        subscription.billing_interval = payload.billing_interval
-        subscription.current_period_start = now
-        subscription.current_period_end = current_period_end
-        db.flush()
-
-        if not _latest_license(db, subscription.id):
-            license_row, _raw_key = create_license_for_subscription(
-                db=db,
-                subscription=subscription,
-                status=LicenseStatus.ACTIVE,
-            )
-            db.flush()
-            db.add(
-                LicenseEvent(
-                    license_id=license_row.id,
-                    shop_id=payload.shop_id,
-                    event_type="created",
-                    new_value="license created for paid subscription",
-                    reason=payload.reason,
-                )
-            )
-            _audit(
-                db,
-                actor=actor,
-                action=AuditAction.LICENSE_CHANGED,
-                entity_type="shop_license",
-                entity_id=license_row.id,
-                new={"status": license_row.status, "masked_key": license_row.masked_key},
-                reason=payload.reason,
-                ip_address=ip_address,
-            )
-
-        db.add(
-            SubscriptionEvent(
-                subscription_id=subscription.id,
-                shop_id=payload.shop_id,
-                event_type="payment_activated",
-                previous_value=_json(previous_subscription) if previous_subscription is not None else None,
-                new_value=_json(
-                    {
-                        "plan_id": plan.id,
-                        "status": SubscriptionStatus.ACTIVE,
-                        "billing_interval": payload.billing_interval,
-                    }
-                ),
-                provider=payload.provider,
-                provider_event_id=payload.provider_event_id,
-                reason=payload.reason,
-            )
-        )
-        _audit(
-            db,
-            actor=actor,
-            action=AuditAction.SUBSCRIPTION_CHANGED,
-            entity_type="shop_subscription",
-            entity_id=subscription.id,
-            previous=previous_subscription,
-            new={
-                "shop_id": payload.shop_id,
-                "plan_id": plan.id,
-                "status": SubscriptionStatus.ACTIVE,
-                "billing_interval": payload.billing_interval,
-            },
-            reason=payload.reason,
-            ip_address=ip_address,
-        )
-
     payment = SubscriptionPayment(
         shop_id=payload.shop_id,
         plan_id=payload.plan_id,
-        subscription_id=subscription.id if subscription else None,
-        provider=payload.provider,
-        provider_payment_id=payload.provider_payment_id,
+        provider=ADMIN_MANUAL_PROVIDER,
+        provider_payment_id=payload.provider_payment_id.strip(),
         provider_order_id=payload.provider_order_id,
         provider_event_id=payload.provider_event_id,
-        status=payload.status,
+        status=SubscriptionPaymentStatus.PENDING,
         amount=payload.amount,
         currency=payload.currency.upper(),
         billing_interval=payload.billing_interval,
-        paid_at=now if payload.status == SubscriptionPaymentStatus.SUCCEEDED else None,
-        failure_reason=payload.reason if payload.status == SubscriptionPaymentStatus.FAILED else None,
+        reviewed_at=now,
+        reviewed_by_user_id=actor.id,
     )
     db.add(payment)
-    db.flush()
-    _audit(
-        db,
-        actor=actor,
-        action=AuditAction.PAYMENT_CHANGED,
-        entity_type="subscription_payment",
-        entity_id=payment.id,
-        new={
-            "shop_id": payment.shop_id,
-            "status": payment.status,
-            "amount": str(payment.amount),
-            "currency": payment.currency,
-            "provider": payment.provider,
-        },
-        reason=payload.reason,
-        ip_address=ip_address,
-    )
-    db.commit()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        concurrent = (
+            db.query(SubscriptionPayment)
+            .filter(
+                SubscriptionPayment.provider == ADMIN_MANUAL_PROVIDER,
+                SubscriptionPayment.provider_payment_id == payload.provider_payment_id.strip(),
+            )
+            .first()
+        )
+        if concurrent and _same_payment_request(concurrent, payload):
+            return concurrent
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment identifier is already in use",
+        ) from exc
+
+    try:
+        if payload.status == SubscriptionPaymentStatus.SUCCEEDED:
+            transition_payment(payment, SubscriptionPaymentStatus.SUCCEEDED, effective_at=now)
+            _activate_paid_subscription(
+                db=db,
+                payment=payment,
+                reason=normalized_reason,
+            )
+        elif payload.status == SubscriptionPaymentStatus.FAILED:
+            transition_payment(payment, SubscriptionPaymentStatus.FAILED, effective_at=now)
+            payment.failure_reason = normalized_reason
+
+        _audit(
+            db,
+            actor=actor,
+            action=AuditAction.PAYMENT_CHANGED,
+            entity_type="subscription_payment",
+            entity_id=payment.id,
+            new={
+                "shop_id": payment.shop_id,
+                "status": payment.status,
+                "amount": str(payment.amount),
+                "currency": payment.currency,
+                "provider": payment.provider,
+            },
+            reason=normalized_reason,
+            ip_address=ip_address,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(payment)
     return payment
 
@@ -1447,6 +1648,7 @@ def create_checkout_session(
     plan = _require_assignable_plan(db, payload.plan_id)
     if payload.billing_interval not in (BillingInterval.MONTHLY, BillingInterval.ANNUAL):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid billing interval")
+    _reject_unsupported_plan_change(_latest_subscription(db, shop_id), plan.id)
     config = _active_payment_gateway(db)
     amount = _plan_amount(plan, payload.billing_interval)
     if amount <= Decimal("0.00"):
@@ -1582,7 +1784,10 @@ def submit_upi_payment_reference(
 
     payment.customer_reference = payload.customer_reference
     payment.submitted_at = _utcnow()
-    payment.status = SubscriptionPaymentStatus.SUBMITTED
+    try:
+        transition_payment(payment, SubscriptionPaymentStatus.SUBMITTED)
+    except CommercialTransitionError as exc:
+        raise _transition_conflict(exc) from exc
     try:
         db.commit()
     except IntegrityError as exc:
@@ -1610,44 +1815,92 @@ def _activate_paid_subscription(
     db: Session,
     payment: SubscriptionPayment,
     provider_event_id: str | None = None,
+    reason: str = "Verified payment",
 ) -> ShopSubscription:
     if not payment.plan_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
+    if payment.status != SubscriptionPaymentStatus.SUCCEEDED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment is not confirmed")
     plan = _require_assignable_plan(db, payment.plan_id)
-    now = _utcnow()
-    current_period_end = (
-        now + timedelta(days=365)
-        if payment.billing_interval == BillingInterval.ANNUAL
-        else now + timedelta(days=30)
-    )
-    subscription = _latest_subscription(db, payment.shop_id)
+    now = as_utc(payment.paid_at) or _utcnow()
+    try:
+        term = purchased_term(payment.billing_interval or "")
+    except CommercialTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    # Serializes both renewal of an existing subscription and first activation,
+    # where no subscription row exists yet.
+    _lock_shop(db, payment.shop_id)
+
+    subscription = _latest_subscription_for_update(db, payment.shop_id)
+    _reject_unsupported_plan_change(subscription, plan.id)
     previous = None
+    event_type = "payment_activated"
+    renewal_start = now
     if subscription:
         previous = {
             "plan_id": subscription.plan_id,
             "status": subscription.status,
             "billing_interval": subscription.billing_interval,
+            "current_period_end": subscription.current_period_end,
         }
+        existing_expiry = as_utc(subscription.current_period_end)
+        is_same_paid_plan = (
+            subscription.plan_id == plan.id
+            and subscription.billing_interval != BillingInterval.LEGACY
+            and subscription.status
+            in {
+                SubscriptionStatus.ACTIVE,
+                SubscriptionStatus.PAST_DUE,
+                SubscriptionStatus.GRACE_PERIOD,
+                SubscriptionStatus.SUSPENDED,
+            }
+        )
+        if is_same_paid_plan and existing_expiry and existing_expiry > now:
+            renewal_start = existing_expiry
+            event_type = "payment_renewed"
+        elif subscription.plan_id != plan.id:
+            event_type = "payment_plan_changed"
+        elif subscription.status in {SubscriptionStatus.EXPIRED, SubscriptionStatus.CANCELLED}:
+            event_type = "payment_recovered"
     else:
-        subscription = ShopSubscription(shop_id=payment.shop_id)
+        subscription = ShopSubscription(
+            shop_id=payment.shop_id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.PENDING,
+            billing_interval=payment.billing_interval or BillingInterval.MONTHLY,
+        )
         db.add(subscription)
 
+    current_period_end = renewal_start + term
+    if subscription.status != SubscriptionStatus.ACTIVE:
+        try:
+            transition_subscription(
+                subscription,
+                SubscriptionStatus.ACTIVE,
+                reason=reason,
+                operation="payment",
+                effective_at=now,
+            )
+        except CommercialTransitionError as exc:
+            raise _transition_conflict(exc) from exc
     subscription.plan_id = plan.id
-    subscription.status = SubscriptionStatus.ACTIVE
     subscription.billing_interval = payment.billing_interval or BillingInterval.MONTHLY
     subscription.provider = payment.provider
-    subscription.current_period_start = now
+    if event_type != "payment_renewed":
+        subscription.current_period_start = now
     subscription.current_period_end = current_period_end
     db.flush()
 
     payment.subscription_id = subscription.id
-    license_row = _latest_license(db, subscription.id)
+    license_row = _latest_license_for_update(db, subscription.id)
     if not license_row:
         license_row, _raw_key = create_license_for_subscription(
             db=db,
             subscription=subscription,
             status=LicenseStatus.ACTIVE,
         )
+        license_row.expires_at = current_period_end
         db.flush()
         db.add(
             LicenseEvent(
@@ -1655,10 +1908,19 @@ def _activate_paid_subscription(
                 shop_id=payment.shop_id,
                 event_type="created",
                 new_value="license created after verified payment",
+                reason=reason,
             )
         )
     else:
         previous_license_status = license_row.status
+        if previous_license_status == LicenseStatus.REVOKED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "The current license is revoked. A super administrator must "
+                    "issue an explicit replacement before this payment can be applied."
+                ),
+            )
         license_row.status = LicenseStatus.ACTIVE
         license_row.activated_at = now
         license_row.expires_at = current_period_end
@@ -1671,7 +1933,7 @@ def _activate_paid_subscription(
                     event_type="reactivated",
                     previous_value=previous_license_status,
                     new_value=LicenseStatus.ACTIVE,
-                    reason="License reactivated after verified payment",
+                    reason=reason,
                 )
             )
 
@@ -1679,18 +1941,20 @@ def _activate_paid_subscription(
         SubscriptionEvent(
             subscription_id=subscription.id,
             shop_id=payment.shop_id,
-            event_type="payment_verified",
+            event_type=event_type,
             previous_value=_json(previous) if previous is not None else None,
             new_value=_json(
                 {
                     "plan_id": plan.id,
                     "status": SubscriptionStatus.ACTIVE,
                     "billing_interval": payment.billing_interval,
+                    "renewal_start": renewal_start,
+                    "current_period_end": current_period_end,
                 }
             ),
             provider=payment.provider,
             provider_event_id=provider_event_id or payment.provider_event_id,
-            reason="Verified payment",
+            reason=reason,
         )
     )
     return subscription
@@ -1725,32 +1989,61 @@ def review_upi_payment(
     if payment.status != SubscriptionPaymentStatus.SUBMITTED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only submitted UPI payments can be reviewed.")
 
+    try:
+        normalized_reason = require_reason(payload.reason)
+    except CommercialTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not payment.plan_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
+    plan = _require_assignable_plan(db, payment.plan_id)
+    _validate_paid_amount(
+        plan,
+        payment.amount,
+        payment.currency,
+        payment.billing_interval or "",
+    )
+
     previous_status = payment.status
     payment.reviewed_at = _utcnow()
     payment.reviewed_by_user_id = actor.id
     subscription = None
-    if payload.status == SubscriptionPaymentStatus.SUCCEEDED:
-        payment.status = SubscriptionPaymentStatus.SUCCEEDED
-        payment.paid_at = payment.reviewed_at
-        payment.failure_reason = None
-        subscription = _activate_paid_subscription(db=db, payment=payment)
-    else:
-        payment.status = SubscriptionPaymentStatus.FAILED
-        payment.failure_reason = payload.reason or "UPI payment could not be verified."
+    try:
+        if payload.status == SubscriptionPaymentStatus.SUCCEEDED:
+            transition_payment(
+                payment,
+                SubscriptionPaymentStatus.SUCCEEDED,
+                effective_at=payment.reviewed_at,
+            )
+            payment.failure_reason = None
+            subscription = _activate_paid_subscription(
+                db=db,
+                payment=payment,
+                reason=normalized_reason,
+            )
+        else:
+            transition_payment(
+                payment,
+                SubscriptionPaymentStatus.FAILED,
+                effective_at=payment.reviewed_at,
+            )
+            payment.failure_reason = normalized_reason
 
-    db.flush()
-    _audit(
-        db,
-        actor=actor,
-        action=AuditAction.PAYMENT_CHANGED,
-        entity_type="subscription_payment",
-        entity_id=payment.id,
-        previous={"status": previous_status},
-        new={"status": payment.status, "provider": payment.provider, "shop_id": payment.shop_id},
-        reason=payload.reason or "UPI payment reviewed",
-        ip_address=ip_address,
-    )
-    db.commit()
+        db.flush()
+        _audit(
+            db,
+            actor=actor,
+            action=AuditAction.PAYMENT_CHANGED,
+            entity_type="subscription_payment",
+            entity_id=payment.id,
+            previous={"status": previous_status},
+            new={"status": payment.status, "provider": payment.provider, "shop_id": payment.shop_id},
+            reason=normalized_reason,
+            ip_address=ip_address,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(payment)
     if subscription:
         db.refresh(subscription)
@@ -1791,6 +2084,7 @@ def verify_razorpay_payment(
             SubscriptionPayment.provider_order_id == payload.razorpay_order_id,
             SubscriptionPayment.shop_id == shop_id,
         )
+        .with_for_update()
         .first()
     )
     if not payment:
@@ -1809,11 +2103,28 @@ def verify_razorpay_payment(
             payment=payment,
         )
 
-    payment.provider_payment_id = payload.razorpay_payment_id
-    payment.status = SubscriptionPaymentStatus.SUCCEEDED
-    payment.paid_at = _utcnow()
-    subscription = _activate_paid_subscription(db=db, payment=payment)
-    db.commit()
+    if payment.status != SubscriptionPaymentStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Payment cannot be verified from status {payment.status}",
+        )
+    if not payment.plan_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
+    plan = _require_assignable_plan(db, payment.plan_id)
+    _validate_paid_amount(plan, payment.amount, payment.currency, payment.billing_interval or "")
+
+    try:
+        payment.provider_payment_id = payload.razorpay_payment_id
+        transition_payment(payment, SubscriptionPaymentStatus.SUCCEEDED)
+        subscription = _activate_paid_subscription(
+            db=db,
+            payment=payment,
+            reason="Razorpay checkout signature verified",
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(payment)
     db.refresh(subscription)
     return PaymentVerificationResponse(
@@ -1838,24 +2149,41 @@ def handle_razorpay_webhook(
     if not signature or not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid webhook signature")
 
-    payload = json.loads(raw_body.decode("utf-8"))
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid webhook payload") from exc
     event_id = payload.get("id")
     event_type = payload.get("event")
-    if event_id:
-        existing = (
-            db.query(SubscriptionPayment)
-            .filter(
-                SubscriptionPayment.provider == RAZORPAY_PROVIDER,
-                SubscriptionPayment.provider_event_id == event_id,
-                SubscriptionPayment.status == SubscriptionPaymentStatus.SUCCEEDED,
-            )
-            .first()
-        )
-        if existing:
-            return {"status": "duplicate", "message": "Webhook already processed"}
-
     if event_type != "payment.captured":
         return {"status": "ignored", "message": "Webhook event ignored"}
+    if not event_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Webhook event id is required")
+
+    existing_event = (
+        db.query(PaymentWebhookEvent)
+        .filter(
+            PaymentWebhookEvent.provider == RAZORPAY_PROVIDER,
+            PaymentWebhookEvent.provider_event_id == event_id,
+        )
+        .first()
+    )
+    if existing_event:
+        return {"status": "duplicate", "message": "Webhook already processed"}
+
+    webhook_event = PaymentWebhookEvent(
+        provider=RAZORPAY_PROVIDER,
+        provider_event_id=event_id,
+        event_type=event_type,
+        status="processing",
+        payload_sha256=hashlib.sha256(raw_body).hexdigest(),
+    )
+    db.add(webhook_event)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return {"status": "duplicate", "message": "Webhook already processed"}
 
     payment_entity = (
         payload.get("payload", {})
@@ -1865,7 +2193,11 @@ def handle_razorpay_webhook(
     order_id = payment_entity.get("order_id")
     payment_id = payment_entity.get("id")
     if not order_id or not payment_id:
-        return {"status": "ignored", "message": "Webhook has no payment/order id"}
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Captured payment webhook has no payment/order id",
+        )
 
     payment = (
         db.query(SubscriptionPayment)
@@ -1873,20 +2205,59 @@ def handle_razorpay_webhook(
             SubscriptionPayment.provider == RAZORPAY_PROVIDER,
             SubscriptionPayment.provider_order_id == order_id,
         )
+        .with_for_update()
         .first()
     )
     if not payment:
-        return {"status": "ignored", "message": "No matching subscription checkout order"}
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No matching subscription checkout order",
+        )
+
+    if not payment.plan_id:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
+    plan = _require_assignable_plan(db, payment.plan_id)
+    _validate_paid_amount(plan, payment.amount, payment.currency, payment.billing_interval or "")
+    gateway_amount = payment_entity.get("amount")
+    gateway_currency = payment_entity.get("currency")
+    expected_minor = int((Decimal(payment.amount) * Decimal("100")).quantize(Decimal("1")))
+    if gateway_amount is None or int(gateway_amount) != expected_minor:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Webhook amount mismatch")
+    if not gateway_currency or str(gateway_currency).upper() != payment.currency.upper():
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Webhook currency mismatch")
 
     if payment.status == SubscriptionPaymentStatus.SUCCEEDED:
         payment.provider_event_id = payment.provider_event_id or event_id
+        webhook_event.payment_id = payment.id
+        webhook_event.status = "applied"
         db.commit()
         return {"status": "duplicate", "message": "Payment already processed"}
 
-    payment.provider_payment_id = payment_id
-    payment.provider_event_id = event_id
-    payment.status = SubscriptionPaymentStatus.SUCCEEDED
-    payment.paid_at = _utcnow()
-    _activate_paid_subscription(db=db, payment=payment, provider_event_id=event_id)
-    db.commit()
+    if payment.status != SubscriptionPaymentStatus.PENDING:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Payment cannot be confirmed from status {payment.status}",
+        )
+
+    try:
+        payment.provider_payment_id = payment_id
+        payment.provider_event_id = event_id
+        transition_payment(payment, SubscriptionPaymentStatus.SUCCEEDED)
+        _activate_paid_subscription(
+            db=db,
+            payment=payment,
+            provider_event_id=event_id,
+            reason="Razorpay payment.captured webhook verified",
+        )
+        webhook_event.payment_id = payment.id
+        webhook_event.status = "applied"
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"status": "processed", "message": "Payment webhook processed"}
