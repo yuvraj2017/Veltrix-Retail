@@ -23,6 +23,7 @@ import {
 import { vendorsApi } from '../features/vendors/api'
 import { vendorBillSchema } from '../features/vendors/schemas'
 import type { Vendor, VendorBill } from '../features/vendors/types'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 
 const today = new Date().toISOString().slice(0, 10)
 const PAYMENT_MODE_OPTIONS = [
@@ -69,6 +70,14 @@ export default function AddVendorBillPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [isLoadingBill, setIsLoadingBill] = useState(false)
+  const loadedFormRef = useRef(JSON.stringify(emptyForm))
+
+  useBranchDirtyGuard('vendor-bill-form', {
+    dirty: !isLoadingBill && JSON.stringify(form) !== loadedFormRef.current,
+    label: isEditMode ? 'Vendor bill changes' : 'New vendor bill',
+    message: 'Bill amounts, payment references, and vendor details belong to the current branch.',
+    discard: () => setForm(JSON.parse(loadedFormRef.current) as typeof emptyForm),
+  })
 
   const totalAmount = Number(form.total_amount || 0)
   const paidAmount = Number(form.paid_amount || 0)
@@ -92,6 +101,7 @@ export default function AddVendorBillPage() {
     if (!isEditMode || !activeBillId) {
       setBill(null)
       setForm(emptyForm)
+      loadedFormRef.current = JSON.stringify(emptyForm)
       return
     }
 
@@ -103,7 +113,7 @@ export default function AddVendorBillPage() {
         const billData = await vendorsApi.getVendorBill(activeBillId)
 
         setBill(billData)
-        setForm({
+        const loadedForm = {
           bill_number: billData.bill_number || '',
           bill_date: billData.bill_date || today,
           due_date: billData.due_date || '',
@@ -114,7 +124,9 @@ export default function AddVendorBillPage() {
           reminder_days_before: billData.reminder_days_before ?? 5,
           attachment_url: billData.attachment_url || '',
           notes: billData.notes || '',
-        })
+        }
+        loadedFormRef.current = JSON.stringify(loadedForm)
+        setForm(loadedForm)
       } catch (error) {
         setErrorMessage(
           error instanceof Error ? error.message : 'Unable to load bill'

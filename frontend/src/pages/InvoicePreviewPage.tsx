@@ -22,6 +22,8 @@ import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
 import { useToast } from '../components/ui/ToastProvider'
 import { useBranch } from '../context/BranchContext'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
+import { useBranchOperation } from '../hooks/useBranchOperation'
 
 const paymentMethods: { value: PaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -59,6 +61,7 @@ export default function InvoicePreviewPage() {
   const [searchParams] = useSearchParams()
   const { user, hasPermission } = useAuth()
   const { activeShop: shop } = useBranch()
+  const { captureBranchOperation, isCurrentBranchOperation } = useBranchOperation()
   const { showToast } = useToast()
 
   const id = Number(invoiceId)
@@ -80,6 +83,31 @@ export default function InvoicePreviewPage() {
   const [returnDispositions, setReturnDispositions] = useState<Record<number, 'damaged' | 'defective' | 'other_non_restock'>>({})
   const [isRefundingReturnId, setIsRefundingReturnId] = useState<number | null>(null)
   const [refundForms, setRefundForms] = useState<Record<number, RefundForm>>({})
+
+  const hasTransactionalDraft = Boolean(
+    paymentAmount || paymentReference || paymentNotes ||
+    returnReason || returnNotes ||
+    Object.values(returnQuantities).some(Boolean) ||
+    Object.values(restockQuantities).some(Boolean) ||
+    Object.values(refundForms).some((form) => form.amount || form.reference || form.notes),
+  )
+
+  useBranchDirtyGuard('invoice-payment-return', {
+    dirty: hasTransactionalDraft,
+    label: 'Invoice payment or return',
+    message: 'Payment, return, and refund entries are tied to this invoice and branch.',
+    discard: () => {
+      setPaymentAmount('')
+      setPaymentReference('')
+      setPaymentNotes('')
+      setReturnReason('')
+      setReturnNotes('')
+      setReturnQuantities({})
+      setRestockQuantities({})
+      setReturnDispositions({})
+      setRefundForms({})
+    },
+  })
 
   const shopInfo = useMemo(() => {
     return {
@@ -145,6 +173,7 @@ export default function InvoicePreviewPage() {
 
     try {
       setIsRecordingPayment(true)
+      const operation = captureBranchOperation()
       await billingApi.addInvoicePayment(invoice.id, {
         client_request_id: newRequestId(),
         amount,
@@ -152,6 +181,7 @@ export default function InvoicePreviewPage() {
         payment_reference: paymentReference || null,
         notes: paymentNotes || null,
       })
+      if (!isCurrentBranchOperation(operation)) return
       setPaymentAmount('')
       setPaymentReference('')
       setPaymentNotes('')
@@ -228,12 +258,14 @@ export default function InvoicePreviewPage() {
 
     try {
       setIsCreatingReturn(true)
+      const operation = captureBranchOperation()
       await billingApi.createInvoiceReturn(invoice.id, {
         client_request_id: newRequestId(),
         reason: returnReason.trim() || 'Customer return',
         notes: returnNotes.trim() || null,
         items,
       })
+      if (!isCurrentBranchOperation(operation)) return
       setReturnReason('')
       setReturnNotes('')
       setReturnQuantities({})
@@ -296,6 +328,7 @@ export default function InvoicePreviewPage() {
 
     try {
       setIsRefundingReturnId(returnRecord.id)
+      const operation = captureBranchOperation()
       await billingApi.addReturnRefund(returnRecord.id, {
         client_request_id: newRequestId(),
         amount,
@@ -303,6 +336,7 @@ export default function InvoicePreviewPage() {
         reference: form.reference.trim() || null,
         notes: form.notes.trim() || null,
       })
+      if (!isCurrentBranchOperation(operation)) return
       setRefundForms((current) => ({
         ...current,
         [returnRecord.id]: {

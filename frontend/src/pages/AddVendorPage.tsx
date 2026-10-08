@@ -20,6 +20,7 @@ import { useEffect, useRef } from 'react'
 import { vendorsApi } from '../features/vendors/api'
 import { vendorSchema } from '../features/vendors/schemas'
 import type { VendorCreatePayload } from '../features/vendors/types'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 
 // ── Status Dropdown ───────────────────────────────────────────────────────────
 
@@ -27,6 +28,25 @@ const statusOptions = [
   { value: 'active', label: 'Active', color: 'bg-emerald-500' },
   { value: 'inactive', label: 'Inactive', color: 'bg-slate-400' },
 ]
+
+const initialVendorForm = {
+  vendor_name: '',
+  company_name: '',
+  email: '',
+  phone: '',
+  alternate_phone: '',
+  tax_number: '',
+  address_line_1: '',
+  address_line_2: '',
+  city: '',
+  state: '',
+  postal_code: '',
+  country: 'India',
+  payment_terms: 'Net 15',
+  default_reminder_days: 7,
+  notes: '',
+  is_active: true,
+}
 
 function StatusDropdown({
   value,
@@ -110,27 +130,17 @@ function StatusDropdown({
 export default function AddVendorPage() {
   const navigate = useNavigate()
 
-  const [form, setForm] = useState({
-    vendor_name: '',
-    company_name: '',
-    email: '',
-    phone: '',
-    alternate_phone: '',
-    tax_number: '',
-    address_line_1: '',
-    address_line_2: '',
-    city: '',
-    state: '',
-    postal_code: '',
-    country: 'India',
-    payment_terms: 'Net 15',
-    default_reminder_days: 7,
-    notes: '',
-    is_active: true,
-  })
+  const [form, setForm] = useState(initialVendorForm)
 
   const [errorMessage, setErrorMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  useBranchDirtyGuard('add-vendor', {
+    dirty: JSON.stringify(form) !== JSON.stringify(initialVendorForm),
+    label: 'New vendor',
+    message: 'Unsaved vendor details belong to the current branch.',
+    discard: () => setForm(initialVendorForm),
+  })
 
   const updateField = (
     field: keyof typeof form,

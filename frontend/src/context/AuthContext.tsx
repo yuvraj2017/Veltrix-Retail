@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api } from '../lib/api'
 import { queryClient } from '../lib/queryClient'
 import { clearTabSession, getTabToken, getTabUser, saveTabSession } from '../lib/tab-session'
+import { clearPosDraftTabState } from '../lib/pos-drafts'
 
 type AuthUser = {
   id: number
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     clearTabSession()
+    clearPosDraftTabState()
     saveTabSession(payload.access_token, authUser)
     queryClient.clear()
 
@@ -121,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     clearTabSession()
+    clearPosDraftTabState()
     queryClient.clear()
     setToken(null)
     setUser(null)

@@ -33,6 +33,7 @@ import { useToast } from '../components/ui/ToastProvider'
 import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
 import { useBranch } from '../context/BranchContext'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
 
 type BillingInterval = 'monthly' | 'annual'
@@ -901,6 +902,16 @@ function UpiPaymentModal({
 }) {
   const [reference, setReference] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useBranchDirtyGuard('subscription-payment', {
+    dirty: Boolean(reference.trim()),
+    label: 'Subscription payment reference',
+    message: 'This payment reference belongs to the selected branch subscription.',
+    discard: () => {
+      setReference('')
+      onClose()
+    },
+  })
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {

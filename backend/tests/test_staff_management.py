@@ -393,6 +393,7 @@ def test_ownership_transfer_is_atomic_and_permissions_change_without_new_jwt(
     client, db_session, make_user, auth_headers
 ):
     owner = make_user(email="transfer-owner@example.com")
+    second = _create_second_branch(db_session, owner, "transfer-owner-access")
     target = make_user(
         email="transfer-target@example.com",
         shop=owner.shop,
@@ -416,6 +417,11 @@ def test_ownership_transfer_is_atomic_and_permissions_change_without_new_jwt(
     db_session.refresh(target_membership)
     assert owner_membership.role == MembershipRole.ADMIN
     assert target_membership.role == MembershipRole.OWNER
+    assert {
+        branch.shop_id
+        for branch in target_membership.branch_memberships
+        if branch.status == MembershipStatus.ACTIVE
+    } == {owner.shop_id, second.id}
     assert client.get("/api/v1/auth/me", headers=owner_headers).json()["membership_role"] == MembershipRole.ADMIN
     assert client.get("/api/v1/auth/me", headers=target_headers).json()["membership_role"] == MembershipRole.OWNER
     assert client.post(

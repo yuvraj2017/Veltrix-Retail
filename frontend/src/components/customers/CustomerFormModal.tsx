@@ -4,6 +4,7 @@ import { Loader2, UserRound, X } from 'lucide-react'
 import { getApiErrorMessage } from '../../lib/api-error'
 import { customerSchema, type CustomerFormValues } from '../../features/customers/schemas'
 import type { CustomerPayload, CustomerRecord } from '../../features/customers/types'
+import { useBranchDirtyGuard } from '../../hooks/useBranchDirtyGuard'
 
 type CustomerFormModalProps = {
   open: boolean
@@ -52,6 +53,17 @@ export function CustomerFormModal({
 }: CustomerFormModalProps) {
   const [values, setValues] = useState<CustomerFormValues>(emptyValues)
   const [errorMessage, setErrorMessage] = useState('')
+  const baseline = toFormValues(customer)
+
+  useBranchDirtyGuard('customer-form', {
+    dirty: open && JSON.stringify(values) !== JSON.stringify(baseline),
+    label: mode === 'create' ? 'New customer' : 'Customer changes',
+    message: 'Unsaved customer details belong to the current branch.',
+    discard: () => {
+      setValues(baseline)
+      onClose()
+    },
+  })
 
   useEffect(() => {
     if (!open) return

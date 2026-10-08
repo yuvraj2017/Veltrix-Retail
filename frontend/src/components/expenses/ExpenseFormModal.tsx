@@ -15,6 +15,7 @@ type ExpenseFormModalProps = {
   loading: boolean
   onClose: () => void
   onSubmit: (values: ExpenseFormValues) => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 const getTodayDate = () => new Date().toISOString().slice(0, 10)
@@ -28,13 +29,14 @@ export function ExpenseFormModal({
   loading,
   onClose,
   onSubmit,
+  onDirtyChange,
 }: ExpenseFormModalProps) {
   const {
     register,
     control,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
@@ -60,11 +62,16 @@ export function ExpenseFormModal({
     })
   }, [expense, open, reset])
 
+  useEffect(() => {
+    onDirtyChange?.(open && isDirty)
+    return () => onDirtyChange?.(false)
+  }, [isDirty, onDirtyChange, open])
+
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 sm:items-center sm:p-6 dark:bg-black/70">
-      <div className="w-full max-w-2xl overflow-hidden rounded-t-[2rem] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.28)] dark:bg-slate-900 dark:shadow-[0_30px_80px_rgba(0,0,0,0.65)] sm:rounded-[2rem]">
+      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[2rem] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.28)] dark:bg-slate-900 dark:shadow-[0_30px_80px_rgba(0,0,0,0.65)] sm:max-h-[88vh] sm:rounded-[2rem]">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-5 dark:border-slate-800 sm:px-7">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
@@ -89,7 +96,7 @@ export function ExpenseFormModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="min-h-0 space-y-5 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
           {error && (
             <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
               {error}

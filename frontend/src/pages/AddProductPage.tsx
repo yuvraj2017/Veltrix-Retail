@@ -13,6 +13,7 @@ import { useForm, type FieldErrors } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { createProduct } from '../features/products/api'
 import { productSchema, type ProductFormValues } from '../features/products/schemas'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 
 const categories = ['Apparel', 'Electronics', 'Accessories', 'Footwear', 'Home Decor', 'Other']
 const MAX_IMAGES = 5
@@ -69,9 +70,10 @@ export default function AddProductPage() {
   const {
     register,
     handleSubmit,
+    reset,
     setValue,
     watch,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
@@ -94,6 +96,17 @@ export default function AddProductPage() {
   })
 
   const selectedCategory = watch('category')
+
+  useBranchDirtyGuard('add-product', {
+    dirty: isDirty || images.length > 0,
+    label: 'New product',
+    message: 'Unsaved product and opening-stock details belong to the current branch.',
+    discard: () => {
+      images.forEach((image) => URL.revokeObjectURL(image.url))
+      setImages([])
+      reset()
+    },
+  })
 
   useEffect(() => {
     return () => {

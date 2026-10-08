@@ -4,6 +4,8 @@ import { CreditCard, X, Check, Banknote, Smartphone, Building2, FileText } from 
 import { vendorsApi } from "../../features/vendors/api";
 import type { VendorBill } from "../../features/vendors/types";
 import { vendorPaymentSchema } from "../../features/vendors/schemas";
+import { useBranchDirtyGuard } from "../../hooks/useBranchDirtyGuard";
+import { useBranchOperation } from "../../hooks/useBranchOperation";
 
 type AddPaymentModalProps = {
   bill: VendorBill | null;
@@ -22,6 +24,7 @@ const PAYMENT_MODES = [
 const today = new Date().toISOString().slice(0, 10);
 
 export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPaymentModalProps) {
+  const { captureBranchOperation, isCurrentBranchOperation } = useBranchOperation();
   const [paymentDate, setPaymentDate] = useState(today);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("cash");
@@ -32,6 +35,19 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
   const [clientRequestId, setClientRequestId] = useState<string | null>(null);
 
   const remainingAmount = useMemo(() => Number(bill?.remaining_amount || 0), [bill]);
+
+  useBranchDirtyGuard(`vendor-payment-${bill?.id ?? "closed"}`, {
+    dirty: Boolean(bill) && Boolean(amount || referenceNumber || notes || clientRequestId || paymentDate !== today || paymentMode !== "cash"),
+    label: "Vendor payment",
+    message: "Payment amount and settlement references belong to this branch and bill.",
+    discard: () => {
+      setAmount("");
+      setReferenceNumber("");
+      setNotes("");
+      setClientRequestId(null);
+      onClose();
+    },
+  });
 
   if (!bill) return null;
 
@@ -59,6 +75,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
       setIsSaving(true);
       const requestKey = clientRequestId || crypto.randomUUID();
       setClientRequestId(requestKey);
+      const operation = captureBranchOperation();
       await vendorsApi.addBillPayment(bill.id, {
         client_request_id: requestKey,
         payment_date: parsed.data.payment_date,
@@ -67,6 +84,7 @@ export default function AddPaymentModal({ bill, onClose, onSuccess }: AddPayment
         reference_number: parsed.data.reference_number,
         notes: parsed.data.notes,
       });
+      if (!isCurrentBranchOperation(operation)) return;
       setClientRequestId(null);
       onSuccess();
     } catch (error) {

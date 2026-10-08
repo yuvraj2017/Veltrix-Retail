@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
 import { useBranch } from '../context/BranchContext'
 import { branchQueryKey, branchQueryPrefix } from '../lib/branch-query-keys'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 import { useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -168,6 +169,38 @@ export default function PurchaseOrdersPage() {
     setDraftItems([])
     setMessage('')
   }
+
+  const hasOrderDraft = Boolean(
+    editingId || vendorId || expectedDate || notes.trim() || taxAmount !== '0' || draftItems.length,
+  )
+  const hasReceiptDraft = Boolean(
+    Object.values(receiptQuantities).some(Boolean) ||
+    Object.values(receiptCosts).some(Boolean) ||
+    receiptNotes.trim() ||
+    receiptRequestId,
+  )
+  const hasReturnDraft = Boolean(
+    Object.values(returnQuantities).some(Boolean) || returnNotes.trim() || returnRequestId,
+  )
+
+  useBranchDirtyGuard('purchasing-workflow', {
+    dirty: hasOrderDraft || hasReceiptDraft || hasReturnDraft,
+    label: 'Purchasing work',
+    message: 'Unsaved purchase order, receipt, or return details belong to the current branch.',
+    discard: () => {
+      resetOrderForm()
+      setReceiptQuantities({})
+      setReceiptCosts({})
+      setReceiptDate(today)
+      setReceiptNotes('')
+      setReceiptRequestId(null)
+      setReturnQuantities({})
+      setReturnDate(today)
+      setReturnReason('damaged')
+      setReturnNotes('')
+      setReturnRequestId(null)
+    },
+  })
 
   const loadDraft = (po: PurchaseOrder) => {
     setEditingId(po.id)

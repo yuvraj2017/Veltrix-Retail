@@ -29,6 +29,7 @@ backend/logs/
 *.temp
 
 # Database dumps and local backups
+backend/backups/
 *.sql
 *.dump
 *.bak
@@ -36,6 +37,9 @@ backend/logs/
 *.sqlite
 *.sqlite3
 *.db
+
+# Accidental local command-output artifact
+/ponsive multi-branch selection and cache isolation*
 
 # Generated uploads and documents
 uploads/**

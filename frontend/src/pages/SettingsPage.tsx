@@ -12,7 +12,7 @@ import {
   UserCog2,
   WalletCards,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAuth } from '../context/AuthContext'
 import { PERMISSIONS } from '../features/staff/constants'
@@ -35,6 +35,7 @@ import type {
   UpdateShopPayload,
   WorkspacePreferences,
 } from '../features/settings/types'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 import { getApiErrorMessage } from '../lib/api-error'
 import { useBranch } from '../context/BranchContext'
 
@@ -274,6 +275,31 @@ export default function SettingsPage() {
     new_password: '',
     confirm_password: '',
   })
+  const shopBaselineRef = useRef(JSON.stringify(shopForm))
+  const accountBaselineRef = useRef(JSON.stringify(accountForm))
+  const workspaceBaselineRef = useRef(JSON.stringify(workspacePreferences))
+  const notificationBaselineRef = useRef(JSON.stringify(notificationPreferences))
+
+  const settingsDirty = !loading && Boolean(
+    JSON.stringify(shopForm) !== shopBaselineRef.current ||
+    JSON.stringify(accountForm) !== accountBaselineRef.current ||
+    JSON.stringify(workspacePreferences) !== workspaceBaselineRef.current ||
+    JSON.stringify(notificationPreferences) !== notificationBaselineRef.current ||
+    passwordForm.current_password || passwordForm.new_password || passwordForm.confirm_password,
+  )
+
+  useBranchDirtyGuard('settings-forms', {
+    dirty: settingsDirty,
+    label: 'Settings changes',
+    message: 'Unsaved branch settings and account changes will be discarded.',
+    discard: () => {
+      setShopForm(JSON.parse(shopBaselineRef.current) as UpdateShopPayload)
+      setAccountForm(JSON.parse(accountBaselineRef.current) as typeof accountForm)
+      setWorkspacePreferences(JSON.parse(workspaceBaselineRef.current) as WorkspacePreferences)
+      setNotificationPreferences(JSON.parse(notificationBaselineRef.current) as NotificationPreferences)
+      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' })
+    },
+  })
 
   const [storeBanner, setStoreBanner] = useState<BannerState>({ error: '', success: '' })
 
@@ -299,7 +325,7 @@ export default function SettingsPage() {
 
         setProfile(profileData)
         setShop(shopData)
-        setShopForm({
+        const loadedShopForm = {
           name: shopData.name,
           category: shopData.category,
           email: shopData.email,
@@ -311,17 +337,25 @@ export default function SettingsPage() {
           gstin: shopData.gstin || '',
           state: shopData.state || '',
           gst_state_code: shopData.gst_state_code || '',
-        })
-        setAccountForm({
+        }
+        const loadedAccountForm = {
           full_name: profileData.full_name || '',
           phone: profileData.phone || '',
           profile_image_url: profileData.profile_image_url || '',
           language: profileData.language || 'English (US)',
           timezone: profileData.timezone || '(GMT+05:30) India Standard Time',
           two_factor_enabled: Boolean(profileData.two_factor_enabled),
-        })
-        setWorkspacePreferences(loadWorkspacePreferences())
-        setNotificationPreferences(loadNotificationPreferences())
+        }
+        const loadedWorkspace = loadWorkspacePreferences()
+        const loadedNotifications = loadNotificationPreferences()
+        shopBaselineRef.current = JSON.stringify(loadedShopForm)
+        accountBaselineRef.current = JSON.stringify(loadedAccountForm)
+        workspaceBaselineRef.current = JSON.stringify(loadedWorkspace)
+        notificationBaselineRef.current = JSON.stringify(loadedNotifications)
+        setShopForm(loadedShopForm)
+        setAccountForm(loadedAccountForm)
+        setWorkspacePreferences(loadedWorkspace)
+        setNotificationPreferences(loadedNotifications)
       } catch (error) {
         if (!cancelled) {
           const message = getApiErrorMessage(error, 'Unable to load settings')
@@ -367,6 +401,7 @@ export default function SettingsPage() {
         gst_state_code: shopForm.gst_state_code || null,
       })
       setShop(updated)
+      shopBaselineRef.current = JSON.stringify(shopForm)
       showToast({
         title: 'Store updated',
         message: 'Store identity updated successfully.',
@@ -403,6 +438,7 @@ export default function SettingsPage() {
       })
 
       setProfile(updated)
+      accountBaselineRef.current = JSON.stringify(accountForm)
       showToast({
         title: 'Account updated',
         message: 'Account preferences updated successfully.',
@@ -425,6 +461,8 @@ export default function SettingsPage() {
       setSavingWorkspace(true)
       saveWorkspacePreferences(workspacePreferences)
       saveNotificationPreferences(notificationPreferences)
+      workspaceBaselineRef.current = JSON.stringify(workspacePreferences)
+      notificationBaselineRef.current = JSON.stringify(notificationPreferences)
       showToast({
         title: 'Workspace saved',
         message: 'Workspace preferences saved for this browser.',

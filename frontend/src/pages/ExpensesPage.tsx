@@ -17,6 +17,7 @@ import { createExpense, deleteExpense, getExpenseAnalytics, getExpenses, updateE
 import { expenseCategories, paymentModes, type ExpenseFormValues } from '../features/expenses/schemas'
 import type { Expense, ExpenseAnalytics, ExpensePayload, ExpenseRange } from '../features/expenses/types'
 import { getApiErrorMessage } from '../lib/api-error'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
 
 const emptyAnalytics: ExpenseAnalytics = {
   selected_range: 'all',
@@ -76,6 +77,19 @@ export default function ExpensesPage() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [submitLoading, setSubmitLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [expenseFormDirty, setExpenseFormDirty] = useState(false)
+
+  useBranchDirtyGuard('expense-form', {
+    dirty: modalOpen && expenseFormDirty,
+    label: selectedExpense ? 'Expense changes' : 'New expense',
+    message: 'This unsaved expense belongs to the current branch.',
+    discard: () => {
+      setExpenseFormDirty(false)
+      setModalOpen(false)
+      setSelectedExpense(null)
+      setModalError('')
+    },
+  })
 
   const maxTrendValue = useMemo(
     () => Math.max(...analytics.trend.map((point) => point.total), 1),
@@ -638,6 +652,7 @@ export default function ExpensesPage() {
         loading={submitLoading}
         onClose={handleCloseModal}
         onSubmit={handleSaveExpense}
+        onDirtyChange={setExpenseFormDirty}
       />
     </>
   )

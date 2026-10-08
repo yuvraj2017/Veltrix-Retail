@@ -4,11 +4,15 @@ from app.core.membership import MembershipRole, MembershipStatus
 from app.core.security import create_access_token
 from app.core.shop_status import ShopStatus
 from app.models.business_audit_log import BusinessAuditAction, BusinessAuditLog
+from app.models.customer import Customer
 from app.models.entitlement import EntitlementDefinition, PlanEntitlement
+from app.models.license import ShopLicense
 from app.models.membership import BranchMembership, OrganizationMembership
+from app.models.product import Product
 from app.models.shop import Shop
 from app.models.subscription import ShopSubscription
 from app.models.user import User
+from app.models.vendor import Vendor
 from app.services.subscription_service import ensure_legacy_subscription_for_shop
 
 
@@ -162,6 +166,102 @@ def test_activation_requires_branch_local_entitlement(client, db_session, make_u
     )
     assert activated.status_code == 200, activated.text
     assert activated.json()["status"] == ShopStatus.ACTIVE
+
+
+def test_supported_branch_provisioning_journey_is_isolated_and_revocable(
+    client,
+    db_session,
+    make_user,
+    admin_headers,
+):
+    owner = make_user(email="branch-release-owner@example.com")
+    staff = make_user(
+        email="branch-release-staff@example.com",
+        shop=owner.shop,
+        membership_role=MembershipRole.MANAGER,
+    )
+    original_shop_id = owner.shop_id
+    original_default_id = owner.shop_id
+    source_subscription = (
+        db_session.query(ShopSubscription)
+        .filter_by(shop_id=original_shop_id)
+        .order_by(ShopSubscription.id.desc())
+        .one()
+    )
+
+    created = _create(client, owner, "Release Journey Branch")
+    assert created.status_code == 201, created.text
+    branch_id = created.json()["id"]
+    assert created.json()["status"] == ShopStatus.PENDING
+    assert created.json()["is_default_branch"] is False
+    assert db_session.query(ShopSubscription).filter_by(shop_id=branch_id).count() == 0
+    assert db_session.query(ShopLicense).filter_by(shop_id=branch_id).count() == 0
+    assert db_session.query(Product).filter_by(shop_id=branch_id).count() == 0
+    assert db_session.query(Customer).filter_by(shop_id=branch_id).count() == 0
+    assert db_session.query(Vendor).filter_by(shop_id=branch_id).count() == 0
+
+    staff_membership = _membership(db_session, staff)
+    assert (
+        db_session.query(BranchMembership)
+        .filter_by(
+            organization_membership_id=staff_membership.id,
+            shop_id=branch_id,
+        )
+        .count()
+        == 0
+    )
+    assert client.get(
+        "/api/v1/products", headers=_headers(staff, branch_id)
+    ).status_code == 403
+
+    provisioned = client.post(
+        f"/api/v1/admin/shops/{branch_id}/subscription",
+        headers=admin_headers,
+        json={
+            "plan_id": source_subscription.plan_id,
+            "status": "active",
+            "billing_interval": "legacy",
+            "reason": "Isolated Phase 4 release provisioning test",
+        },
+    )
+    assert provisioned.status_code == 200, provisioned.text
+    assert provisioned.json()["shop_id"] == branch_id
+    assert db_session.query(ShopLicense).filter_by(shop_id=branch_id).count() == 1
+
+    activated = client.post(
+        f"/api/v1/branches/{branch_id}/activate",
+        headers=_headers(owner),
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == ShopStatus.ACTIVE
+
+    owner_branches = client.get("/api/v1/branches", headers=_headers(owner))
+    staff_branches = client.get("/api/v1/branches", headers=_headers(staff))
+    assert branch_id in {row["id"] for row in owner_branches.json()["items"]}
+    assert branch_id not in {row["id"] for row in staff_branches.json()["items"]}
+
+    granted = client.post(
+        f"/api/v1/organizations/current/staff/{staff_membership.id}/branches/{branch_id}",
+        headers=_headers(owner),
+    )
+    assert granted.status_code == 200, granted.text
+    assert client.get(
+        "/api/v1/products", headers=_headers(staff, branch_id)
+    ).status_code == 200
+
+    revoked = client.delete(
+        f"/api/v1/organizations/current/staff/{staff_membership.id}/branches/{branch_id}",
+        headers=_headers(owner),
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert client.get(
+        "/api/v1/products", headers=_headers(staff, branch_id)
+    ).status_code == 403
+
+    db_session.expire_all()
+    assert db_session.get(User, owner.id).shop_id == original_shop_id
+    assert db_session.get(User, staff.id).shop_id == original_shop_id
+    assert db_session.get(Shop, original_default_id).is_default_branch is True
 
 
 def test_inactive_branch_is_denied_for_header_and_preferred_fallback(

@@ -1,11 +1,9 @@
 import { Building2, Check, ChevronDown, Loader2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
 
 import { useBranch } from '../../context/BranchContext'
 
 export function BranchSelector() {
-  const location = useLocation()
   const {
     branches,
     selectedBranch,
@@ -16,8 +14,7 @@ export function BranchSelector() {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
-  const posLocked = location.pathname.startsWith('/billing/new')
-  const disabled = isSwitching || switchBlocked || posLocked
+  const disabled = isSwitching || switchBlocked
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -59,11 +56,7 @@ export function BranchSelector() {
     }
   }
 
-  const lockedReason = posLocked
-    ? 'Finish or leave the current sale before switching branches.'
-    : switchBlocked
-      ? 'Wait for the current operation to finish.'
-      : undefined
+  const lockedReason = switchBlocked ? 'Wait for the current operation to finish.' : undefined
 
   return (
     <div ref={rootRef} className="relative min-w-0" data-testid="branch-selector">

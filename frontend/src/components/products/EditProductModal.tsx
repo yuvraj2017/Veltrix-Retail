@@ -22,6 +22,8 @@ import { productSchema, type ProductFormValues } from '../../features/products/s
 import type { Product, StockMovement } from '../../features/products/types'
 import { useAuth } from '../../context/AuthContext'
 import { PERMISSIONS } from '../../features/staff/constants'
+import { useBranchDirtyGuard } from '../../hooks/useBranchDirtyGuard'
+import { useBranchOperation } from '../../hooks/useBranchOperation'
 
 const categories = ['Apparel', 'Electronics', 'Accessories', 'Footwear', 'Home Decor', 'Other']
 const MAX_IMAGES = 5
@@ -124,6 +126,7 @@ export function EditProductModal({
   loading: boolean
 }) {
   const { hasPermission } = useAuth()
+  const { captureBranchOperation, isCurrentBranchOperation } = useBranchOperation()
   const canAdjustStock = hasPermission(PERMISSIONS.inventoryAdjust)
   const canCountStock = hasPermission(PERMISSIONS.inventoryCount)
   const [newImages, setNewImages] = useState<PreviewImage[]>([])
@@ -151,7 +154,7 @@ export function EditProductModal({
     handleSubmit,
     reset,
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
   })
@@ -197,6 +200,15 @@ export function EditProductModal({
       newImages.forEach((image) => URL.revokeObjectURL(image.url))
     }
   }, [newImages])
+
+  useBranchDirtyGuard(`product-editor-${product?.id ?? 'closed'}`, {
+    dirty: Boolean(product) && (
+      isDirty || newImages.length > 0 || Boolean(adjustmentQuantity || physicalCount || adjustmentNotes || inventoryRequestId)
+    ),
+    label: 'Product and inventory changes',
+    message: 'Product edits and stock-count inputs belong to the current branch.',
+    discard: onClose,
+  })
 
   if (!product) return null
 
@@ -244,6 +256,7 @@ export function EditProductModal({
     setInventorySubmitting(true)
     setInventoryMessage('')
     try {
+      const operation = captureBranchOperation()
       const result = inventoryMode === 'adjustment'
         ? await createStockAdjustment(product.id, {
             client_request_id: requestId,
@@ -258,6 +271,7 @@ export function EditProductModal({
             reason: adjustmentReason,
             notes: adjustmentNotes.trim() || null,
           })
+      if (!isCurrentBranchOperation(operation)) return
       setCurrentStock(result.quantity_after)
       setInventoryMessage(
         `Stock ${result.quantity_before} to ${result.quantity_after} (${result.quantity_delta >= 0 ? '+' : ''}${result.quantity_delta}).`,

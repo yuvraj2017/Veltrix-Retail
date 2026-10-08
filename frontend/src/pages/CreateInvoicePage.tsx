@@ -8,6 +8,7 @@ import InvoiceItemsTable from '../components/billing/InvoiceItemsTable'
 import InvoiceSummaryCard from '../components/billing/InvoiceSummaryCard'
 import type { ProductCodeSearchHandle } from '../components/billing/ProductCodeSearch'
 import { useToast } from '../components/ui/ToastProvider'
+import { useAuth } from '../context/AuthContext'
 import { useBranch } from '../context/BranchContext'
 import { billingApi } from '../features/billing/api'
 import { calculateGstPreview } from '../features/billing/gstPreview'
@@ -22,6 +23,17 @@ import type {
   PaymentMode,
   PaymentStatus,
 } from '../features/billing/types'
+import { useBranchDirtyGuard } from '../hooks/useBranchDirtyGuard'
+import { useBranchOperation, type BranchOperationSnapshot } from '../hooks/useBranchOperation'
+import {
+  discardQuarantinedLegacyPosDraft,
+  hasQuarantinedLegacyPosDraft,
+  loadPosDraft,
+  migrateLegacyPosDraft,
+  removePosDraft,
+  savePosDraft,
+  type PosDraftData,
+} from '../lib/pos-drafts'
 
 const emptyCustomer: CustomerPayload = {
   id: null,
@@ -132,7 +144,9 @@ function friendlyInvoiceError(message: string) {
 export default function CreateInvoicePage() {
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { activeShop: shop } = useBranch()
+  const { user } = useAuth()
+  const { activeShop: shop, branches, selectedBranchId } = useBranch()
+  const { captureBranchOperation, isCurrentBranchOperation } = useBranchOperation()
   const [searchParams] = useSearchParams()
 
   const editParam = searchParams.get('edit')
@@ -154,7 +168,10 @@ export default function CreateInvoicePage() {
   const [isLoadingInvoice, setIsLoadingInvoice] = useState(false)
   const [completedInvoice, setCompletedInvoice] = useState<Invoice | null>(null)
   const invoiceRequestIdRef = useRef(createInvoiceRequestId())
+  const draftRevisionRef = useRef<number | null>(null)
+  const restoredDraftRef = useRef(false)
   const productSearchRef = useRef<ProductCodeSearchHandle | null>(null)
+  const [legacyDraftQuarantined, setLegacyDraftQuarantined] = useState(false)
 
   const totalBilledAmount = useMemo(() => {
     return items.reduce(
@@ -194,6 +211,152 @@ export default function CreateInvoicePage() {
       })
     })
   }, [gstPreview.grandTotal])
+
+  const draftIdentity = user?.id && user.organization_id && selectedBranchId
+    ? { userId: user.id, organizationId: user.organization_id, branchId: selectedBranchId }
+    : null
+
+  const currentDraftData = (): PosDraftData => ({
+    customer,
+    items,
+    totalPayable,
+    isPayableManuallyEdited,
+    notes,
+    invoiceDate,
+    editInvoiceId,
+    clientRequestId: invoiceRequestIdRef.current,
+  })
+
+  const hasUnsavedWork = !completedInvoice && (
+    items.length > 0 ||
+    Boolean(customer.first_name || customer.last_name || customer.phone || customer.email || customer.address) ||
+    Boolean(notes.trim()) ||
+    paymentLines.some((line) => Number(line.amount || 0) > 0 || Boolean(line.payment_reference || line.notes))
+  )
+
+  const resetSaleState = (removeStoredDraft: boolean) => {
+    if (removeStoredDraft && draftIdentity) {
+      removePosDraft(draftIdentity.userId, draftIdentity.organizationId, draftIdentity.branchId)
+      draftRevisionRef.current = null
+    }
+    restoredDraftRef.current = false
+    setCompletedInvoice(null)
+    setCustomer(emptyCustomer)
+    setItems([])
+    setPaymentLines([createPaymentLine()])
+    setTotalPayable(0)
+    setIsPayableManuallyEdited(false)
+    setNotes('')
+    setInvoiceDate(new Date().toISOString().slice(0, 10))
+    setErrorMessage('')
+    invoiceRequestIdRef.current = createInvoiceRequestId()
+  }
+
+  const persistDraft = () => {
+    if (!draftIdentity) throw new Error('Select an active branch before saving this draft.')
+    const saved = savePosDraft(draftIdentity, currentDraftData(), draftRevisionRef.current)
+    draftRevisionRef.current = saved.revision
+  }
+
+  useBranchDirtyGuard('pos-invoice', {
+    dirty: hasUnsavedWork,
+    label: isEditMode ? 'Invoice edits' : 'POS sale',
+    message: 'The cart, customer, and tender details belong to the current branch.',
+    discard: () => resetSaleState(true),
+    saveDraft: () => {
+      persistDraft()
+      resetSaleState(false)
+    },
+  })
+
+  useEffect(() => {
+    if (isEditMode || !draftIdentity || !branches.length) return
+    let cancelled = false
+
+    const restore = async () => {
+      const migration = migrateLegacyPosDraft(
+        { userId: draftIdentity.userId, organizationId: draftIdentity.organizationId },
+        branches.map((branch) => branch.id),
+      )
+      setLegacyDraftQuarantined(migration.quarantined || hasQuarantinedLegacyPosDraft())
+
+      const draft = loadPosDraft(draftIdentity.userId, draftIdentity.organizationId, draftIdentity.branchId)
+      if (!draft) {
+        draftRevisionRef.current = null
+        return
+      }
+
+      try {
+        const products = await Promise.all(
+          draft.data.items.map((item) => billingApi.getBillingProductByCode(item.product_code)),
+        )
+        const referencesValid = products.every((product, index) => (
+          product.id === draft.data.items[index]?.product_id && product.is_active
+        ))
+        if (!referencesValid) throw new Error('A saved product is no longer available in this branch.')
+        if (cancelled) return
+
+        const hydratedItems = draft.data.items.map((item, index) => {
+          const product = products[index]
+          const quantity = Number(item.quantity || 0)
+          const mrp = Number(product.mrp || 0)
+          const buyPrice = Number(product.buying_price || 0)
+          const sellingPrice = Number(item.selling_price_per_unit || product.selling_price || mrp)
+          const discountPerUnit = Number(item.discount_amount_per_unit || Math.max(mrp - sellingPrice, 0))
+          return {
+            ...item,
+            product_id: product.id,
+            product_code: product.product_code,
+            product_name: product.name,
+            category: product.category || '',
+            unit: product.unit || '',
+            hsn_sac: product.hsn_sac || '',
+            mrp,
+            buy_price: buyPrice,
+            available_stock: Number(product.available_stock || 0),
+            gst_rate: Number(product.gst_rate || 0),
+            discount_amount_per_unit: discountPerUnit,
+            selling_price_per_unit: sellingPrice,
+            total_discount_amount: discountPerUnit * quantity,
+            total_selling_price: sellingPrice * quantity,
+            total_buy_cost: buyPrice * quantity,
+            profit_per_unit: sellingPrice - buyPrice,
+            total_profit: (sellingPrice - buyPrice) * quantity,
+          }
+        })
+
+        setCustomer({ ...draft.data.customer, id: null })
+        setItems(hydratedItems)
+        setPaymentLines([createPaymentLine()])
+        setTotalPayable(draft.data.totalPayable)
+        setIsPayableManuallyEdited(draft.data.isPayableManuallyEdited)
+        setNotes(draft.data.notes)
+        setInvoiceDate(draft.data.invoiceDate)
+        invoiceRequestIdRef.current = draft.data.clientRequestId || createInvoiceRequestId()
+        draftRevisionRef.current = draft.revision
+        restoredDraftRef.current = true
+        showToast({
+          title: 'Branch draft restored',
+          message: 'Payment details were cleared and must be entered again.',
+          variant: 'success',
+        })
+      } catch (error) {
+        if (cancelled) return
+        removePosDraft(draftIdentity.userId, draftIdentity.organizationId, draftIdentity.branchId)
+        draftRevisionRef.current = null
+        showToast({
+          title: 'Draft could not be restored',
+          message: error instanceof Error ? error.message : 'The saved draft is invalid for this branch.',
+          variant: 'error',
+        })
+      }
+    }
+
+    void restore()
+    return () => {
+      cancelled = true
+    }
+  }, [branches, draftIdentity?.branchId, draftIdentity?.organizationId, draftIdentity?.userId, isEditMode])
 
   const handleTotalPayableChange = (value: number) => {
     setIsPayableManuallyEdited(Math.abs(totalBilledAmount - value) > 0.009)
@@ -352,8 +515,19 @@ export default function CreateInvoicePage() {
       return
     }
 
+    let operation: BranchOperationSnapshot | null = null
     try {
       setErrorMessage('')
+
+      if (restoredDraftRef.current) {
+        const products = await Promise.all(items.map((item) => billingApi.getBillingProductByCode(item.product_code)))
+        const invalidProduct = products.find((product, index) => (
+          product.id !== items[index]?.product_id || !product.is_active
+        ))
+        if (invalidProduct) {
+          throw new Error('A restored product no longer belongs to this branch. Remove it and add it again.')
+        }
+      }
 
       const payload = buildPayload()
       const parsed = invoiceCreateSchema.safeParse(payload)
@@ -368,6 +542,7 @@ export default function CreateInvoicePage() {
       }
 
       setIsSaving(true)
+      operation = captureBranchOperation()
 
       const normalizedPayload = normalizePayload(payload)
 
@@ -376,7 +551,12 @@ export default function CreateInvoicePage() {
           ? await billingApi.updateInvoice(editInvoiceId, normalizedPayload)
           : await billingApi.createInvoice(normalizedPayload)
 
+      if (!isCurrentBranchOperation(operation)) return
+
       if (!isEditMode) {
+        if (draftIdentity) removePosDraft(draftIdentity.userId, draftIdentity.organizationId, operation.branchId)
+        draftRevisionRef.current = null
+        restoredDraftRef.current = false
         invoiceRequestIdRef.current = createInvoiceRequestId()
         setCompletedInvoice(invoice)
         showToast({
@@ -389,6 +569,7 @@ export default function CreateInvoicePage() {
 
       navigate(`/billing/${invoice.id}/preview`)
     } catch (error) {
+      if (operation && !isCurrentBranchOperation(operation)) return
       showToast({
         title: isEditMode ? 'Unable to update invoice' : 'Unable to create invoice',
         message:
@@ -405,37 +586,27 @@ export default function CreateInvoicePage() {
   }
 
   const startNewSale = () => {
-    setCompletedInvoice(null)
-    setCustomer(emptyCustomer)
-    setItems([])
-    setPaymentLines([createPaymentLine()])
-    setTotalPayable(0)
-    setIsPayableManuallyEdited(false)
-    setNotes('')
-    setInvoiceDate(new Date().toISOString().slice(0, 10))
-    setErrorMessage('')
-    invoiceRequestIdRef.current = createInvoiceRequestId()
+    resetSaleState(true)
     window.setTimeout(() => productSearchRef.current?.focus(), 100)
   }
 
   const saveDraftLocally = () => {
-    const payload = buildPayload()
-
-    localStorage.setItem(
-      'billing_invoice_draft',
-      JSON.stringify({
-        ...payload,
-        edit_invoice_id: editInvoiceId,
+    try {
+      persistDraft()
+      showToast({
+        title: 'Draft saved',
+        message: isEditMode
+          ? 'Edited invoice draft saved for this branch in this browser.'
+          : 'Draft saved for this branch in this browser.',
+        variant: 'success',
       })
-    )
-
-    showToast({
-      title: 'Draft saved',
-      message: isEditMode
-        ? 'Edited invoice draft saved locally in this browser.'
-        : 'Draft saved locally in this browser.',
-      variant: 'success',
-    })
+    } catch (error) {
+      showToast({
+        title: 'Draft not saved',
+        message: error instanceof Error ? error.message : 'Unable to save this branch draft.',
+        variant: 'error',
+      })
+    }
   }
 
   if (isLoadingInvoice) {
@@ -513,6 +684,24 @@ export default function CreateInvoicePage() {
                 </p>
                 <p className="mt-1 text-sm">{errorMessage}</p>
               </div>
+            </div>
+          )}
+
+          {legacyDraftQuarantined && (
+            <div className="mb-6 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold">
+                An older browser draft was not restored because its branch ownership could not be verified.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  discardQuarantinedLegacyPosDraft()
+                  setLegacyDraftQuarantined(false)
+                }}
+                className="min-h-11 shrink-0 rounded-lg border border-amber-300 px-4 text-sm font-black dark:border-amber-800"
+              >
+                Discard old draft
+              </button>
             </div>
           )}
 

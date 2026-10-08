@@ -579,9 +579,53 @@ def transfer_ownership(
             "previous_owner": _staff_snapshot(actor_membership),
             "target": _staff_snapshot(target),
         }
+
+        # Branch creation and ownership transfer share the organization lock.
+        # Synchronizing every explicit assignment here closes both serialized
+        # race orders: a branch committed just before transfer is inherited by
+        # the incoming OWNER, while a transfer committed first is observed by
+        # branch creation's owner auto-assignment.
+        organization_branch_ids = [
+            row[0]
+            for row in (
+                db.query(Shop.id)
+                .filter(Shop.organization_id == context.organization.id)
+                .order_by(Shop.id)
+                .with_for_update()
+                .all()
+            )
+        ]
+        target_assignments = {
+            assignment.shop_id: assignment
+            for assignment in (
+                db.query(BranchMembership)
+                .filter(
+                    BranchMembership.organization_membership_id == target.id,
+                    BranchMembership.organization_id == context.organization.id,
+                )
+                .with_for_update()
+                .all()
+            )
+        }
+        for shop_id in organization_branch_ids:
+            assignment = target_assignments.get(shop_id)
+            if assignment is None:
+                db.add(
+                    BranchMembership(
+                        organization_membership_id=target.id,
+                        organization_id=context.organization.id,
+                        shop_id=shop_id,
+                        status=MembershipStatus.ACTIVE,
+                        created_by_user_id=context.user.id,
+                    )
+                )
+            else:
+                assignment.status = MembershipStatus.ACTIVE
+
         target.role = MembershipRole.OWNER
         actor_membership.role = MembershipRole.ADMIN
         db.flush()
+        db.expire(target, ["branch_memberships"])
         after = {
             "previous_owner": _staff_snapshot(actor_membership),
             "new_owner": _staff_snapshot(target),
