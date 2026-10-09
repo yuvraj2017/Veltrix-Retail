@@ -82,6 +82,8 @@ class BusinessAuditAction:
     BRANCH_ACTIVATED = "branch.activated"
     BRANCH_DEACTIVATED = "branch.deactivated"
     BRANCH_DEFAULT_CHANGED = "branch.default_changed"
+    ORGANIZATION_COMMERCIAL_SOURCE_ASSIGNED = "organization.commercial_source_assigned"
+    ORGANIZATION_COMMERCIAL_SOURCE_CHANGED = "organization.commercial_source_changed"
 
     ALL = (
         INVOICE_CREATED,
@@ -115,4 +117,6 @@ class BusinessAuditAction:
         BRANCH_ACTIVATED,
         BRANCH_DEACTIVATED,
         BRANCH_DEFAULT_CHANGED,
+        ORGANIZATION_COMMERCIAL_SOURCE_ASSIGNED,
+        ORGANIZATION_COMMERCIAL_SOURCE_CHANGED,
     )

@@ -71,7 +71,11 @@ class Shop(Base, IDMixin, TimestampMixin):
     state = Column(String(100), nullable=True)
     gst_state_code = Column(String(2), nullable=True)
 
-    organization = relationship("Organization", back_populates="shops")
+    organization = relationship(
+        "Organization",
+        back_populates="shops",
+        foreign_keys=[organization_id],
+    )
     users = relationship("User", back_populates="shop", cascade="all, delete-orphan")
     branch_memberships = relationship(
         "BranchMembership",

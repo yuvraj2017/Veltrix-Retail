@@ -348,7 +348,12 @@ ENDPOINT_PERMISSION_POLICIES: dict[str, EndpointPermissionPolicy] = {
     ),
     "list_organization_branch_directory": _policy(Permission.BRANCHES_VIEW),
     "get_organization_branch_detail": _policy(Permission.BRANCHES_VIEW),
-    "create_organization_branch": _policy(Permission.BRANCHES_MANAGE),
+    "reassign_current_organization_commercial_source": _policy(
+        Permission.BRANCHES_MANAGE, entitlement=False
+    ),
+    "create_organization_branch": _policy(
+        Permission.BRANCHES_MANAGE, entitlement=False
+    ),
     "update_organization_branch": _policy(Permission.BRANCHES_MANAGE),
     "activate_organization_branch": _policy(Permission.BRANCHES_MANAGE),
     "deactivate_organization_branch": _policy(Permission.BRANCHES_MANAGE),

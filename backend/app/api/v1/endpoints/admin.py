@@ -28,6 +28,10 @@ from app.schemas.admin import (
     AdminUserDetailResponse,
     AdminUserListResponse,
 )
+from app.schemas.branch import (
+    CommercialSourceReassignmentRequest,
+    OrganizationCommercialSourceResponse,
+)
 from app.schemas.subscription import (
     EntitlementDefinitionCreateRequest,
     EntitlementDefinitionResponse,
@@ -56,6 +60,10 @@ from app.schemas.subscription import (
     UpiPaymentReviewRequest,
 )
 from app.services import admin_service, audit_service, commercial_service
+from app.services.organization_entitlement_service import (
+    commercial_source_response,
+    recover_commercial_source_as_super_admin,
+)
 from app.services.admin_service import (
     DEFAULT_ADMIN_PAGE_SIZE,
     MAX_ADMIN_PAGE_SIZE,
@@ -416,6 +424,28 @@ def list_shops(
         }
         for shop in rows
     ]
+
+
+@router.post(
+    "/organizations/{organization_id}/commercial-source",
+    response_model=OrganizationCommercialSourceResponse,
+)
+def recover_organization_commercial_source(
+    organization_id: int,
+    payload: CommercialSourceReassignmentRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    source = recover_commercial_source_as_super_admin(
+        db,
+        organization_id=organization_id,
+        target_shop_id=payload.shop_id,
+        actor=current_user,
+        reason=payload.reason,
+        ip_address=_client_ip(request),
+    )
+    return commercial_source_response(source)
 
 
 @router.get(

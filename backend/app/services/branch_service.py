@@ -18,7 +18,11 @@ from app.models.user import User
 from app.schemas.branch import BranchCreateRequest, BranchUpdateRequest
 from app.services.authorization_service import TenantAuthorizationContext
 from app.services.business_audit_service import record_business_audit
-from app.services.entitlement_service import evaluate_shop_access, get_limit, has_feature
+from app.services.entitlement_service import evaluate_shop_access
+from app.services.organization_entitlement_service import (
+    get_scoped_feature,
+    get_scoped_limit,
+)
 
 
 def _not_found() -> None:
@@ -105,13 +109,24 @@ def _check_location_entitlement(
     db: Session,
     context: TenantAuthorizationContext,
 ) -> None:
-    if not has_feature(context.active_shop_id, "multi_location.enabled", db):
+    feature = get_scoped_feature(
+        db,
+        organization_id=context.organization.id,
+        operational_shop_id=context.active_shop_id,
+        feature_key="multi_location.enabled",
+    )
+    if not feature.configured or not feature.feature_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The current subscription does not enable multiple branches",
         )
 
-    limit = get_limit(context.active_shop_id, "locations", db)
+    limit = get_scoped_limit(
+        db,
+        organization_id=context.organization.id,
+        operational_shop_id=context.active_shop_id,
+        resource_key="locations",
+    )
     if not limit.configured:
         _conflict("The current subscription has no branch limit configured")
     if limit.is_unlimited:
@@ -370,7 +385,8 @@ def deactivate_branch(
     branch_id: int,
 ) -> Shop:
     try:
-        _lock_organization(db, context.organization.id)
+        organization = _lock_organization(db, context.organization.id)
+        db.refresh(organization)
         _assert_owner_manager(context)
         branches = _lock_organization_branches(db, context.organization.id)
         branch = next((item for item in branches if item.id == branch_id), None)
@@ -378,6 +394,10 @@ def deactivate_branch(
             _not_found()
         if branch.status != ShopStatus.ACTIVE:
             _conflict("Only an active branch can be deactivated")
+        if organization.commercial_source_shop_id == branch.id:
+            _conflict(
+                "The commercial-source branch cannot be deactivated until a replacement is assigned"
+            )
         _assert_deactivation_safe(db, branch, branches)
 
         before = _branch_snapshot(branch)

@@ -17,6 +17,7 @@ from app.core.user_status import (
     normalize_role,
 )
 from app.models.admin_audit_log import AdminAuditLog, AuditAction
+from app.models.business_audit_log import BusinessAuditAction
 from app.models.organization import Organization
 from app.models.password_reset_token import PasswordResetToken
 from app.models.shop import Shop
@@ -34,6 +35,7 @@ from app.schemas.auth import (
 from app.services.subscription_service import ensure_legacy_subscription_for_shop
 from app.services.membership_service import create_registration_memberships
 from app.services.authorization_service import resolve_tenant_authorization_context
+from app.services.business_audit_service import record_business_audit
 
 PASSWORD_RESET_NEUTRAL_MESSAGE = (
     "If an account exists for this email, a password reset link has been sent."
@@ -142,6 +144,8 @@ def register_shop_owner(
         )
         db.add(shop)
         db.flush()
+        organization.commercial_source_shop_id = shop.id
+        db.flush()
 
         first_name, last_name = _split_name(owner_name)
 
@@ -170,6 +174,18 @@ def register_shop_owner(
         # period. Organization-level entitlement migration is intentionally
         # deferred.
         ensure_legacy_subscription_for_shop(db=db, shop_id=shop.id)
+
+        record_business_audit(
+            db,
+            shop_id=shop.id,
+            actor=user,
+            action=BusinessAuditAction.ORGANIZATION_COMMERCIAL_SOURCE_ASSIGNED,
+            entity_type="organization",
+            entity_id=organization.id,
+            summary="Initial organization commercial source assigned",
+            after_data={"commercial_source_shop_id": shop.id},
+            metadata={"organization_id": organization.id, "reason": "initial_registration"},
+        )
 
         db.add(
             AdminAuditLog(

@@ -55,6 +55,7 @@ def _setup_organization(Session, *, branch_count: int = 3):
             db.add(shop)
             shops.append(shop)
         db.flush()
+        organization.commercial_source_shop_id = shops[0].id
 
         user = User(
             shop_id=shops[0].id,

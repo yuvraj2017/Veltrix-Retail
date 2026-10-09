@@ -16,6 +16,8 @@ from app.schemas.branch import (
     BranchDirectoryResponse,
     BranchResponse,
     BranchUpdateRequest,
+    CommercialSourceReassignmentRequest,
+    OrganizationCommercialSourceResponse,
 )
 from app.services.authorization_service import TenantAuthorizationContext
 from app.services.branch_service import (
@@ -26,6 +28,10 @@ from app.services.branch_service import (
     list_organization_branches,
     make_default_branch,
     update_branch,
+)
+from app.services.organization_entitlement_service import (
+    commercial_source_response,
+    reassign_commercial_source_as_owner,
 )
 
 router = APIRouter(prefix="/branches", tags=["Branches"])
@@ -75,6 +81,25 @@ def list_organization_branch_directory(
     db: Session = Depends(get_db),
 ):
     return {"items": list_organization_branches(db, context)}
+
+
+@router.post(
+    "/commercial-source",
+    response_model=OrganizationCommercialSourceResponse,
+)
+def reassign_current_organization_commercial_source(
+    payload: CommercialSourceReassignmentRequest,
+    context: TenantAuthorizationContext = Depends(get_tenant_authorization_context),
+    _authorized_user=Depends(require_active_shop_access),
+    db: Session = Depends(get_db),
+):
+    source = reassign_commercial_source_as_owner(
+        db,
+        context,
+        target_shop_id=payload.shop_id,
+        reason=payload.reason,
+    )
+    return commercial_source_response(source)
 
 
 @router.get("/{branch_id}", response_model=BranchResponse)

@@ -128,3 +128,24 @@ class BranchResponse(BaseModel):
 class BranchDirectoryResponse(BaseModel):
     items: list[BranchResponse]
 
+
+class CommercialSourceReassignmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shop_id: int = Field(gt=0)
+    reason: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def strip_reason(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+        return value
+
+
+class OrganizationCommercialSourceResponse(BaseModel):
+    organization_id: int
+    commercial_source_shop_id: int
+    shop_name: str
+    shop_status: str
+

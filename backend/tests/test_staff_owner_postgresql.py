@@ -50,6 +50,7 @@ def test_concurrent_ownership_transfers_preserve_exactly_one_owner():
         )
         db.add(shop)
         db.flush()
+        organization.commercial_source_shop_id = shop.id
 
         users = []
         memberships = []
@@ -172,6 +173,7 @@ def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner():
         )
         db.add(shop)
         db.flush()
+        organization.commercial_source_shop_id = shop.id
         users = []
         memberships = []
         for index, role in enumerate((MembershipRole.OWNER, MembershipRole.MANAGER)):

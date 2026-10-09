@@ -65,6 +65,14 @@ def db_session():
     try:
         yield session
     finally:
+        session.rollback()
+        # Break the intentional Organization -> Shop source cycle before
+        # SQLite tears the isolated schema down with FK enforcement enabled.
+        session.query(Organization).update(
+            {Organization.commercial_source_shop_id: None},
+            synchronize_session=False,
+        )
+        session.commit()
         session.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
@@ -113,6 +121,8 @@ def make_shop(db_session):
             phone=f"90000000{index:02d}",
         )
         db_session.add(shop)
+        db_session.flush()
+        organization.commercial_source_shop_id = shop.id
         db_session.commit()
         db_session.refresh(shop)
         return shop

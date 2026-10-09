@@ -194,6 +194,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     const nextBranch = branches.find((branch) => branch.id === branchId && branch.status === 'active')
     if (!nextBranch) throw new Error('This branch is no longer available.')
     if (branchId === selectedBranchId) return
+
+    // Let pending controlled-input updates commit before taking the dirty-state
+    // snapshot. A fast selector click must not outrun the preceding form event.
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
     if (getPendingBranchMutationCount() > 0) {
       throw new Error('Wait for the current operation to finish before switching branches.')
     }
