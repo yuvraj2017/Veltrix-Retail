@@ -10,12 +10,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.domain_errors import DomainError, DomainErrorCode
-from app.core.membership import MembershipRole
+from app.core.membership import MembershipRole, MembershipStatus
 from app.core.permissions import Permission
 from app.core.shop_status import ShopStatus
 from app.core.user_status import UserRole
 from app.models.admin_audit_log import AuditAction
 from app.models.business_audit_log import BusinessAuditAction
+from app.models.membership import OrganizationMembership
 from app.models.organization import Organization
 from app.models.shop import Shop
 from app.models.user import User
@@ -55,6 +56,16 @@ class OrganizationLocationCapacity:
     remaining_allowance: Decimal | None
     is_unlimited: bool
     multi_location_enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class OrganizationStaffCapacity:
+    organization_id: int
+    commercial_source_shop_id: int
+    current_usage: int
+    effective_limit: Decimal | None
+    remaining_allowance: Decimal | None
+    is_unlimited: bool
 
 
 def _source_error(code: str, message: str, organization_id: int) -> HTTPException:
@@ -199,7 +210,21 @@ def count_organization_locations(db: Session, organization_id: int) -> int:
     )
 
 
-def _location_quota_error(
+def count_organization_staff(db: Session, organization_id: int) -> int:
+    """Count distinct active non-OWNER organization members."""
+    return int(
+        db.query(func.count(func.distinct(OrganizationMembership.user_id)))
+        .filter(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.status == MembershipStatus.ACTIVE,
+            OrganizationMembership.role != MembershipRole.OWNER,
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _quota_error(
     *,
     code: str,
     message: str,
@@ -254,7 +279,7 @@ def ensure_organization_location_capacity(
         not multi_location.configured or not multi_location.feature_enabled
     ):
         remaining = Decimal(max(1 - current_usage, 0))
-        raise _location_quota_error(
+        raise _quota_error(
             code=DomainErrorCode.FEATURE_NOT_AVAILABLE,
             message="The current subscription does not enable multiple branches.",
             entitlement_key="multi_location.enabled",
@@ -268,7 +293,7 @@ def ensure_organization_location_capacity(
     if not location_limit.configured or (
         not location_limit.is_unlimited and location_limit.limit_value is None
     ):
-        raise _location_quota_error(
+        raise _quota_error(
             code=DomainErrorCode.ENTITLEMENT_NOT_CONFIGURED,
             message="The current subscription has no valid branch limit configured.",
             entitlement_key="locations.max",
@@ -293,7 +318,7 @@ def ensure_organization_location_capacity(
     assert effective_limit is not None
     remaining = max(effective_limit - Decimal(current_usage), Decimal("0"))
     if Decimal(projected_usage) > effective_limit:
-        raise _location_quota_error(
+        raise _quota_error(
             code=DomainErrorCode.PLAN_LIMIT_REACHED,
             message="The organization has reached its branch limit.",
             entitlement_key="locations.max",
@@ -311,6 +336,74 @@ def ensure_organization_location_capacity(
         remaining_allowance=effective_limit - Decimal(projected_usage),
         is_unlimited=False,
         multi_location_enabled=bool(multi_location.feature_enabled),
+    )
+
+
+def ensure_organization_staff_capacity(
+    db: Session,
+    *,
+    organization_id: int,
+    requested_increase: int = 1,
+    organization_locked: bool = False,
+) -> OrganizationStaffCapacity:
+    """Serialize and validate an organization staff-usage increase."""
+    if requested_increase < 1:
+        raise ValueError("requested_increase must be positive")
+
+    source = resolve_organization_commercial_source(
+        db,
+        organization_id,
+        lock_organization=not organization_locked,
+        lock_source=True,
+        require_access=True,
+    )
+    current_usage = count_organization_staff(db, organization_id)
+    staff_limit = get_limit(source.shop.id, "staff", db)
+    if not staff_limit.configured or (
+        not staff_limit.is_unlimited and staff_limit.limit_value is None
+    ):
+        raise _quota_error(
+            code=DomainErrorCode.ENTITLEMENT_NOT_CONFIGURED,
+            message="The current subscription has no valid staff limit configured.",
+            entitlement_key="staff.max",
+            current_usage=current_usage,
+            effective_limit=None,
+            remaining_allowance=None,
+            requested_increase=requested_increase,
+        )
+
+    if staff_limit.is_unlimited:
+        return OrganizationStaffCapacity(
+            organization_id=organization_id,
+            commercial_source_shop_id=source.shop.id,
+            current_usage=current_usage,
+            effective_limit=None,
+            remaining_allowance=None,
+            is_unlimited=True,
+        )
+
+    effective_limit = staff_limit.limit_value
+    assert effective_limit is not None
+    remaining = max(effective_limit - Decimal(current_usage), Decimal("0"))
+    projected_usage = current_usage + requested_increase
+    if Decimal(projected_usage) > effective_limit:
+        raise _quota_error(
+            code=DomainErrorCode.PLAN_LIMIT_REACHED,
+            message="The organization has reached its staff limit.",
+            entitlement_key="staff.max",
+            current_usage=current_usage,
+            effective_limit=effective_limit,
+            remaining_allowance=remaining,
+            requested_increase=requested_increase,
+        )
+
+    return OrganizationStaffCapacity(
+        organization_id=organization_id,
+        commercial_source_shop_id=source.shop.id,
+        current_usage=current_usage,
+        effective_limit=effective_limit,
+        remaining_allowance=effective_limit - Decimal(projected_usage),
+        is_unlimited=False,
     )
 
 

@@ -16,6 +16,9 @@ from app.models.user import User
 from app.schemas.staff import StaffCreate, StaffUpdate
 from app.services.authorization_service import TenantAuthorizationContext
 from app.services.business_audit_service import record_business_audit
+from app.services.organization_entitlement_service import (
+    ensure_organization_staff_capacity,
+)
 
 
 ORDINARY_STAFF_ROLES = frozenset(
@@ -140,8 +143,9 @@ def _assert_actor_can_manage(
     *,
     target: OrganizationMembership | None = None,
     requested_role: str | None = None,
+    actor_role: str | None = None,
 ) -> None:
-    actor_role = context.role
+    actor_role = actor_role or context.role
     if actor_role not in (MembershipRole.OWNER, MembershipRole.ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -168,6 +172,33 @@ def _assert_actor_can_manage(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only OWNER can assign the ADMIN role",
             )
+
+
+def _current_actor_role(db: Session, context: TenantAuthorizationContext) -> str:
+    membership = (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.id == context.organization_membership.id,
+            OrganizationMembership.organization_id == context.organization.id,
+            OrganizationMembership.user_id == context.user.id,
+            OrganizationMembership.status == MembershipStatus.ACTIVE,
+        )
+        .populate_existing()
+        .one_or_none()
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active organization membership is required",
+        )
+    return membership.role
+
+
+def _membership_consumes_staff_slot(*, role: str, membership_status: str) -> bool:
+    return (
+        membership_status == MembershipStatus.ACTIVE
+        and role != MembershipRole.OWNER
+    )
 
 
 def _load_valid_branches(
@@ -214,8 +245,16 @@ def create_staff(
     payload: StaffCreate,
 ) -> dict:
     try:
-        _lock_organization(db, context.organization.id)
         _assert_actor_can_manage(context, requested_role=payload.role)
+        ensure_organization_staff_capacity(
+            db,
+            organization_id=context.organization.id,
+        )
+        _assert_actor_can_manage(
+            context,
+            requested_role=payload.role,
+            actor_role=_current_actor_role(db, context),
+        )
         branches = _load_valid_branches(db, context.organization.id, payload.branch_ids)
         if payload.default_shop_id not in {branch.id for branch in branches}:
             raise HTTPException(
@@ -296,6 +335,39 @@ def update_staff(
 ) -> dict:
     try:
         _lock_organization(db, context.organization.id)
+        membership = _get_membership(db, context.organization.id, membership_id)
+        _assert_actor_can_manage(
+            context,
+            target=membership,
+            requested_role=payload.role,
+            actor_role=_current_actor_role(db, context),
+        )
+
+        role_changed = payload.role is not None and payload.role != membership.role
+        status_changed = payload.status is not None and payload.status != membership.status
+        if not role_changed and not status_changed:
+            _conflict("The requested staff state is already current")
+
+        next_role = payload.role if payload.role is not None else membership.role
+        next_status = payload.status if payload.status is not None else membership.status
+        requested_increase = int(
+            _membership_consumes_staff_slot(
+                role=next_role,
+                membership_status=next_status,
+            )
+            and not _membership_consumes_staff_slot(
+                role=membership.role,
+                membership_status=membership.status,
+            )
+        )
+        if requested_increase:
+            ensure_organization_staff_capacity(
+                db,
+                organization_id=context.organization.id,
+                requested_increase=requested_increase,
+                organization_locked=True,
+            )
+
         membership = _get_membership(
             db, context.organization.id, membership_id, lock=True
         )
@@ -321,11 +393,6 @@ def update_staff(
             )
             if current_branch is None:
                 _conflict("The current shop must have active branch access before reactivation")
-
-        role_changed = payload.role is not None and payload.role != membership.role
-        status_changed = payload.status is not None and payload.status != membership.status
-        if not role_changed and not status_changed:
-            _conflict("The requested staff state is already current")
 
         if role_changed:
             membership.role = payload.role
