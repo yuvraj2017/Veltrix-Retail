@@ -52,6 +52,53 @@ class PlanResponse(BaseModel):
     display_order: int
     created_at: datetime
     updated_at: datetime
+    catalog_version_id: int | None = None
+    catalog_version_number: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class CatalogEntitlementSnapshotRequest(EntitlementValuePayload):
+    entitlement_id: int
+
+
+class PlanCatalogPublishRequest(BaseModel):
+    monthly_price: Decimal = Field(ge=0)
+    annual_price: Decimal = Field(ge=0)
+    currency: str = Field(min_length=3, max_length=3)
+    trial_days: int = Field(default=0, ge=0)
+    grace_period_days: int = Field(default=0, ge=0)
+    entitlements: list[CatalogEntitlementSnapshotRequest] = Field(default_factory=list)
+
+
+class CatalogEntitlementSnapshotResponse(BaseModel):
+    id: int
+    entitlement_id: int
+    entitlement_key: str
+    entitlement_name: str
+    kind: str
+    value_type: str
+    resource_key: str | None = None
+    limit_value: Decimal | None = None
+    is_unlimited: bool
+    feature_enabled: bool | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PlanCatalogVersionResponse(BaseModel):
+    id: int
+    plan_id: int
+    version_number: int
+    status: str
+    monthly_price: Decimal
+    annual_price: Decimal
+    currency: str
+    trial_days: int
+    grace_period_days: int
+    published_at: datetime | None = None
+    published_by_user_id: int | None = None
+    entitlement_snapshots: list[CatalogEntitlementSnapshotResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -170,6 +217,7 @@ class SubscriptionResponse(BaseModel):
     id: int
     shop_id: int
     plan_id: int
+    catalog_version_id: int | None = None
     plan: PlanResponse | None = None
     status: str
     billing_interval: str
@@ -225,6 +273,7 @@ class ShopSubscriptionOverviewResponse(BaseModel):
 class PaymentCreateRequest(BaseModel):
     shop_id: int
     plan_id: int
+    catalog_version_id: int | None = None
     amount: Decimal = Field(ge=0)
     currency: str = Field(default="INR", min_length=3, max_length=3)
     billing_interval: str = "monthly"
@@ -239,6 +288,8 @@ class PaymentCreateRequest(BaseModel):
 class PaymentResponse(BaseModel):
     id: int
     shop_id: int
+    plan_id: int | None = None
+    catalog_version_id: int | None = None
     subscription_id: int | None = None
     provider: str
     provider_payment_id: str
@@ -262,6 +313,7 @@ class PaymentResponse(BaseModel):
 
 class CheckoutSessionRequest(BaseModel):
     plan_id: int
+    catalog_version_id: int | None = None
     billing_interval: str = "monthly"
 
 

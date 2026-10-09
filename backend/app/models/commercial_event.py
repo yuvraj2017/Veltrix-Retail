@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -58,12 +59,27 @@ class SubscriptionPayment(Base, IDMixin, TimestampMixin):
             "billing_interval IS NULL OR billing_interval IN ('monthly', 'annual', 'legacy')",
             name="ck_subscription_payments_billing_interval",
         ),
+        CheckConstraint(
+            "catalog_version_id IS NULL OR plan_id IS NOT NULL",
+            name="ck_subscription_payments_catalog_version_has_plan",
+        ),
+        ForeignKeyConstraint(
+            ["catalog_version_id", "plan_id"],
+            ["plan_catalog_versions.id", "plan_catalog_versions.plan_id"],
+            name="fk_subscription_payments_catalog_version_plan",
+            ondelete="RESTRICT",
+        ),
         Index("ix_subscription_payments_shop_status", "shop_id", "status"),
         Index("ix_subscription_payments_provider_event", "provider", "provider_event_id"),
     )
 
     shop_id = Column(ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
     plan_id = Column(ForeignKey("plans.id", ondelete="SET NULL"), nullable=True, index=True)
+    catalog_version_id = Column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
     subscription_id = Column(
         ForeignKey("shop_subscriptions.id", ondelete="SET NULL"),
         nullable=True,
@@ -93,6 +109,7 @@ class SubscriptionPayment(Base, IDMixin, TimestampMixin):
 
     shop = relationship("Shop")
     plan = relationship("Plan")
+    catalog_version = relationship("PlanCatalogVersion", viewonly=True, overlaps="plan")
     subscription = relationship("ShopSubscription")
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
 

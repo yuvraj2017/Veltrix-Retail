@@ -88,6 +88,7 @@ def _setup_commercial(Session, *, with_subscription: bool = False):
         )
         db.add_all([shop, plan])
         db.flush()
+        catalog_version = commercial_service._ensure_baseline_catalog_version(db, plan)
         actor = User(
             shop_id=None,
             full_name="Phase 5B Platform Admin",
@@ -107,6 +108,7 @@ def _setup_commercial(Session, *, with_subscription: bool = False):
             subscription = ShopSubscription(
                 shop_id=shop.id,
                 plan_id=plan.id,
+                catalog_version_id=catalog_version.id,
                 status=SubscriptionStatus.ACTIVE,
                 billing_interval=BillingInterval.MONTHLY,
                 current_period_start=datetime.now(timezone.utc),

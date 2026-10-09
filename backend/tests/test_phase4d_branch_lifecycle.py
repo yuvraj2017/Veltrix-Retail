@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.core.membership import MembershipRole, MembershipStatus
@@ -5,7 +6,11 @@ from app.core.security import create_access_token
 from app.core.shop_status import ShopStatus
 from app.models.business_audit_log import BusinessAuditAction, BusinessAuditLog
 from app.models.customer import Customer
-from app.models.entitlement import EntitlementDefinition, PlanEntitlement
+from app.models.entitlement import (
+    EntitlementDefinition,
+    PlanEntitlement,
+    ShopEntitlementOverride,
+)
 from app.models.license import ShopLicense
 from app.models.membership import BranchMembership, OrganizationMembership
 from app.models.product import Product
@@ -446,13 +451,16 @@ def test_location_limit_blocks_branch_creation(client, db_session, make_user):
         .filter_by(key="locations.max")
         .one()
     )
-    entitlement = (
-        db_session.query(PlanEntitlement)
-        .filter_by(plan_id=subscription.plan_id, entitlement_id=definition.id)
-        .one()
+    db_session.add(
+        ShopEntitlementOverride(
+            shop_id=owner.shop_id,
+            entitlement_id=definition.id,
+            limit_value=Decimal("1"),
+            is_unlimited=False,
+            starts_at=datetime.now(timezone.utc),
+            reason="Branch-limit test override",
+        )
     )
-    entitlement.is_unlimited = False
-    entitlement.limit_value = Decimal("1")
     db_session.commit()
 
     response = _create(client, owner, "Over Limit")

@@ -8,7 +8,13 @@ from app.core.domain_errors import DomainErrorCode
 from app.core.subscription_status import SubscriptionStatus
 from app.main import app
 from app.models.plan import Plan
+from app.models.plan_catalog import (
+    CatalogVersionStatus,
+    PlanCatalogEntitlementSnapshot,
+    PlanCatalogVersion,
+)
 from app.models.subscription import ShopSubscription
+from app.services import commercial_service
 
 
 def _utcnow() -> datetime:
@@ -42,7 +48,41 @@ def _set_subscription(
     subscription.trial_start_at = trial_start_at
     subscription.trial_end_at = trial_end_at
     if grace_period_days is not None:
-        subscription.plan.grace_period_days = grace_period_days
+        source = subscription.catalog_version
+        version = PlanCatalogVersion(
+            plan_id=subscription.plan_id,
+            version_number=(
+                db_session.query(PlanCatalogVersion)
+                .filter_by(plan_id=subscription.plan_id)
+                .count()
+                + 1
+            ),
+            status=CatalogVersionStatus.PUBLISHED,
+            monthly_price=source.monthly_price,
+            annual_price=source.annual_price,
+            currency=source.currency,
+            trial_days=source.trial_days,
+            grace_period_days=grace_period_days,
+            published_at=_utcnow(),
+        )
+        db_session.add(version)
+        db_session.flush()
+        for item in source.entitlement_snapshots:
+            db_session.add(
+                PlanCatalogEntitlementSnapshot(
+                    catalog_version_id=version.id,
+                    entitlement_id=item.entitlement_id,
+                    entitlement_key=item.entitlement_key,
+                    entitlement_name=item.entitlement_name,
+                    kind=item.kind,
+                    value_type=item.value_type,
+                    resource_key=item.resource_key,
+                    limit_value=item.limit_value,
+                    is_unlimited=item.is_unlimited,
+                    feature_enabled=item.feature_enabled,
+                )
+            )
+        subscription.catalog_version_id = version.id
     db_session.commit()
     db_session.refresh(subscription)
     return subscription
@@ -63,6 +103,8 @@ def _create_empty_plan(db_session) -> Plan:
         display_order=50,
     )
     db_session.add(plan)
+    db_session.flush()
+    commercial_service._ensure_baseline_catalog_version(db_session, plan)
     db_session.commit()
     db_session.refresh(plan)
     return plan
@@ -236,6 +278,12 @@ def test_entitlement_denial_is_feature_specific_not_global_access_denial(
     empty_plan = _create_empty_plan(db_session)
     subscription = _latest_subscription(db_session, user.shop_id)
     subscription.plan_id = empty_plan.id
+    subscription.catalog_version_id = (
+        db_session.query(PlanCatalogVersion)
+        .filter_by(plan_id=empty_plan.id, version_number=1)
+        .one()
+        .id
+    )
     subscription.current_period_end = None
     db_session.commit()
     headers = auth_headers(user.email)

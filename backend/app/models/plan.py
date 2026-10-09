@@ -28,4 +28,9 @@ class Plan(Base, IDMixin, TimestampMixin):
         back_populates="plan",
         cascade="all, delete-orphan",
     )
+    catalog_versions = relationship(
+        "PlanCatalogVersion",
+        back_populates="plan",
+        order_by="PlanCatalogVersion.version_number",
+    )
     subscriptions = relationship("ShopSubscription", back_populates="plan")

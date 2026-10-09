@@ -42,6 +42,8 @@ from app.schemas.subscription import (
     PaymentResponse,
     PaymentVerificationResponse,
     PlanCreateRequest,
+    PlanCatalogPublishRequest,
+    PlanCatalogVersionResponse,
     PlanEntitlementResponse,
     PlanResponse,
     PlanUpdateRequest,
@@ -288,6 +290,27 @@ def update_plan(
     current_user: User = Depends(require_super_admin),
 ):
     return commercial_service.update_plan(
+        db,
+        plan_id,
+        payload,
+        current_user,
+        ip_address=_client_ip(request),
+    )
+
+
+@router.post(
+    "/plans/{plan_id}/catalog-versions",
+    response_model=PlanCatalogVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def publish_plan_catalog_version(
+    plan_id: int,
+    payload: PlanCatalogPublishRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return commercial_service.publish_plan_catalog_version(
         db,
         plan_id,
         payload,

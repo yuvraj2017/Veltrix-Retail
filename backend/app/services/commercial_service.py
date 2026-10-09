@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -41,12 +42,18 @@ from app.models.entitlement import (
 )
 from app.models.license import ShopLicense
 from app.models.plan import Plan
+from app.models.plan_catalog import (
+    CatalogVersionStatus,
+    PlanCatalogEntitlementSnapshot,
+    PlanCatalogVersion,
+)
 from app.models.shop import Shop
 from app.models.subscription import ShopSubscription
 from app.models.user import User
 from app.schemas.subscription import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
+    CatalogEntitlementSnapshotRequest,
     EntitlementDefinitionCreateRequest,
     EntitlementDefinitionUpdateRequest,
     EntitlementValuePayload,
@@ -56,6 +63,8 @@ from app.schemas.subscription import (
     PaymentGatewayConfigResponse,
     PaymentVerificationResponse,
     PlanCreateRequest,
+    PlanCatalogPublishRequest,
+    PlanCatalogVersionResponse,
     PlanEntitlementResponse,
     PlanUpdateRequest,
     PublicPlanResponse,
@@ -113,29 +122,48 @@ def _transition_conflict(exc: CommercialTransitionError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-def _validate_paid_amount(plan: Plan, amount: Decimal, currency: str, billing_interval: str) -> None:
+def _catalog_amount(version: PlanCatalogVersion, billing_interval: str) -> Decimal:
+    if billing_interval == BillingInterval.ANNUAL:
+        return Decimal(version.annual_price or 0)
+    if billing_interval == BillingInterval.MONTHLY:
+        return Decimal(version.monthly_price or 0)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid billing interval")
+
+
+def _validate_catalog_payment(
+    version: PlanCatalogVersion,
+    amount: Decimal,
+    currency: str,
+    billing_interval: str,
+) -> None:
     try:
         purchased_term(billing_interval)
     except CommercialTransitionError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-    expected = _plan_amount(plan, billing_interval)
-    if Decimal(amount) != expected:
+    if Decimal(amount) != _catalog_amount(version, billing_interval):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Payment amount does not match the selected plan price",
+            detail="Payment amount does not match the selected catalog price",
         )
-    if currency.strip().upper() != plan.currency.upper():
+    if currency.strip().upper() != version.currency.upper():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Payment currency does not match the selected plan currency",
+            detail="Payment currency does not match the selected catalog currency",
         )
 
 
-def _same_payment_request(existing: SubscriptionPayment, payload: PaymentCreateRequest) -> bool:
+def _same_payment_request(
+    existing: SubscriptionPayment,
+    payload: PaymentCreateRequest,
+    catalog_version_id: int | None = None,
+) -> bool:
     return (
         existing.shop_id == payload.shop_id
         and existing.plan_id == payload.plan_id
+        and (
+            existing.catalog_version_id == catalog_version_id
+            or (existing.catalog_version_id is None and payload.catalog_version_id is None)
+        )
         and Decimal(existing.amount) == Decimal(payload.amount)
         and existing.currency.upper() == payload.currency.upper()
         and existing.billing_interval == payload.billing_interval
@@ -226,6 +254,167 @@ def _require_assignable_plan(db: Session, plan_id: int) -> Plan:
     return plan
 
 
+def _latest_published_catalog_version(
+    db: Session,
+    plan_id: int,
+) -> PlanCatalogVersion | None:
+    return (
+        db.query(PlanCatalogVersion)
+        .options(joinedload(PlanCatalogVersion.entitlement_snapshots))
+        .filter(
+            PlanCatalogVersion.plan_id == plan_id,
+            PlanCatalogVersion.status == CatalogVersionStatus.PUBLISHED,
+        )
+        .order_by(PlanCatalogVersion.version_number.desc())
+        .first()
+    )
+
+
+def _published_catalog_version(
+    db: Session,
+    catalog_version_id: int,
+) -> PlanCatalogVersion:
+    version = (
+        db.query(PlanCatalogVersion)
+        .options(joinedload(PlanCatalogVersion.entitlement_snapshots))
+        .filter(
+            PlanCatalogVersion.id == catalog_version_id,
+            PlanCatalogVersion.status == CatalogVersionStatus.PUBLISHED,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Catalog version is unavailable",
+        )
+    return version
+
+
+def _baseline_catalog_version(db: Session, plan: Plan) -> PlanCatalogVersion:
+    baseline = (
+        db.query(PlanCatalogVersion)
+        .filter(
+            PlanCatalogVersion.plan_id == plan.id,
+            PlanCatalogVersion.version_number == 1,
+            PlanCatalogVersion.status == CatalogVersionStatus.PUBLISHED,
+        )
+        .first()
+    )
+    return baseline or _ensure_baseline_catalog_version(db, plan)
+
+
+def _snapshot_from_plan_entitlement(
+    version: PlanCatalogVersion,
+    row: PlanEntitlement,
+) -> PlanCatalogEntitlementSnapshot:
+    definition = row.entitlement
+    return PlanCatalogEntitlementSnapshot(
+        catalog_version=version,
+        entitlement_id=row.entitlement_id,
+        entitlement_key=definition.key,
+        entitlement_name=definition.name,
+        kind=definition.kind,
+        value_type=definition.value_type,
+        resource_key=definition.resource_key,
+        limit_value=row.limit_value,
+        is_unlimited=row.is_unlimited,
+        feature_enabled=row.feature_enabled,
+    )
+
+
+def _ensure_baseline_catalog_version(db: Session, plan: Plan) -> PlanCatalogVersion:
+    existing = _latest_published_catalog_version(db, plan.id)
+    if existing:
+        return existing
+    rows = (
+        db.query(PlanEntitlement)
+        .options(joinedload(PlanEntitlement.entitlement))
+        .filter(PlanEntitlement.plan_id == plan.id)
+        .order_by(PlanEntitlement.id.asc())
+        .all()
+    )
+    version = PlanCatalogVersion(
+        plan_id=plan.id,
+        version_number=1,
+        status=CatalogVersionStatus.DRAFT,
+        monthly_price=plan.monthly_price,
+        annual_price=plan.annual_price,
+        currency=plan.currency.upper(),
+        trial_days=plan.trial_days,
+        grace_period_days=plan.grace_period_days,
+        published_at=None,
+    )
+    db.add(version)
+    db.flush()
+    for row in rows:
+        db.add(_snapshot_from_plan_entitlement(version, row))
+    db.flush()
+    version.status = CatalogVersionStatus.PUBLISHED
+    version.published_at = _utcnow()
+    db.flush()
+    db.refresh(version)
+    return version
+
+
+def _resolve_checkout_catalog_version(
+    db: Session,
+    *,
+    shop_id: int,
+    plan: Plan,
+    requested_version_id: int | None,
+) -> PlanCatalogVersion:
+    subscription = _latest_subscription(db, shop_id)
+    if subscription and subscription.plan_id == plan.id and subscription.catalog_version_id:
+        contracted = _published_catalog_version(db, subscription.catalog_version_id)
+        if requested_version_id is not None and requested_version_id != contracted.id:
+            requested = _published_catalog_version(db, requested_version_id)
+            latest = _ensure_baseline_catalog_version(db, plan)
+            if requested.plan_id != plan.id or requested.id != latest.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "CATALOG_VERSION_NOT_PURCHASABLE",
+                        "message": "The selected catalog version is unavailable.",
+                        "details": {},
+                    },
+                )
+        return contracted
+
+    latest = _ensure_baseline_catalog_version(db, plan)
+    if requested_version_id is not None and requested_version_id != latest.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "CATALOG_VERSION_NOT_PURCHASABLE",
+                "message": "The selected catalog version is no longer available for new purchases.",
+                "details": {},
+            },
+        )
+    return latest
+
+
+def _payment_catalog_version(
+    db: Session,
+    payment: SubscriptionPayment,
+) -> PlanCatalogVersion | None:
+    if not payment.catalog_version_id:
+        return None
+    version = _published_catalog_version(db, payment.catalog_version_id)
+    if payment.plan_id != version.plan_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment catalog version does not belong to its plan",
+        )
+    _validate_catalog_payment(
+        version,
+        payment.amount,
+        payment.currency,
+        payment.billing_interval or "",
+    )
+    return version
+
+
 def _require_entitlement(db: Session, entitlement_id: int) -> EntitlementDefinition:
     entitlement = (
         db.query(EntitlementDefinition)
@@ -243,7 +432,10 @@ def _require_entitlement(db: Session, entitlement_id: int) -> EntitlementDefinit
 def _latest_subscription(db: Session, shop_id: int) -> ShopSubscription | None:
     return (
         db.query(ShopSubscription)
-        .options(joinedload(ShopSubscription.plan))
+        .options(
+            joinedload(ShopSubscription.plan),
+            joinedload(ShopSubscription.catalog_version),
+        )
         .filter(ShopSubscription.shop_id == shop_id)
         .order_by(ShopSubscription.created_at.desc(), ShopSubscription.id.desc())
         .first()
@@ -317,6 +509,21 @@ def _plan_snapshot(plan: Plan) -> dict[str, Any]:
     }
 
 
+def _catalog_snapshot(version: PlanCatalogVersion) -> dict[str, Any]:
+    return {
+        "id": version.id,
+        "plan_id": version.plan_id,
+        "version_number": version.version_number,
+        "status": version.status,
+        "monthly_price": str(version.monthly_price),
+        "annual_price": str(version.annual_price),
+        "currency": version.currency,
+        "trial_days": version.trial_days,
+        "grace_period_days": version.grace_period_days,
+        "published_at": version.published_at,
+    }
+
+
 def list_plans(db: Session, *, include_archived: bool = False) -> list[Plan]:
     query = db.query(Plan)
     if not include_archived:
@@ -327,9 +534,6 @@ def list_plans(db: Session, *, include_archived: bool = False) -> list[Plan]:
 def list_public_plan_catalog(db: Session) -> list[PublicPlanResponse]:
     plans = (
         db.query(Plan)
-        .options(
-            joinedload(Plan.entitlements).joinedload(PlanEntitlement.entitlement),
-        )
         .filter(
             Plan.is_archived == False,  # noqa: E712
             Plan.is_active == True,  # noqa: E712
@@ -337,30 +541,212 @@ def list_public_plan_catalog(db: Session) -> list[PublicPlanResponse]:
         .order_by(Plan.display_order.asc(), Plan.id.asc())
         .all()
     )
-    return [
-        PublicPlanResponse(
+    responses: list[PublicPlanResponse] = []
+    for plan in plans:
+        version = _latest_published_catalog_version(db, plan.id)
+        if not version:
+            continue
+        responses.append(
+            PublicPlanResponse(
             id=plan.id,
             code=plan.code,
             name=plan.name,
             description=plan.description,
-            monthly_price=plan.monthly_price,
-            annual_price=plan.annual_price,
-            currency=plan.currency,
-            trial_days=plan.trial_days,
-            grace_period_days=plan.grace_period_days,
+            monthly_price=version.monthly_price,
+            annual_price=version.annual_price,
+            currency=version.currency,
+            trial_days=version.trial_days,
+            grace_period_days=version.grace_period_days,
             is_active=plan.is_active,
             is_archived=plan.is_archived,
             display_order=plan.display_order,
             created_at=plan.created_at,
             updated_at=plan.updated_at,
+            catalog_version_id=version.id,
+            catalog_version_number=version.version_number,
             entitlements=[
-                _plan_entitlement_response(row)
-                for row in sorted(plan.entitlements, key=lambda item: item.id)
-                if row.entitlement and row.entitlement.is_active
+                PlanEntitlementResponse(
+                    id=row.id,
+                    plan_id=plan.id,
+                    entitlement_id=row.entitlement_id,
+                    entitlement_key=row.entitlement_key,
+                    entitlement_name=row.entitlement_name,
+                    kind=row.kind,
+                    resource_key=row.resource_key,
+                    limit_value=row.limit_value,
+                    is_unlimited=row.is_unlimited,
+                    feature_enabled=row.feature_enabled,
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                )
+                for row in version.entitlement_snapshots
             ],
+        ))
+    return responses
+
+
+def _validate_catalog_entitlements(
+    db: Session,
+    payloads: list[CatalogEntitlementSnapshotRequest],
+) -> list[tuple[CatalogEntitlementSnapshotRequest, EntitlementDefinition]]:
+    entitlement_ids = [item.entitlement_id for item in payloads]
+    if len(entitlement_ids) != len(set(entitlement_ids)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Catalog entitlement definitions must be unique",
         )
-        for plan in plans
-    ]
+    definitions = {
+        row.id: row
+        for row in db.query(EntitlementDefinition)
+        .filter(EntitlementDefinition.id.in_(entitlement_ids))
+        .all()
+    } if entitlement_ids else {}
+    resolved = []
+    for item in payloads:
+        definition = definitions.get(item.entitlement_id)
+        if not definition or not definition.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Entitlement {item.entitlement_id} is unavailable",
+            )
+        try:
+            validate_entitlement_configuration(
+                definition=definition,
+                limit_value=item.limit_value,
+                is_unlimited=item.is_unlimited,
+                feature_enabled=item.feature_enabled,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        resolved.append((item, definition))
+    return resolved
+
+
+def _publish_catalog_version(
+    db: Session,
+    *,
+    plan: Plan,
+    monthly_price: Decimal,
+    annual_price: Decimal,
+    currency: str,
+    trial_days: int,
+    grace_period_days: int,
+    entitlements: list[CatalogEntitlementSnapshotRequest],
+    actor_id: int | None,
+) -> PlanCatalogVersion:
+    resolved = _validate_catalog_entitlements(db, entitlements)
+    next_version = (
+        db.query(func.max(PlanCatalogVersion.version_number))
+        .filter(PlanCatalogVersion.plan_id == plan.id)
+        .scalar()
+        or 0
+    ) + 1
+    now = _utcnow()
+    version = PlanCatalogVersion(
+        plan_id=plan.id,
+        version_number=next_version,
+        status=CatalogVersionStatus.DRAFT,
+        monthly_price=monthly_price,
+        annual_price=annual_price,
+        currency=currency.strip().upper(),
+        trial_days=trial_days,
+        grace_period_days=grace_period_days,
+        published_at=None,
+        published_by_user_id=actor_id,
+    )
+    db.add(version)
+    db.flush()
+    for item, definition in resolved:
+        db.add(
+            PlanCatalogEntitlementSnapshot(
+                catalog_version_id=version.id,
+                entitlement_id=definition.id,
+                entitlement_key=definition.key,
+                entitlement_name=definition.name,
+                kind=definition.kind,
+                value_type=definition.value_type,
+                resource_key=definition.resource_key,
+                limit_value=item.limit_value,
+                is_unlimited=item.is_unlimited,
+                feature_enabled=item.feature_enabled,
+            )
+        )
+    db.flush()
+
+    version.status = CatalogVersionStatus.PUBLISHED
+    version.published_at = now
+
+    # Legacy columns/tables remain a compatibility projection of the latest
+    # published catalog. Existing subscriptions resolve immutable snapshots.
+    plan.monthly_price = monthly_price
+    plan.annual_price = annual_price
+    plan.currency = currency.strip().upper()
+    plan.trial_days = trial_days
+    plan.grace_period_days = grace_period_days
+    existing_rows = {
+        row.entitlement_id: row
+        for row in db.query(PlanEntitlement).filter(PlanEntitlement.plan_id == plan.id).all()
+    }
+    requested_ids = {item.entitlement_id for item, _definition in resolved}
+    for entitlement_id, row in existing_rows.items():
+        if entitlement_id not in requested_ids:
+            db.delete(row)
+    for item, definition in resolved:
+        row = existing_rows.get(definition.id)
+        if not row:
+            row = PlanEntitlement(plan_id=plan.id, entitlement_id=definition.id)
+            db.add(row)
+        row.limit_value = item.limit_value
+        row.is_unlimited = item.is_unlimited
+        row.feature_enabled = item.feature_enabled
+    db.flush()
+    db.refresh(version)
+    return version
+
+
+def publish_plan_catalog_version(
+    db: Session,
+    plan_id: int,
+    payload: PlanCatalogPublishRequest,
+    actor: User,
+    *,
+    ip_address: str | None = None,
+) -> PlanCatalogVersionResponse:
+    plan = db.query(Plan).filter(Plan.id == plan_id).with_for_update().first()
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    version = _publish_catalog_version(
+        db,
+        plan=plan,
+        monthly_price=payload.monthly_price,
+        annual_price=payload.annual_price,
+        currency=payload.currency,
+        trial_days=payload.trial_days,
+        grace_period_days=payload.grace_period_days,
+        entitlements=payload.entitlements,
+        actor_id=actor.id,
+    )
+    _audit(
+        db,
+        actor=actor,
+        action=AuditAction.PLAN_CHANGED,
+        entity_type="plan_catalog_version",
+        entity_id=version.id,
+        new=_catalog_snapshot(version),
+        ip_address=ip_address,
+    )
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    version = (
+        db.query(PlanCatalogVersion)
+        .options(joinedload(PlanCatalogVersion.entitlement_snapshots))
+        .filter(PlanCatalogVersion.id == version.id)
+        .one()
+    )
+    return PlanCatalogVersionResponse.model_validate(version)
 
 
 def create_plan(
@@ -389,6 +775,17 @@ def create_plan(
     )
     db.add(plan)
     db.flush()
+    _publish_catalog_version(
+        db,
+        plan=plan,
+        monthly_price=payload.monthly_price,
+        annual_price=payload.annual_price,
+        currency=payload.currency,
+        trial_days=payload.trial_days,
+        grace_period_days=payload.grace_period_days,
+        entitlements=[],
+        actor_id=actor.id,
+    )
     _audit(
         db,
         actor=actor,
@@ -415,6 +812,32 @@ def update_plan(
     previous = _plan_snapshot(plan)
 
     data = payload.model_dump(exclude_unset=True)
+    commercial_fields = {
+        "monthly_price",
+        "annual_price",
+        "currency",
+        "trial_days",
+        "grace_period_days",
+    }
+    changed_commercial = {
+        field
+        for field in commercial_fields.intersection(data)
+        if data[field] is not None
+        and (
+            str(data[field]).upper() if field == "currency" else data[field]
+        ) != (
+            str(getattr(plan, field)).upper() if field == "currency" else getattr(plan, field)
+        )
+    }
+    if changed_commercial:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "CATALOG_PUBLICATION_REQUIRED",
+                "message": "Published commercial values require a new catalog version.",
+                "details": {"fields": sorted(changed_commercial)},
+            },
+        )
     if "currency" in data and data["currency"] is not None:
         data["currency"] = data["currency"].upper()
 
@@ -561,7 +984,9 @@ def upsert_plan_entitlement(
     *,
     ip_address: str | None = None,
 ) -> PlanEntitlementResponse:
-    _require_plan(db, plan_id)
+    plan = db.query(Plan).filter(Plan.id == plan_id).with_for_update().first()
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
     definition = _require_entitlement(db, entitlement_id)
     try:
         validate_entitlement_configuration(
@@ -597,6 +1022,29 @@ def upsert_plan_entitlement(
     row.feature_enabled = payload.feature_enabled
     db.flush()
     db.refresh(row)
+    catalog_payloads = [
+        CatalogEntitlementSnapshotRequest(
+            entitlement_id=current.entitlement_id,
+            limit_value=current.limit_value,
+            is_unlimited=current.is_unlimited,
+            feature_enabled=current.feature_enabled,
+        )
+        for current in db.query(PlanEntitlement)
+        .filter(PlanEntitlement.plan_id == plan_id)
+        .order_by(PlanEntitlement.id.asc())
+        .all()
+    ]
+    version = _publish_catalog_version(
+        db,
+        plan=plan,
+        monthly_price=plan.monthly_price,
+        annual_price=plan.annual_price,
+        currency=plan.currency,
+        trial_days=plan.trial_days,
+        grace_period_days=plan.grace_period_days,
+        entitlements=catalog_payloads,
+        actor_id=actor.id,
+    )
     _audit(
         db,
         actor=actor,
@@ -610,6 +1058,7 @@ def upsert_plan_entitlement(
             "limit_value": str(row.limit_value) if row.limit_value is not None else None,
             "is_unlimited": row.is_unlimited,
             "feature_enabled": row.feature_enabled,
+            "catalog_version_id": version.id,
         },
         ip_address=ip_address,
     )
@@ -765,6 +1214,7 @@ def assign_shop_subscription(
 ) -> ShopSubscription:
     _require_shop(db, shop_id)
     plan = _require_assignable_plan(db, payload.plan_id)
+    catalog_version = _ensure_baseline_catalog_version(db, plan)
     if payload.status not in SubscriptionStatus.ALL:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid subscription status")
     if payload.billing_interval not in BillingInterval.ALL:
@@ -802,6 +1252,7 @@ def assign_shop_subscription(
 
     now = _utcnow()
     subscription.plan_id = plan.id
+    subscription.catalog_version_id = catalog_version.id
     if previous is None:
         subscription.status = payload.status
     subscription.billing_interval = payload.billing_interval
@@ -1155,6 +1606,12 @@ def record_payment(
     # concurrent renewals can deadlock when both later request this row lock.
     _lock_shop(db, payload.shop_id)
     plan = _require_assignable_plan(db, payload.plan_id)
+    catalog_version = _resolve_checkout_catalog_version(
+        db,
+        shop_id=payload.shop_id,
+        plan=plan,
+        requested_version_id=payload.catalog_version_id,
+    )
     if payload.provider.strip().lower() != ADMIN_MANUAL_PROVIDER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1173,7 +1630,12 @@ def record_payment(
         normalized_reason = require_reason(payload.reason)
     except CommercialTransitionError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    _validate_paid_amount(plan, payload.amount, payload.currency, payload.billing_interval)
+    _validate_catalog_payment(
+        catalog_version,
+        payload.amount,
+        payload.currency,
+        payload.billing_interval,
+    )
 
     existing = (
         db.query(SubscriptionPayment)
@@ -1184,7 +1646,7 @@ def record_payment(
         .first()
     )
     if existing:
-        if not _same_payment_request(existing, payload):
+        if not _same_payment_request(existing, payload, catalog_version.id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Payment identifier is already used for different commercial data",
@@ -1195,6 +1657,7 @@ def record_payment(
     payment = SubscriptionPayment(
         shop_id=payload.shop_id,
         plan_id=payload.plan_id,
+        catalog_version_id=catalog_version.id,
         provider=ADMIN_MANUAL_PROVIDER,
         provider_payment_id=payload.provider_payment_id.strip(),
         provider_order_id=payload.provider_order_id,
@@ -1219,7 +1682,7 @@ def record_payment(
             )
             .first()
         )
-        if concurrent and _same_payment_request(concurrent, payload):
+        if concurrent and _same_payment_request(concurrent, payload, catalog_version.id):
             return concurrent
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1437,14 +1900,6 @@ def _razorpay_config(db: Session) -> PaymentGatewayConfig:
     return config
 
 
-def _plan_amount(plan: Plan, billing_interval: str) -> Decimal:
-    if billing_interval == BillingInterval.ANNUAL:
-        return Decimal(plan.annual_price or 0)
-    if billing_interval == BillingInterval.MONTHLY:
-        return Decimal(plan.monthly_price or 0)
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid billing interval")
-
-
 def _create_razorpay_order(
     *,
     key_id: str,
@@ -1586,11 +2041,12 @@ def _create_upi_checkout_session(
     *,
     shop_id: int,
     plan: Plan,
+    catalog_version: PlanCatalogVersion,
     billing_interval: str,
     amount: Decimal,
     config: PaymentGatewayConfig,
 ) -> CheckoutSessionResponse:
-    if plan.currency.upper() != "INR":
+    if catalog_version.currency.upper() != "INR":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Direct UPI collection is available only for INR plans.",
@@ -1623,6 +2079,7 @@ def _create_upi_checkout_session(
     payment = SubscriptionPayment(
         shop_id=shop_id,
         plan_id=plan.id,
+        catalog_version_id=catalog_version.id,
         provider=UPI_MANUAL_PROVIDER,
         provider_payment_id=payment_id,
         provider_order_id=payment_id,
@@ -1645,6 +2102,8 @@ def _create_upi_checkout_session(
             "amount": format(amount, ".2f"),
             "currency": "INR",
             "plan_id": plan.id,
+            "catalog_version_id": catalog_version.id,
+            "catalog_version_number": catalog_version.version_number,
             "plan_name": plan.name,
             "billing_interval": billing_interval,
             "upi_id": upi_id,
@@ -1666,8 +2125,14 @@ def create_checkout_session(
     if payload.billing_interval not in (BillingInterval.MONTHLY, BillingInterval.ANNUAL):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid billing interval")
     _reject_unsupported_plan_change(_latest_subscription(db, shop_id), plan.id)
+    catalog_version = _resolve_checkout_catalog_version(
+        db,
+        shop_id=shop_id,
+        plan=plan,
+        requested_version_id=payload.catalog_version_id,
+    )
     config = _active_payment_gateway(db)
-    amount = _plan_amount(plan, payload.billing_interval)
+    amount = _catalog_amount(catalog_version, payload.billing_interval)
     if amount <= Decimal("0.00"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1679,6 +2144,7 @@ def create_checkout_session(
             db,
             shop_id=shop_id,
             plan=plan,
+            catalog_version=catalog_version,
             billing_interval=payload.billing_interval,
             amount=amount,
             config=config,
@@ -1695,11 +2161,12 @@ def create_checkout_session(
         key_id=config.key_id,
         key_secret=key_secret,
         amount=amount,
-        currency=plan.currency,
+        currency=catalog_version.currency,
         receipt=receipt,
         notes={
             "shop_id": str(shop_id),
             "plan_id": str(plan.id),
+            "catalog_version_id": str(catalog_version.id),
             "billing_interval": payload.billing_interval,
         },
     )
@@ -1723,12 +2190,13 @@ def create_checkout_session(
             SubscriptionPayment(
                 shop_id=shop_id,
                 plan_id=plan.id,
+                catalog_version_id=catalog_version.id,
                 provider=RAZORPAY_PROVIDER,
                 provider_payment_id=order_id,
                 provider_order_id=order_id,
                 status=SubscriptionPaymentStatus.PENDING,
                 amount=amount,
-                currency=plan.currency,
+                currency=catalog_version.currency,
                 billing_interval=payload.billing_interval,
             )
         )
@@ -1743,8 +2211,10 @@ def create_checkout_session(
             "key_id": config.key_id,
             "order_id": order_id,
             "amount": order.get("amount"),
-            "currency": order.get("currency", plan.currency),
+            "currency": order.get("currency", catalog_version.currency),
             "plan_id": plan.id,
+            "catalog_version_id": catalog_version.id,
+            "catalog_version_number": catalog_version.version_number,
             "plan_name": plan.name,
             "billing_interval": payload.billing_interval,
             "is_test_mode": config.is_test_mode,
@@ -1843,7 +2313,11 @@ def _activate_paid_subscription(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
     if payment.status != SubscriptionPaymentStatus.SUCCEEDED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment is not confirmed")
-    plan = _require_assignable_plan(db, payment.plan_id)
+    plan = _require_plan(db, payment.plan_id)
+    catalog_version = _payment_catalog_version(db, payment)
+    legacy_catalog_version = (
+        _baseline_catalog_version(db, plan) if catalog_version is None else None
+    )
     now = as_utc(payment.paid_at) or _utcnow()
     try:
         term = purchased_term(payment.billing_interval or "")
@@ -1918,6 +2392,9 @@ def _activate_paid_subscription(
         subscription = ShopSubscription(
             shop_id=payment.shop_id,
             plan_id=plan.id,
+            catalog_version_id=(
+                catalog_version.id if catalog_version else legacy_catalog_version.id
+            ),
             status=SubscriptionStatus.PENDING,
             billing_interval=payment.billing_interval or BillingInterval.MONTHLY,
         )
@@ -1936,6 +2413,10 @@ def _activate_paid_subscription(
         except CommercialTransitionError as exc:
             raise _transition_conflict(exc) from exc
     subscription.plan_id = plan.id
+    if catalog_version:
+        subscription.catalog_version_id = catalog_version.id
+    elif subscription.catalog_version_id is None:
+        subscription.catalog_version_id = legacy_catalog_version.id
     subscription.billing_interval = payment.billing_interval or BillingInterval.MONTHLY
     subscription.provider = payment.provider
     if event_type != "payment_renewed":
@@ -1997,6 +2478,7 @@ def _activate_paid_subscription(
             new_value=_json(
                 {
                     "plan_id": plan.id,
+                    "catalog_version_id": subscription.catalog_version_id,
                     "status": SubscriptionStatus.ACTIVE,
                     "billing_interval": payment.billing_interval,
                     "renewal_start": renewal_start,
@@ -2052,13 +2534,8 @@ def review_upi_payment(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if not payment.plan_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
-    plan = _require_assignable_plan(db, payment.plan_id)
-    _validate_paid_amount(
-        plan,
-        payment.amount,
-        payment.currency,
-        payment.billing_interval or "",
-    )
+    _require_plan(db, payment.plan_id)
+    _payment_catalog_version(db, payment)
 
     previous_status = payment.status
     payment.reviewed_at = _utcnow()
@@ -2190,8 +2667,8 @@ def verify_razorpay_payment(
         )
     if not payment.plan_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
-    plan = _require_assignable_plan(db, payment.plan_id)
-    _validate_paid_amount(plan, payment.amount, payment.currency, payment.billing_interval or "")
+    _require_plan(db, payment.plan_id)
+    _payment_catalog_version(db, payment)
 
     try:
         payment.provider_payment_id = payload.razorpay_payment_id
@@ -2307,8 +2784,8 @@ def handle_razorpay_webhook(
     if not payment.plan_id:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment has no plan")
-    plan = _require_assignable_plan(db, payment.plan_id)
-    _validate_paid_amount(plan, payment.amount, payment.currency, payment.billing_interval or "")
+    _require_plan(db, payment.plan_id)
+    _payment_catalog_version(db, payment)
     gateway_amount = payment_entity.get("amount")
     gateway_currency = payment_entity.get("currency")
     expected_minor = int((Decimal(payment.amount) * Decimal("100")).quantize(Decimal("1")))

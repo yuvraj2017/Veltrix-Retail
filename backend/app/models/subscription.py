@@ -1,4 +1,13 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+)
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -19,10 +28,21 @@ class ShopSubscription(Base, IDMixin, TimestampMixin):
             "billing_interval IN ('monthly', 'annual', 'legacy')",
             name="ck_shop_subscriptions_billing_interval",
         ),
+        ForeignKeyConstraint(
+            ["catalog_version_id", "plan_id"],
+            ["plan_catalog_versions.id", "plan_catalog_versions.plan_id"],
+            name="fk_shop_subscriptions_catalog_version_plan",
+            ondelete="RESTRICT",
+        ),
     )
 
     shop_id = Column(ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
     plan_id = Column(ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False, index=True)
+    catalog_version_id = Column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
 
     status = Column(String(30), nullable=False, index=True)
     billing_interval = Column(String(20), nullable=False)
@@ -40,6 +60,11 @@ class ShopSubscription(Base, IDMixin, TimestampMixin):
 
     shop = relationship("Shop")
     plan = relationship("Plan", back_populates="subscriptions")
+    catalog_version = relationship(
+        "PlanCatalogVersion",
+        viewonly=True,
+        overlaps="plan,subscriptions",
+    )
     licenses = relationship(
         "ShopLicense",
         back_populates="subscription",

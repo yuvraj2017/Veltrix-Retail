@@ -39,6 +39,11 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.admin_audit_log import AdminAuditLog, AuditAction
 from app.models.business_audit_log import BusinessAuditAction, BusinessAuditLog
 from app.models.plan import Plan
+from app.models.plan_catalog import (
+    CatalogVersionStatus,
+    PlanCatalogEntitlementSnapshot,
+    PlanCatalogVersion,
+)
 from app.models.entitlement import (
     EntitlementDefinition,
     EntitlementKind,
@@ -99,6 +104,9 @@ __all__ = [
     "BusinessAuditAction",
     "BusinessAuditLog",
     "Plan",
+    "CatalogVersionStatus",
+    "PlanCatalogVersion",
+    "PlanCatalogEntitlementSnapshot",
     "EntitlementDefinition",
     "EntitlementKind",
     "EntitlementValueType",

@@ -15,6 +15,11 @@ from app.models.entitlement import (
     PlanEntitlement,
 )
 from app.models.plan import Plan
+from app.models.plan_catalog import (
+    CatalogVersionStatus,
+    PlanCatalogEntitlementSnapshot,
+    PlanCatalogVersion,
+)
 from app.models.subscription import ShopSubscription
 from app.services.license_service import create_license_for_subscription
 
@@ -116,6 +121,7 @@ def ensure_legacy_plan(db: Session) -> Plan:
     plan = db.query(Plan).filter(Plan.code == LEGACY_PLAN_CODE).first()
     if plan:
         _ensure_default_entitlements_for_plan(db, plan)
+        _ensure_catalog_version_for_plan(db, plan)
         return plan
 
     plan = Plan(
@@ -135,9 +141,64 @@ def ensure_legacy_plan(db: Session) -> Plan:
     db.flush()
 
     _ensure_default_entitlements_for_plan(db, plan)
+    _ensure_catalog_version_for_plan(db, plan)
 
     db.flush()
     return plan
+
+
+def _ensure_catalog_version_for_plan(db: Session, plan: Plan) -> PlanCatalogVersion:
+    existing = (
+        db.query(PlanCatalogVersion)
+        .filter(
+            PlanCatalogVersion.plan_id == plan.id,
+            PlanCatalogVersion.status == CatalogVersionStatus.PUBLISHED,
+        )
+        .order_by(PlanCatalogVersion.version_number.desc())
+        .first()
+    )
+    if existing:
+        return existing
+    version = PlanCatalogVersion(
+        plan_id=plan.id,
+        version_number=1,
+        status=CatalogVersionStatus.DRAFT,
+        monthly_price=plan.monthly_price,
+        annual_price=plan.annual_price,
+        currency=plan.currency,
+        trial_days=plan.trial_days,
+        grace_period_days=plan.grace_period_days,
+        published_at=None,
+    )
+    db.add(version)
+    db.flush()
+    rows = (
+        db.query(PlanEntitlement)
+        .filter(PlanEntitlement.plan_id == plan.id)
+        .order_by(PlanEntitlement.id.asc())
+        .all()
+    )
+    for row in rows:
+        definition = row.entitlement
+        db.add(
+            PlanCatalogEntitlementSnapshot(
+                catalog_version_id=version.id,
+                entitlement_id=row.entitlement_id,
+                entitlement_key=definition.key,
+                entitlement_name=definition.name,
+                kind=definition.kind,
+                value_type=definition.value_type,
+                resource_key=definition.resource_key,
+                limit_value=row.limit_value,
+                is_unlimited=row.is_unlimited,
+                feature_enabled=row.feature_enabled,
+            )
+        )
+    db.flush()
+    version.status = CatalogVersionStatus.PUBLISHED
+    version.published_at = _utcnow()
+    db.flush()
+    return version
 
 
 def _ensure_default_entitlements_for_plan(db: Session, plan: Plan) -> None:
@@ -205,10 +266,12 @@ def ensure_legacy_subscription_for_shop(
         return existing
 
     plan = ensure_legacy_plan(db)
+    catalog_version = _ensure_catalog_version_for_plan(db, plan)
     now = _utcnow()
     subscription = ShopSubscription(
         shop_id=shop_id,
         plan_id=plan.id,
+        catalog_version_id=catalog_version.id,
         status=SubscriptionStatus.ACTIVE,
         billing_interval=BillingInterval.LEGACY,
         current_period_start=now,

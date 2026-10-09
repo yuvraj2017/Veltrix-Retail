@@ -13,6 +13,7 @@ export async function getAvailablePlans() {
 
 export async function createCheckoutSession(payload: {
   plan_id: number
+  catalog_version_id: number
   billing_interval: 'monthly' | 'annual'
 }) {
   const { data } = await api.post<{

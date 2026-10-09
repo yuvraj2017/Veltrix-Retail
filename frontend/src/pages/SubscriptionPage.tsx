@@ -309,10 +309,19 @@ export default function SubscriptionPage() {
       document.body.appendChild(script)
     })
 
-  const startCheckout = async (planId: number, interval: BillingInterval) => {
+  const startCheckout = async (plan: Plan, interval: BillingInterval) => {
+    if (!plan.catalog_version_id) {
+      showToast({
+        title: 'Plan unavailable',
+        message: 'This plan is not available for checkout yet.',
+        variant: 'error',
+      })
+      return
+    }
     try {
       const session = await createCheckoutSession({
-        plan_id: planId,
+        plan_id: plan.id,
+        catalog_version_id: plan.catalog_version_id,
         billing_interval: interval,
       })
       const metadata = session.metadata as Record<string, any>
@@ -620,7 +629,7 @@ export default function SubscriptionPage() {
 
                       <button
                         type="button"
-                        onClick={() => startCheckout(plan.id, billingInterval)}
+                        onClick={() => startCheckout(plan, billingInterval)}
                         disabled={isCurrent || !paid || !canManageSubscription}
                         className={`mt-4 inline-flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black transition ${
                           isCurrent

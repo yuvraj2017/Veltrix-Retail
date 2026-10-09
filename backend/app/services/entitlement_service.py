@@ -25,6 +25,7 @@ from app.models.entitlement import (
 )
 from app.models.invoice import Invoice
 from app.models.license import ShopLicense
+from app.models.plan_catalog import PlanCatalogEntitlementSnapshot
 from app.models.product import Product
 from app.models.shop import Shop
 from app.models.subscription import ShopSubscription
@@ -121,7 +122,10 @@ def _as_utc(value: datetime | None) -> datetime | None:
 def _latest_subscription(shop_id: int, db: Session) -> ShopSubscription | None:
     return (
         db.query(ShopSubscription)
-        .options(joinedload(ShopSubscription.plan))
+        .options(
+            joinedload(ShopSubscription.plan),
+            joinedload(ShopSubscription.catalog_version),
+        )
         .filter(ShopSubscription.shop_id == shop_id)
         .order_by(ShopSubscription.created_at.desc(), ShopSubscription.id.desc())
         .first()
@@ -174,7 +178,12 @@ def evaluate_shop_access(shop_id: int, db: Session) -> CommercialAccess:
 
     current_period_end = _as_utc(subscription.current_period_end)
     trial_end = _as_utc(subscription.trial_end_at)
-    plan_grace_days = int(getattr(subscription.plan, "grace_period_days", 0) or 0)
+    plan_grace_days = int(
+        getattr(subscription.catalog_version, "grace_period_days", None)
+        if subscription.catalog_version is not None
+        else getattr(subscription.plan, "grace_period_days", 0)
+        or 0
+    )
 
     if current_period_end and current_period_end < now:
         grace_until = current_period_end + timedelta(days=plan_grace_days)
@@ -333,10 +342,60 @@ def _effective_from_rows(
     )
 
 
+def _effective_from_snapshot(
+    *,
+    snapshot: PlanCatalogEntitlementSnapshot,
+    override: ShopEntitlementOverride | None,
+) -> EffectiveEntitlement:
+    if override:
+        return EffectiveEntitlement(
+            key=snapshot.entitlement_key,
+            kind=snapshot.kind,
+            resource_key=snapshot.resource_key,
+            configured=True,
+            source="override",
+            limit_value=override.limit_value,
+            is_unlimited=bool(override.is_unlimited),
+            feature_enabled=override.feature_enabled,
+        )
+    return EffectiveEntitlement(
+        key=snapshot.entitlement_key,
+        kind=snapshot.kind,
+        resource_key=snapshot.resource_key,
+        configured=True,
+        source="catalog_version",
+        limit_value=snapshot.limit_value,
+        is_unlimited=bool(snapshot.is_unlimited),
+        feature_enabled=snapshot.feature_enabled,
+    )
+
+
 def get_effective_entitlements(shop_id: int, db: Session) -> dict[str, EffectiveEntitlement]:
     access = evaluate_shop_access(shop_id, db)
     if not access.allowed or not access.subscription:
         return {}
+
+    if access.subscription.catalog_version_id:
+        snapshots = (
+            db.query(PlanCatalogEntitlementSnapshot)
+            .filter(
+                PlanCatalogEntitlementSnapshot.catalog_version_id
+                == access.subscription.catalog_version_id
+            )
+            .order_by(PlanCatalogEntitlementSnapshot.id.asc())
+            .all()
+        )
+        return {
+            snapshot.entitlement_key: _effective_from_snapshot(
+                snapshot=snapshot,
+                override=_active_override(
+                    db=db,
+                    shop_id=shop_id,
+                    entitlement_id=snapshot.entitlement_id,
+                ),
+            )
+            for snapshot in snapshots
+        }
 
     rows = (
         db.query(EntitlementDefinition, PlanEntitlement)
@@ -375,6 +434,37 @@ def get_limit(shop_id: int, resource_key: str, db: Session) -> EffectiveEntitlem
             configured=False,
         )
 
+    if access.subscription.catalog_version_id:
+        snapshot = (
+            db.query(PlanCatalogEntitlementSnapshot)
+            .filter(
+                PlanCatalogEntitlementSnapshot.catalog_version_id
+                == access.subscription.catalog_version_id,
+                PlanCatalogEntitlementSnapshot.kind == EntitlementKind.LIMIT,
+                (
+                    (PlanCatalogEntitlementSnapshot.resource_key == resource_key)
+                    | (PlanCatalogEntitlementSnapshot.entitlement_key == resource_key)
+                ),
+            )
+            .order_by(PlanCatalogEntitlementSnapshot.id.asc())
+            .first()
+        )
+        if not snapshot:
+            return EffectiveEntitlement(
+                key=resource_key,
+                kind=EntitlementKind.LIMIT,
+                resource_key=resource_key,
+                configured=False,
+            )
+        return _effective_from_snapshot(
+            snapshot=snapshot,
+            override=_active_override(
+                db=db,
+                shop_id=shop_id,
+                entitlement_id=snapshot.entitlement_id,
+            ),
+        )
+
     definition = _find_limit_definition(db, resource_key)
     if not definition:
         return EffectiveEntitlement(
@@ -408,6 +498,29 @@ def has_feature(shop_id: int, feature_key: str, db: Session) -> bool:
     access = evaluate_shop_access(shop_id, db)
     if not access.allowed or not access.subscription:
         return False
+
+    if access.subscription.catalog_version_id:
+        snapshot = (
+            db.query(PlanCatalogEntitlementSnapshot)
+            .filter(
+                PlanCatalogEntitlementSnapshot.catalog_version_id
+                == access.subscription.catalog_version_id,
+                PlanCatalogEntitlementSnapshot.kind == EntitlementKind.FEATURE,
+                PlanCatalogEntitlementSnapshot.entitlement_key == feature_key,
+            )
+            .first()
+        )
+        if not snapshot:
+            return False
+        effective = _effective_from_snapshot(
+            snapshot=snapshot,
+            override=_active_override(
+                db=db,
+                shop_id=shop_id,
+                entitlement_id=snapshot.entitlement_id,
+            ),
+        )
+        return bool(effective.configured and effective.feature_enabled)
 
     definition = _find_feature_definition(db, feature_key)
     if not definition:

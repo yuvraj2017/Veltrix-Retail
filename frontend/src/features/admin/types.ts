@@ -198,6 +198,8 @@ export type Plan = {
   display_order: number
   created_at: string
   updated_at: string
+  catalog_version_id?: number | null
+  catalog_version_number?: number | null
   entitlements?: PlanEntitlement[]
 }
 
@@ -242,6 +244,7 @@ export type Subscription = {
   id: number
   shop_id: number
   plan_id: number
+  catalog_version_id?: number | null
   plan?: Plan | null
   status: string
   billing_interval: string
