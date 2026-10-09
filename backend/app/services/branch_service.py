@@ -41,6 +41,29 @@ def _assert_owner_manager(context: TenantAuthorizationContext) -> None:
         )
 
 
+def _assert_current_owner_manager(
+    db: Session,
+    context: TenantAuthorizationContext,
+) -> None:
+    membership = (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.id == context.organization_membership.id,
+            OrganizationMembership.organization_id == context.organization.id,
+            OrganizationMembership.user_id == context.user.id,
+            OrganizationMembership.role == MembershipRole.OWNER,
+            OrganizationMembership.status == MembershipStatus.ACTIVE,
+        )
+        .populate_existing()
+        .one_or_none()
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an organization OWNER may manage branches",
+        )
+
+
 def _lock_organization(db: Session, organization_id: int) -> Organization:
     organization = (
         db.query(Organization)
@@ -129,9 +152,12 @@ def create_branch(
 ) -> Shop:
     try:
         _assert_owner_manager(context)
+        _lock_organization(db, context.organization.id)
+        _assert_current_owner_manager(db, context)
         ensure_organization_location_capacity(
             db,
             organization_id=context.organization.id,
+            organization_locked=True,
         )
 
         branch = Shop(
@@ -206,6 +232,7 @@ def update_branch(
     try:
         _lock_organization(db, context.organization.id)
         _assert_owner_manager(context)
+        _assert_current_owner_manager(db, context)
         branch = _get_branch(db, context.organization.id, branch_id, lock=True)
         before = _branch_snapshot(branch)
         updates = payload.model_dump(exclude_unset=True)
@@ -244,6 +271,7 @@ def activate_branch(
     try:
         _assert_owner_manager(context)
         _lock_organization(db, context.organization.id)
+        _assert_current_owner_manager(db, context)
         current = _get_branch(db, context.organization.id, branch_id)
         if current.status == ShopStatus.INACTIVE:
             ensure_organization_location_capacity(
@@ -356,6 +384,7 @@ def deactivate_branch(
         organization = _lock_organization(db, context.organization.id)
         db.refresh(organization)
         _assert_owner_manager(context)
+        _assert_current_owner_manager(db, context)
         branches = _lock_organization_branches(db, context.organization.id)
         branch = next((item for item in branches if item.id == branch_id), None)
         if branch is None:
@@ -400,6 +429,7 @@ def make_default_branch(
     try:
         _lock_organization(db, context.organization.id)
         _assert_owner_manager(context)
+        _assert_current_owner_manager(db, context)
         branches = _lock_organization_branches(db, context.organization.id)
         branch = next((item for item in branches if item.id == branch_id), None)
         if branch is None:

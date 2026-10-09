@@ -104,7 +104,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         {isOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
       </button>
 
-      <div className={`flex items-start gap-3 py-6 ${isOpen ? 'px-5' : 'justify-center px-3'}`}>
+      <div className={`flex shrink-0 items-start gap-3 py-4 ${isOpen ? 'px-5' : 'justify-center px-3'}`}>
         {shopLogoUrl ? (
           <img
             src={shopLogoUrl}
@@ -135,7 +135,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
       {/* Shop navigation. A super admin owns no shop, so none of this
           applies to them -- they get the Administration group below. */}
       <nav
-        className={`mt-4 space-y-2 ${isOpen ? 'px-5' : 'px-2'} ${
+        className={`min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain py-2 ${isOpen ? 'px-5' : 'px-2'} ${
           isSuperAdmin ? 'hidden' : ''
         }`}
       >
@@ -147,7 +147,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
               to={item.to}
               title={!isOpen ? item.name : undefined}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-2xl py-3 text-base font-medium transition-all duration-200 ${
+                `flex items-center gap-3 rounded-xl py-2.5 text-base font-medium transition-all duration-200 ${
                   isOpen ? 'px-4' : 'justify-center px-0'
                 } ${
                   isActive
@@ -172,7 +172,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
       {isSuperAdmin && (
         <nav
           aria-label="Administration"
-          className={`mt-6 space-y-2 ${isOpen ? 'px-5' : 'px-2'}`}
+          className={`min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain py-2 ${isOpen ? 'px-5' : 'px-2'}`}
         >
           <p
             className={`mb-1 overflow-hidden text-[10px] font-black uppercase tracking-[0.18em] whitespace-nowrap text-slate-400 transition-all duration-300 dark:text-slate-500 ${
@@ -191,7 +191,7 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
                 end={item.end}
                 title={!isOpen ? item.name : undefined}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-2xl py-3 text-base font-medium transition-all duration-200 ${
+                  `flex items-center gap-3 rounded-xl py-2.5 text-base font-medium transition-all duration-200 ${
                     isOpen ? 'px-4' : 'justify-center px-0'
                   } ${
                     isActive
@@ -214,11 +214,11 @@ export function AppSidebar({ isOpen, onToggle, onClose }: AppSidebarProps) {
         </nav>
       )}
 
-      <div className={`mt-auto space-y-4 pb-6 ${isOpen ? 'px-5' : 'px-2'}`}>
+      <div className={`mt-auto shrink-0 space-y-3 pb-4 pt-2 ${isOpen ? 'px-5' : 'px-2'}`}>
         {hasPermission(PERMISSIONS.salesCreate) && <Link
           to="/billing/new"
           title={!isOpen ? 'New Transaction' : undefined}
-          className={`flex w-full items-center gap-2 rounded-2xl bg-indigo-600 dark:bg-indigo-700 py-4 text-base font-semibold text-white shadow-md transition hover:bg-indigo-700 dark:hover:bg-indigo-600 ${
+          className={`flex w-full items-center gap-2 rounded-2xl bg-indigo-600 dark:bg-indigo-700 py-3 text-base font-semibold text-white shadow-md transition hover:bg-indigo-700 dark:hover:bg-indigo-600 ${
             isOpen ? 'justify-center px-4' : 'justify-center px-0'
           } ${isSuperAdmin ? 'hidden' : ''}`}
         >

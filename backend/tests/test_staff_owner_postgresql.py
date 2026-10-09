@@ -18,6 +18,7 @@ from app.models.organization import Organization
 from app.models.shop import Shop
 from app.models.user import User
 from app.schemas.branch import BranchCreateRequest
+from app.services import branch_service
 from app.services.authorization_service import TenantAuthorizationContext
 from app.services.branch_service import create_branch
 from app.services.subscription_service import ensure_legacy_subscription_for_shop
@@ -154,7 +155,7 @@ def test_concurrent_ownership_transfers_preserve_exactly_one_owner():
     engine.dispose()
 
 
-def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner():
+def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner(monkeypatch):
     engine = create_engine(POSTGRES_URL, pool_pre_ping=True)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
     unique = uuid4().hex
@@ -214,7 +215,22 @@ def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner():
         owner_membership_id = memberships[0].id
         target_membership_id = memberships[1].id
 
-    barrier = threading.Barrier(2)
+    branch_name = f"Transferred Owner Branch {unique}"
+    branch_holds_organization_lock = threading.Event()
+    release_branch_creation = threading.Event()
+    original_capacity_check = branch_service.ensure_organization_location_capacity
+
+    def hold_after_organization_lock(*args, **kwargs):
+        branch_holds_organization_lock.set()
+        if not release_branch_creation.wait(timeout=10):
+            raise RuntimeError("Timed out waiting to release branch creation")
+        return original_capacity_check(*args, **kwargs)
+
+    monkeypatch.setattr(
+        branch_service,
+        "ensure_organization_location_capacity",
+        hold_after_organization_lock,
+    )
 
     def context_for_owner(db):
         return TenantAuthorizationContext(
@@ -237,30 +253,35 @@ def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner():
     def create_new_branch():
         with Session() as db:
             context = context_for_owner(db)
-            barrier.wait(timeout=10)
             branch = create_branch(
                 db,
                 context,
                 BranchCreateRequest(
-                    name=f"Transferred Owner Branch {unique}",
+                    name=branch_name,
                     category="Test",
                     email=f"transferred-owner-branch-{unique}@example.com",
                     phone="9000000011",
                 ),
             )
-            return branch.id
+            return 201, branch.id
 
     def transfer_to_target():
         with Session() as db:
             context = context_for_owner(db)
-            barrier.wait(timeout=10)
             transfer_ownership(db, context, target_membership_id)
             return 200
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         branch_future = executor.submit(create_new_branch)
-        transfer_future = executor.submit(transfer_to_target)
-        branch_id = branch_future.result()
+        transfer_future = None
+        try:
+            assert branch_holds_organization_lock.wait(timeout=10)
+            transfer_future = executor.submit(transfer_to_target)
+        finally:
+            release_branch_creation.set()
+
+        branch_status, branch_id = branch_future.result(timeout=10)
+        assert transfer_future is not None
         assert transfer_future.result() == 200
 
     with Session() as db:
@@ -273,16 +294,18 @@ def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner():
             )
             .one()
         )
-        assignment = (
-            db.query(BranchMembership)
-            .filter_by(
-                organization_membership_id=final_owner.id,
-                organization_id=organization_id,
-                shop_id=branch_id,
-                status=MembershipStatus.ACTIVE,
+        assignment = None
+        if branch_id is not None:
+            assignment = (
+                db.query(BranchMembership)
+                .filter_by(
+                    organization_membership_id=final_owner.id,
+                    organization_id=organization_id,
+                    shop_id=branch_id,
+                    status=MembershipStatus.ACTIVE,
+                )
+                .one_or_none()
             )
-            .one_or_none()
-        )
         transfer_audits = (
             db.query(BusinessAuditLog)
             .filter(
@@ -292,16 +315,20 @@ def test_concurrent_branch_creation_and_transfer_assigns_the_final_owner():
             )
             .count()
         )
+        branch_count = db.query(Shop).filter_by(name=branch_name).count()
         branch_audits = (
             db.query(BusinessAuditLog)
-            .filter_by(
-                action=BusinessAuditAction.BRANCH_CREATED,
-                entity_id=branch_id,
+            .filter(
+                BusinessAuditLog.action == BusinessAuditAction.BRANCH_CREATED,
+                BusinessAuditLog.audit_metadata["organization_id"].as_integer()
+                == organization_id,
             )
             .count()
         )
 
     assert final_owner.id == target_membership_id
+    assert branch_status == 201
+    assert branch_count == 1
     assert assignment is not None
     assert transfer_audits == 1
     assert branch_audits == 1

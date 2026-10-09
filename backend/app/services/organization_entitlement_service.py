@@ -469,6 +469,22 @@ def _reassign_commercial_source(
     )
     if organization is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    if actor_scope == "organization_owner":
+        current_owner = (
+            db.query(OrganizationMembership.id)
+            .filter(
+                OrganizationMembership.organization_id == organization.id,
+                OrganizationMembership.user_id == actor.id,
+                OrganizationMembership.role == MembershipRole.OWNER,
+                OrganizationMembership.status == MembershipStatus.ACTIVE,
+            )
+            .one_or_none()
+        )
+        if current_owner is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the organization OWNER may change the commercial source",
+            )
     previous_source_id = organization.commercial_source_shop_id
     if previous_source_id == target_shop_id:
         raise HTTPException(
