@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.domain_errors import DomainError, DomainErrorCode
@@ -34,6 +36,7 @@ ORGANIZATION_FEATURE_KEYS = frozenset({"multi_location.enabled"})
 ORGANIZATION_ENTITLEMENT_KEYS = frozenset(
     {"staff.max", "locations.max", *ORGANIZATION_FEATURE_KEYS}
 )
+COUNTED_LOCATION_STATUSES = (ShopStatus.ACTIVE, ShopStatus.PENDING)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +44,17 @@ class OrganizationCommercialSource:
     organization: Organization
     shop: Shop
     access: CommercialAccess | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OrganizationLocationCapacity:
+    organization_id: int
+    commercial_source_shop_id: int
+    current_usage: int
+    effective_limit: Decimal | None
+    remaining_allowance: Decimal | None
+    is_unlimited: bool
+    multi_location_enabled: bool
 
 
 def _source_error(code: str, message: str, organization_id: int) -> HTTPException:
@@ -85,6 +99,13 @@ def resolve_organization_commercial_source(
         raise _source_error(
             DomainErrorCode.COMMERCIAL_SOURCE_INVALID,
             "The organization's commercial source is invalid.",
+            organization_id,
+        )
+
+    if require_access and source.status != ShopStatus.ACTIVE:
+        raise _source_error(
+            DomainErrorCode.COMMERCIAL_SOURCE_INELIGIBLE,
+            "The organization's commercial source is not active.",
             organization_id,
         )
 
@@ -163,6 +184,134 @@ def get_scoped_feature(
         entitlement_key=feature_key,
     )
     return get_feature(source.id, feature_key, db)
+
+
+def count_organization_locations(db: Session, organization_id: int) -> int:
+    """Count locations that consume organization allowance."""
+    return int(
+        db.query(func.count(Shop.id))
+        .filter(
+            Shop.organization_id == organization_id,
+            Shop.status.in_(COUNTED_LOCATION_STATUSES),
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _location_quota_error(
+    *,
+    code: str,
+    message: str,
+    entitlement_key: str,
+    current_usage: int,
+    effective_limit: Decimal | None,
+    remaining_allowance: Decimal | None,
+    requested_increase: int,
+) -> HTTPException:
+    return DomainError(
+        code=code,
+        message=message,
+        details={
+            "entitlement_key": entitlement_key,
+            "current_usage": current_usage,
+            "effective_limit": (
+                str(effective_limit) if effective_limit is not None else None
+            ),
+            "remaining_allowance": (
+                str(remaining_allowance)
+                if remaining_allowance is not None
+                else None
+            ),
+            "requested_increase": requested_increase,
+        },
+    ).to_http_exception()
+
+
+def ensure_organization_location_capacity(
+    db: Session,
+    *,
+    organization_id: int,
+    requested_increase: int = 1,
+    organization_locked: bool = False,
+) -> OrganizationLocationCapacity:
+    """Serialize and validate one organization location-usage increase."""
+    if requested_increase < 1:
+        raise ValueError("requested_increase must be positive")
+
+    source = resolve_organization_commercial_source(
+        db,
+        organization_id,
+        lock_organization=not organization_locked,
+        lock_source=True,
+        require_access=True,
+    )
+    current_usage = count_organization_locations(db, organization_id)
+    projected_usage = current_usage + requested_increase
+
+    multi_location = get_feature(source.shop.id, "multi_location.enabled", db)
+    if projected_usage > 1 and (
+        not multi_location.configured or not multi_location.feature_enabled
+    ):
+        remaining = Decimal(max(1 - current_usage, 0))
+        raise _location_quota_error(
+            code=DomainErrorCode.FEATURE_NOT_AVAILABLE,
+            message="The current subscription does not enable multiple branches.",
+            entitlement_key="multi_location.enabled",
+            current_usage=current_usage,
+            effective_limit=Decimal("1"),
+            remaining_allowance=remaining,
+            requested_increase=requested_increase,
+        )
+
+    location_limit = get_limit(source.shop.id, "locations", db)
+    if not location_limit.configured or (
+        not location_limit.is_unlimited and location_limit.limit_value is None
+    ):
+        raise _location_quota_error(
+            code=DomainErrorCode.ENTITLEMENT_NOT_CONFIGURED,
+            message="The current subscription has no valid branch limit configured.",
+            entitlement_key="locations.max",
+            current_usage=current_usage,
+            effective_limit=None,
+            remaining_allowance=None,
+            requested_increase=requested_increase,
+        )
+
+    if location_limit.is_unlimited:
+        return OrganizationLocationCapacity(
+            organization_id=organization_id,
+            commercial_source_shop_id=source.shop.id,
+            current_usage=current_usage,
+            effective_limit=None,
+            remaining_allowance=None,
+            is_unlimited=True,
+            multi_location_enabled=bool(multi_location.feature_enabled),
+        )
+
+    effective_limit = location_limit.limit_value
+    assert effective_limit is not None
+    remaining = max(effective_limit - Decimal(current_usage), Decimal("0"))
+    if Decimal(projected_usage) > effective_limit:
+        raise _location_quota_error(
+            code=DomainErrorCode.PLAN_LIMIT_REACHED,
+            message="The organization has reached its branch limit.",
+            entitlement_key="locations.max",
+            current_usage=current_usage,
+            effective_limit=effective_limit,
+            remaining_allowance=remaining,
+            requested_increase=requested_increase,
+        )
+
+    return OrganizationLocationCapacity(
+        organization_id=organization_id,
+        commercial_source_shop_id=source.shop.id,
+        current_usage=current_usage,
+        effective_limit=effective_limit,
+        remaining_allowance=effective_limit - Decimal(projected_usage),
+        is_unlimited=False,
+        multi_location_enabled=bool(multi_location.feature_enabled),
+    )
 
 
 def _lock_candidate_shops(

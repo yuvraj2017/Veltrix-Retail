@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from decimal import Decimal
-
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -20,8 +18,7 @@ from app.services.authorization_service import TenantAuthorizationContext
 from app.services.business_audit_service import record_business_audit
 from app.services.entitlement_service import evaluate_shop_access
 from app.services.organization_entitlement_service import (
-    get_scoped_feature,
-    get_scoped_limit,
+    ensure_organization_location_capacity,
 )
 
 
@@ -105,44 +102,6 @@ def _branch_snapshot(branch: Shop) -> dict:
     }
 
 
-def _check_location_entitlement(
-    db: Session,
-    context: TenantAuthorizationContext,
-) -> None:
-    feature = get_scoped_feature(
-        db,
-        organization_id=context.organization.id,
-        operational_shop_id=context.active_shop_id,
-        feature_key="multi_location.enabled",
-    )
-    if not feature.configured or not feature.feature_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The current subscription does not enable multiple branches",
-        )
-
-    limit = get_scoped_limit(
-        db,
-        organization_id=context.organization.id,
-        operational_shop_id=context.active_shop_id,
-        resource_key="locations",
-    )
-    if not limit.configured:
-        _conflict("The current subscription has no branch limit configured")
-    if limit.is_unlimited:
-        return
-    if limit.limit_value is None:
-        _conflict("The current subscription has no valid branch limit configured")
-
-    current_count = (
-        db.query(Shop.id)
-        .filter(Shop.organization_id == context.organization.id)
-        .count()
-    )
-    if Decimal(current_count) >= limit.limit_value:
-        _conflict("The organization has reached its branch limit")
-
-
 def list_organization_branches(
     db: Session,
     context: TenantAuthorizationContext,
@@ -169,9 +128,11 @@ def create_branch(
     payload: BranchCreateRequest,
 ) -> Shop:
     try:
-        _lock_organization(db, context.organization.id)
         _assert_owner_manager(context)
-        _check_location_entitlement(db, context)
+        ensure_organization_location_capacity(
+            db,
+            organization_id=context.organization.id,
+        )
 
         branch = Shop(
             organization_id=context.organization.id,
@@ -281,8 +242,15 @@ def activate_branch(
     branch_id: int,
 ) -> Shop:
     try:
-        _lock_organization(db, context.organization.id)
         _assert_owner_manager(context)
+        _lock_organization(db, context.organization.id)
+        current = _get_branch(db, context.organization.id, branch_id)
+        if current.status == ShopStatus.INACTIVE:
+            ensure_organization_location_capacity(
+                db,
+                organization_id=context.organization.id,
+                organization_locked=True,
+            )
         branch = _get_branch(db, context.organization.id, branch_id, lock=True)
         if branch.status == ShopStatus.ACTIVE:
             _conflict("The branch is already active")
