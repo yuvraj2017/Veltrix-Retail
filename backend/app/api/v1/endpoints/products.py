@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_active_shop_access
+from app.models.product import ProductImage
 from app.models.user import User
 from app.schemas.product import (
     ProductCreate,
@@ -12,7 +13,12 @@ from app.schemas.product import (
     ProductStatsResponse,
     ProductUpdate,
 )
-from app.services.image_service import ImageProcessingError, save_optimized_image
+from app.services.entitlement_service import ensure_can_create
+from app.services.image_service import (
+    ImageProcessingError,
+    delete_uploaded_image_variants,
+    save_optimized_image,
+)
 from app.services.product_service import (
     DEFAULT_PRODUCT_PAGE_SIZE,
     MAX_PRODUCT_PAGE_SIZE,
@@ -32,6 +38,31 @@ ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 MAX_PRODUCT_IMAGES = 5
 
 
+def cleanup_unpersisted_product_images(image_urls: list[str], db: Session) -> None:
+    if not image_urls:
+        return
+
+    db.rollback()
+    try:
+        persisted_urls = {
+            row[0]
+            for row in (
+                db.query(ProductImage.image_url)
+                .filter(ProductImage.image_url.in_(image_urls))
+                .all()
+            )
+        }
+    except Exception:
+        # If persistence cannot be determined, retain the files rather than
+        # risk breaking an image reference committed by the database.
+        db.rollback()
+        return
+
+    for image_url in image_urls:
+        if image_url not in persisted_urls:
+            delete_uploaded_image_variants(image_url)
+
+
 def save_uploaded_product_images(images: list[UploadFile] | None) -> list[str]:
     if not images:
         return []
@@ -44,22 +75,27 @@ def save_uploaded_product_images(images: list[UploadFile] | None) -> list[str]:
 
     saved_urls: list[str] = []
 
-    for image in images:
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only png, jpg, jpeg, and webp files are allowed",
-            )
+    try:
+        for image in images:
+            if image.content_type not in ALLOWED_IMAGE_TYPES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Only png, jpg, jpeg, and webp files are allowed",
+                )
 
-        try:
-            full_url, _thumbnail_url = save_optimized_image(image, "products")
-        except ImageProcessingError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
+            try:
+                full_url, _thumbnail_url = save_optimized_image(image, "products")
+            except ImageProcessingError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
 
-        saved_urls.append(full_url)
+            saved_urls.append(full_url)
+    except Exception:
+        for saved_url in saved_urls:
+            delete_uploaded_image_variants(saved_url)
+        raise
 
     return saved_urls
 
@@ -85,8 +121,6 @@ def create_product_endpoint(
     current_user: User = Depends(require_active_shop_access),
     db: Session = Depends(get_db),
 ):
-    image_urls = save_uploaded_product_images(images)
-
     payload = ProductCreate(
         name=name,
         sku=sku,
@@ -105,7 +139,15 @@ def create_product_endpoint(
         main_image_url=main_image_url,
     )
 
-    return create_product(payload, current_user, db, image_urls=image_urls)
+    # Validate the quota before writing files. The service repeats this check
+    # under the same shop lock immediately before inserting the product.
+    ensure_can_create(current_user.shop_id, "products", db)
+    image_urls = save_uploaded_product_images(images)
+    try:
+        return create_product(payload, current_user, db, image_urls=image_urls)
+    except Exception:
+        cleanup_unpersisted_product_images(image_urls, db)
+        raise
 
 
 @router.get("", response_model=ProductListResponse)
@@ -182,8 +224,6 @@ def update_product_endpoint(
     # reloads it for the locked mutation path, but a foreign-branch ID cannot
     # leave orphaned files behind.
     get_product(product_id, current_user, db)
-    image_urls = save_uploaded_product_images(images)
-
     payload = ProductUpdate(
         name=name,
         sku=sku,
@@ -202,7 +242,12 @@ def update_product_endpoint(
         main_image_url=main_image_url,
     )
 
-    return update_product(product_id, payload, current_user, db, new_image_urls=image_urls)
+    image_urls = save_uploaded_product_images(images)
+    try:
+        return update_product(product_id, payload, current_user, db, new_image_urls=image_urls)
+    except Exception:
+        cleanup_unpersisted_product_images(image_urls, db)
+        raise
 
 
 @router.delete("/{product_id}")

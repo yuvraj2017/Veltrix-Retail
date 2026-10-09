@@ -13,6 +13,7 @@ lists, tables, and avatars.
 import logging
 import os
 import uuid
+from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -38,6 +39,25 @@ Image.MAX_IMAGE_PIXELS = 64_000_000
 
 class ImageProcessingError(Exception):
     """Raised when an upload cannot be decoded as an image."""
+
+
+def delete_uploaded_image_variants(image_url: str | None) -> None:
+    """Remove a generated full image and thumbnail without leaving uploads/."""
+    if not image_url or not image_url.startswith("/uploads/"):
+        return
+
+    uploads_root = Path("uploads").resolve()
+    full_path = Path(image_url.lstrip("/")).resolve()
+    if not full_path.is_relative_to(uploads_root):
+        logger.warning("Refused to delete an upload outside the uploads directory")
+        return
+
+    thumbnail_path = full_path.with_name(f"{full_path.stem}_thumb{full_path.suffix}")
+    for path in (full_path, thumbnail_path):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Could not remove uploaded image %s: %s", path, exc)
 
 
 def _flatten_to_rgb(image: Image.Image) -> Image.Image:
@@ -69,6 +89,8 @@ def save_optimized_image(upload_file, subdirectory: str) -> tuple[str, str]:
     upload_dir = os.path.join("uploads", subdirectory)
     os.makedirs(upload_dir, exist_ok=True)
 
+    full_path: str | None = None
+    thumbnail_path: str | None = None
     try:
         upload_file.file.seek(0)
         with Image.open(upload_file.file) as opened:
@@ -82,8 +104,9 @@ def save_optimized_image(upload_file, subdirectory: str) -> tuple[str, str]:
             full = image.copy()
             full.thumbnail((MAX_FULL_EDGE, MAX_FULL_EDGE), Image.LANCZOS)
             full_name = f"{stem}.webp"
+            full_path = os.path.join(upload_dir, full_name)
             full.save(
-                os.path.join(upload_dir, full_name),
+                full_path,
                 format="WEBP",
                 quality=WEBP_QUALITY_FULL,
                 method=6,
@@ -95,13 +118,22 @@ def save_optimized_image(upload_file, subdirectory: str) -> tuple[str, str]:
                 image, (THUMBNAIL_EDGE, THUMBNAIL_EDGE), Image.LANCZOS
             )
             thumb_name = f"{stem}_thumb.webp"
+            thumbnail_path = os.path.join(upload_dir, thumb_name)
             thumb.save(
-                os.path.join(upload_dir, thumb_name),
+                thumbnail_path,
                 format="WEBP",
                 quality=WEBP_QUALITY_THUMB,
                 method=6,
             )
     except (UnidentifiedImageError, OSError, ValueError) as exc:
+        for path in (full_path, thumbnail_path):
+            if path:
+                try:
+                    os.remove(path)
+                except FileNotFoundError:
+                    pass
+                except OSError as cleanup_exc:
+                    logger.warning("Could not remove partial image %s: %s", path, cleanup_exc)
         logger.warning("Rejected unreadable image upload: %s", exc)
         raise ImageProcessingError("The uploaded file is not a readable image") from exc
 

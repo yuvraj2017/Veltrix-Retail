@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-import os
 from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -11,6 +10,7 @@ from app.schemas.product import ProductCreate, ProductStatsResponse, ProductUpda
 from app.models.business_audit_log import BusinessAuditAction
 from app.services.business_audit_service import record_business_audit
 from app.services.entitlement_service import ensure_can_create
+from app.services.image_service import delete_uploaded_image_variants
 from app.services.stock_service import record_opening_balance
 
 MAX_PRODUCT_IMAGES = 5
@@ -447,13 +447,7 @@ def delete_product_image(image_id: int, current_user: User, db: Session):
         )
 
     product = image.product
-
-    file_path = image.image_url.lstrip("/")
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
+    image_url = image.image_url
 
     was_main = image.is_main
 
@@ -478,5 +472,6 @@ def delete_product_image(image_id: int, current_user: User, db: Session):
             product.main_image_url = first_image.image_url
 
     db.commit()
+    delete_uploaded_image_variants(image_url)
 
     return {"message": "Product image removed successfully"}

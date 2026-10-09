@@ -494,10 +494,15 @@ def get_limit(shop_id: int, resource_key: str, db: Session) -> EffectiveEntitlem
     )
 
 
-def has_feature(shop_id: int, feature_key: str, db: Session) -> bool:
+def get_feature(shop_id: int, feature_key: str, db: Session) -> EffectiveEntitlement:
     access = evaluate_shop_access(shop_id, db)
     if not access.allowed or not access.subscription:
-        return False
+        return EffectiveEntitlement(
+            key=feature_key,
+            kind=EntitlementKind.FEATURE,
+            resource_key=None,
+            configured=False,
+        )
 
     if access.subscription.catalog_version_id:
         snapshot = (
@@ -511,8 +516,13 @@ def has_feature(shop_id: int, feature_key: str, db: Session) -> bool:
             .first()
         )
         if not snapshot:
-            return False
-        effective = _effective_from_snapshot(
+            return EffectiveEntitlement(
+                key=feature_key,
+                kind=EntitlementKind.FEATURE,
+                resource_key=None,
+                configured=False,
+            )
+        return _effective_from_snapshot(
             snapshot=snapshot,
             override=_active_override(
                 db=db,
@@ -520,11 +530,15 @@ def has_feature(shop_id: int, feature_key: str, db: Session) -> bool:
                 entitlement_id=snapshot.entitlement_id,
             ),
         )
-        return bool(effective.configured and effective.feature_enabled)
 
     definition = _find_feature_definition(db, feature_key)
     if not definition:
-        return False
+        return EffectiveEntitlement(
+            key=feature_key,
+            kind=EntitlementKind.FEATURE,
+            resource_key=None,
+            configured=False,
+        )
 
     plan_entitlement = (
         db.query(PlanEntitlement)
@@ -539,12 +553,50 @@ def has_feature(shop_id: int, feature_key: str, db: Session) -> bool:
         shop_id=shop_id,
         entitlement_id=definition.id,
     )
-    effective = _effective_from_rows(
+    return _effective_from_rows(
         definition=definition,
         plan_entitlement=plan_entitlement,
         override=override,
     )
+
+
+def has_feature(shop_id: int, feature_key: str, db: Session) -> bool:
+    effective = get_feature(shop_id, feature_key, db)
     return bool(effective.configured and effective.feature_enabled)
+
+
+def ensure_feature_enabled(
+    shop_id: int,
+    feature_key: str,
+    db: Session,
+) -> EffectiveEntitlement:
+    """Require commercial access and one effective boolean entitlement.
+
+    Callers must still enforce authentication, branch membership, and RBAC.
+    This helper is the commercial half of that composition and intentionally
+    fails closed for missing or disabled features.
+    """
+    access = evaluate_shop_access(shop_id, db)
+    if not access.allowed:
+        raise DomainError(
+            code=access.code or DomainErrorCode.FEATURE_NOT_AVAILABLE,
+            message=access.message or "This commercial feature is not available.",
+            details={"shop_id": shop_id, "feature_key": feature_key},
+        ).to_http_exception()
+
+    effective = get_feature(shop_id, feature_key, db)
+    if effective.configured and effective.feature_enabled:
+        return effective
+
+    raise DomainError(
+        code=DomainErrorCode.FEATURE_NOT_AVAILABLE,
+        message=f"The feature '{feature_key}' is not available for this shop.",
+        details={
+            "feature_key": feature_key,
+            "configured": effective.configured,
+            "source": effective.source,
+        },
+    ).to_http_exception()
 
 
 def get_usage(shop_id: int, resource_key: str, db: Session) -> UsageResult:

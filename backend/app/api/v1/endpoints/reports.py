@@ -20,6 +20,7 @@ from app.services.report_service import (
     get_report_summary,
     get_sales_profit_report,
 )
+from app.services.entitlement_service import ensure_feature_enabled
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -29,6 +30,7 @@ def get_reports_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "reports.advanced", db)
     return get_report_summary(db, current_user)
 
 
@@ -38,6 +40,7 @@ def get_reports_sales_profit(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "reports.advanced", db)
     return get_sales_profit_report(db, current_user, period=period)
 
 
@@ -47,6 +50,7 @@ def get_reports_cashflow(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "reports.advanced", db)
     return get_cashflow_report(db, current_user, period=period)
 
 
@@ -56,6 +60,7 @@ def get_reports_category_performance(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "reports.advanced", db)
     return get_category_performance_report(db, current_user, period=period)
 
 
@@ -65,6 +70,7 @@ def get_reports_customer_insights(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "reports.advanced", db)
     return get_customer_insights_report(db, current_user, period=period)
 
 
@@ -74,4 +80,5 @@ def get_reports_payment_insights(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "reports.advanced", db)
     return get_payment_insights_report(db, current_user, period=period)

@@ -1113,7 +1113,9 @@ def create_shop_override(
     *,
     ip_address: str | None = None,
 ) -> ShopOverrideResponse:
-    _require_shop(db, shop_id)
+    # Resource creation uses this same row as the quota serialization point.
+    # Locking it here prevents a concurrent lower override from racing a create.
+    _lock_shop(db, shop_id)
     definition = _require_entitlement(db, payload.entitlement_id)
     try:
         validate_entitlement_configuration(
@@ -1185,6 +1187,8 @@ def expire_shop_override(
     )
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Override not found")
+    _lock_shop(db, row.shop_id)
+    db.refresh(row)
     previous = {"ends_at": row.ends_at}
     row.ends_at = _utcnow()
     db.flush()
@@ -1212,7 +1216,9 @@ def assign_shop_subscription(
     *,
     ip_address: str | None = None,
 ) -> ShopSubscription:
-    _require_shop(db, shop_id)
+    # A direct assignment can change effective quota values, so it shares the
+    # same lock boundary as quota-consuming resource creation.
+    _lock_shop(db, shop_id)
     plan = _require_assignable_plan(db, payload.plan_id)
     catalog_version = _ensure_baseline_catalog_version(db, plan)
     if payload.status not in SubscriptionStatus.ALL:

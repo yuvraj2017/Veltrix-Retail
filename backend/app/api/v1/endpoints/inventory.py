@@ -36,6 +36,7 @@ from app.services.inventory_reporting_service import (
     list_reconciliation_report,
     list_vendor_purchasing_insights,
 )
+from app.services.entitlement_service import ensure_feature_enabled
 
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
@@ -190,6 +191,7 @@ def export_inventory_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_shop_access),
 ):
+    ensure_feature_enabled(current_user.shop_id, "export.enabled", db)
     if report_name in {"inventory", "low-stock"}:
         status_filter = "actionable" if report_name == "low-stock" else stock_status
         result = list_inventory_products(
