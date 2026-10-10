@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -531,6 +531,24 @@ def list_plans(db: Session, *, include_archived: bool = False) -> list[Plan]:
     return query.order_by(Plan.display_order.asc(), Plan.id.asc()).all()
 
 
+def list_plan_catalog_versions(
+    db: Session,
+    plan_id: int,
+) -> list[PlanCatalogVersionResponse]:
+    _require_plan(db, plan_id)
+    versions = (
+        db.query(PlanCatalogVersion)
+        .options(joinedload(PlanCatalogVersion.entitlement_snapshots))
+        .filter(
+            PlanCatalogVersion.plan_id == plan_id,
+            PlanCatalogVersion.status == CatalogVersionStatus.PUBLISHED,
+        )
+        .order_by(PlanCatalogVersion.version_number.desc())
+        .all()
+    )
+    return [PlanCatalogVersionResponse.model_validate(version) for version in versions]
+
+
 def list_public_plan_catalog(db: Session) -> list[PublicPlanResponse]:
     plans = (
         db.query(Plan)
@@ -590,25 +608,61 @@ def _validate_catalog_entitlements(
     payloads: list[CatalogEntitlementSnapshotRequest],
 ) -> list[tuple[CatalogEntitlementSnapshotRequest, EntitlementDefinition]]:
     entitlement_ids = [item.entitlement_id for item in payloads]
-    if len(entitlement_ids) != len(set(entitlement_ids)):
+    duplicate_ids = sorted(
+        entitlement_id
+        for entitlement_id in set(entitlement_ids)
+        if entitlement_ids.count(entitlement_id) > 1
+    )
+    if duplicate_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Catalog entitlement definitions must be unique",
+            detail={
+                "code": "CATALOG_SNAPSHOT_INVALID",
+                "message": "Catalog entitlement definitions must be unique.",
+                "details": {"duplicate_entitlement_ids": duplicate_ids},
+            },
         )
-    definitions = {
-        row.id: row
-        for row in db.query(EntitlementDefinition)
-        .filter(EntitlementDefinition.id.in_(entitlement_ids))
+
+    # A PostgreSQL SHARE lock gives publication a stable definition set while
+    # still allowing publications for different plans to proceed concurrently.
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(text("LOCK TABLE entitlement_definitions IN SHARE MODE"))
+    definition_rows = (
+        db.query(EntitlementDefinition)
+        .order_by(EntitlementDefinition.id.asc())
+        .with_for_update()
         .all()
-    } if entitlement_ids else {}
+    )
+    definitions = {row.id: row for row in definition_rows}
+    active_definitions = {row.id: row for row in definition_rows if row.is_active}
+    submitted_ids = set(entitlement_ids)
+    active_ids = set(active_definitions)
+    missing_ids = sorted(active_ids - submitted_ids)
+    unknown_ids = sorted(submitted_ids - set(definitions))
+    inactive_ids = sorted((submitted_ids & set(definitions)) - active_ids)
+    if missing_ids or unknown_ids or inactive_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "CATALOG_SNAPSHOT_INVALID",
+                "message": "Catalog versions must include exactly one value for every active entitlement.",
+                "details": {
+                    "missing_entitlements": [
+                        {"id": entitlement_id, "key": active_definitions[entitlement_id].key}
+                        for entitlement_id in missing_ids
+                    ],
+                    "unknown_entitlement_ids": unknown_ids,
+                    "inactive_entitlements": [
+                        {"id": entitlement_id, "key": definitions[entitlement_id].key}
+                        for entitlement_id in inactive_ids
+                    ],
+                },
+            },
+        )
+
     resolved = []
     for item in payloads:
-        definition = definitions.get(item.entitlement_id)
-        if not definition or not definition.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Entitlement {item.entitlement_id} is unavailable",
-            )
+        definition = active_definitions[item.entitlement_id]
         try:
             validate_entitlement_configuration(
                 definition=definition,
@@ -715,6 +769,22 @@ def publish_plan_catalog_version(
     plan = db.query(Plan).filter(Plan.id == plan_id).with_for_update().first()
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    latest = _latest_published_catalog_version(db, plan.id)
+    if (
+        payload.expected_latest_version_number is not None
+        and (
+            latest is None
+            or latest.version_number != payload.expected_latest_version_number
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "CATALOG_VERSION_CONFLICT",
+                "message": "The catalog changed since this draft was prepared. Refresh and review the latest version.",
+                "current_version_number": latest.version_number if latest else None,
+            },
+        )
     version = _publish_catalog_version(
         db,
         plan=plan,
@@ -759,6 +829,7 @@ def create_plan(
     code = _normalize_code(payload.code)
     if db.query(Plan).filter(Plan.code == code).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Plan code already exists")
+    _validate_catalog_entitlements(db, payload.entitlements)
 
     plan = Plan(
         code=code,
@@ -783,7 +854,7 @@ def create_plan(
         currency=payload.currency,
         trial_days=payload.trial_days,
         grace_period_days=payload.grace_period_days,
-        entitlements=[],
+        entitlements=payload.entitlements,
         actor_id=actor.id,
     )
     _audit(

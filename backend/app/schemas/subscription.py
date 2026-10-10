@@ -2,13 +2,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 
 class EntitlementValuePayload(BaseModel):
     limit_value: Decimal | None = Field(default=None, ge=0)
-    is_unlimited: bool = False
-    feature_enabled: bool | None = None
+    is_unlimited: StrictBool = False
+    feature_enabled: StrictBool | None = None
+
+
+class CatalogEntitlementSnapshotRequest(EntitlementValuePayload):
+    entitlement_id: int
 
 
 class PlanCreateRequest(BaseModel):
@@ -22,6 +26,7 @@ class PlanCreateRequest(BaseModel):
     grace_period_days: int = Field(default=0, ge=0)
     is_active: bool = True
     display_order: int = 0
+    entitlements: list[CatalogEntitlementSnapshotRequest] = Field(default_factory=list)
 
 
 class PlanUpdateRequest(BaseModel):
@@ -58,11 +63,8 @@ class PlanResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CatalogEntitlementSnapshotRequest(EntitlementValuePayload):
-    entitlement_id: int
-
-
 class PlanCatalogPublishRequest(BaseModel):
+    expected_latest_version_number: int | None = Field(default=None, ge=1)
     monthly_price: Decimal = Field(ge=0)
     annual_price: Decimal = Field(ge=0)
     currency: str = Field(min_length=3, max_length=3)

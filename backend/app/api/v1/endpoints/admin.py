@@ -306,6 +306,18 @@ def update_plan(
     )
 
 
+@router.get(
+    "/plans/{plan_id}/catalog-versions",
+    response_model=list[PlanCatalogVersionResponse],
+)
+def list_plan_catalog_versions(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    return commercial_service.list_plan_catalog_versions(db, plan_id)
+
+
 @router.post(
     "/plans/{plan_id}/catalog-versions",
     response_model=PlanCatalogVersionResponse,

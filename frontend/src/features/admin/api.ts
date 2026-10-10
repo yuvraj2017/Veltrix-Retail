@@ -7,6 +7,9 @@ import type {
   EntitlementDefinition,
   License,
   Plan,
+  PlanCatalogPublishPayload,
+  PlanCatalogVersion,
+  PlanCreatePayload,
   PlanEntitlement,
   PaymentGatewayConfig,
   ShopOverride,
@@ -127,13 +130,31 @@ export async function getPlans(includeArchived = false) {
   return data
 }
 
-export async function createPlan(payload: Partial<Plan> & { code: string; name: string }) {
+export async function createPlan(payload: PlanCreatePayload) {
   const { data } = await api.post<Plan>('/api/v1/admin/plans', payload)
   return data
 }
 
 export async function updatePlan(planId: number, payload: Partial<Plan>) {
   const { data } = await api.patch<Plan>(`/api/v1/admin/plans/${planId}`, payload)
+  return data
+}
+
+export async function getPlanCatalogVersions(planId: number) {
+  const { data } = await api.get<PlanCatalogVersion[]>(
+    `/api/v1/admin/plans/${planId}/catalog-versions`,
+  )
+  return data
+}
+
+export async function publishPlanCatalogVersion(
+  planId: number,
+  payload: PlanCatalogPublishPayload,
+) {
+  const { data } = await api.post<PlanCatalogVersion>(
+    `/api/v1/admin/plans/${planId}/catalog-versions`,
+    payload,
+  )
   return data
 }
 

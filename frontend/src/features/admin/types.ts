@@ -231,6 +231,65 @@ export type PlanEntitlement = {
   updated_at: string
 }
 
+export type CatalogEntitlementSnapshot = {
+  id: number
+  entitlement_id: number
+  entitlement_key: string
+  entitlement_name: string
+  kind: 'limit' | 'feature'
+  value_type: string
+  resource_key?: string | null
+  limit_value?: string | number | null
+  is_unlimited: boolean
+  feature_enabled?: boolean | null
+}
+
+export type PlanCatalogVersion = {
+  id: number
+  plan_id: number
+  version_number: number
+  status: 'draft' | 'published'
+  monthly_price: string | number
+  annual_price: string | number
+  currency: string
+  trial_days: number
+  grace_period_days: number
+  published_at?: string | null
+  published_by_user_id?: number | null
+  entitlement_snapshots: CatalogEntitlementSnapshot[]
+}
+
+export type CatalogEntitlementInput = {
+  entitlement_id: number
+  limit_value?: string | number | null
+  is_unlimited: boolean
+  feature_enabled?: boolean | null
+}
+
+export type PlanCatalogPublishPayload = {
+  expected_latest_version_number?: number | null
+  monthly_price: string | number
+  annual_price: string | number
+  currency: string
+  trial_days: number
+  grace_period_days: number
+  entitlements: CatalogEntitlementInput[]
+}
+
+export type PlanCreatePayload = {
+  code: string
+  name: string
+  description?: string | null
+  monthly_price: string | number
+  annual_price: string | number
+  currency: string
+  trial_days: number
+  grace_period_days: number
+  is_active: boolean
+  display_order: number
+  entitlements: CatalogEntitlementInput[]
+}
+
 export type ShopSummary = {
   id: number
   name: string

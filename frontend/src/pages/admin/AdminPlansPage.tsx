@@ -4,7 +4,6 @@ import {
   BadgeIndianRupee,
   Blocks,
   CalendarDays,
-  CheckCircle2,
   Copy,
   CreditCard,
   Database,
@@ -25,8 +24,9 @@ import {
   WalletCards,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { useEffect, useId, useState, type FormEvent, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 
+import { PlanCatalogManager } from '../../components/admin/PlanCatalogManager'
 import { useToast } from '../../components/ui/ToastProvider'
 import {
   assignShopSubscription,
@@ -37,7 +37,6 @@ import {
   getAdminShops,
   getEntitlements,
   getPaymentGateways,
-  getPlanEntitlements,
   getPlans,
   getShopOverrides,
   getShopSubscriptionOverview,
@@ -47,28 +46,9 @@ import {
   savePaymentGateway,
   updateLicenseStatus,
   updateSubscriptionStatus,
-  upsertPlanEntitlement,
 } from '../../features/admin/api'
-import type { EntitlementDefinition, License, PaymentGatewayConfig, PlanEntitlement, SubscriptionPayment } from '../../features/admin/types'
+import type { License, PaymentGatewayConfig, PlanCreatePayload, SubscriptionPayment } from '../../features/admin/types'
 import { getApiErrorMessage } from '../../lib/api-error'
-
-const featureOptions = [
-  ['reports.advanced', 'Advanced reports'],
-  ['export.enabled', 'CSV/Excel export'],
-  ['api.enabled', 'API access'],
-  ['multi_location.enabled', 'Multi-location'],
-  ['custom_branding.enabled', 'Custom branding'],
-  ['integrations.enabled', 'Integrations'],
-] as const
-
-const limitFields = [
-  ['products_max', 'Products Limit', 'products.max'],
-  ['vendors_max', 'Vendors Allowed', 'vendors.max'],
-  ['staff_max', 'Staff Seats', 'staff.max'],
-  ['locations_max', 'Locations Allowed', 'locations.max'],
-  ['orders_monthly_max', 'Monthly Orders', 'orders.monthly.max'],
-  ['storage_max', 'Cloud Storage (GB)', 'storage.max'],
-] as const
 
 const gatewayCards = [
   {
@@ -119,17 +99,9 @@ function formatDateTime(value?: string | null) {
   })
 }
 
-function entitlementValue(row?: PlanEntitlement) {
-  if (!row) return '-'
-  if (row.kind === 'feature') return row.feature_enabled ? 'On' : 'Off'
-  if (row.is_unlimited) return 'Unlimited'
-  return row.limit_value ?? '-'
-}
-
 export default function AdminPlansPage() {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
-  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
   const [selectedShopId, setSelectedShopId] = useState<number | null>(null)
   const [gatewayProvider, setGatewayProvider] = useState('razorpay')
   const [gatewayModalOpen, setGatewayModalOpen] = useState(false)
@@ -140,6 +112,7 @@ export default function AdminPlansPage() {
     destructive?: boolean
   } | null>(null)
   const [licenseReason, setLicenseReason] = useState('')
+  const [planEntitlementErrors, setPlanEntitlementErrors] = useState<Record<number, string>>({})
 
   const plansQuery = useQuery({ queryKey: ['admin', 'plans'], queryFn: () => getPlans(true) })
   const entitlementsQuery = useQuery({ queryKey: ['admin', 'entitlements'], queryFn: getEntitlements })
@@ -151,11 +124,6 @@ export default function AdminPlansPage() {
   const allPaymentsQuery = useQuery({
     queryKey: ['admin', 'subscription-payments', 'all'],
     queryFn: () => getSubscriptionPayments(),
-  })
-  const planEntitlementsQuery = useQuery({
-    queryKey: ['admin', 'plan-entitlements', selectedPlanId],
-    queryFn: () => getPlanEntitlements(selectedPlanId as number),
-    enabled: Boolean(selectedPlanId),
   })
   const shopOverviewQuery = useQuery({
     queryKey: ['admin', 'shop-subscription', selectedShopId],
@@ -177,7 +145,6 @@ export default function AdminPlansPage() {
   const shops = shopsQuery.data ?? []
   const gateways = gatewaysQuery.data ?? []
   const payments = allPaymentsQuery.data ?? []
-  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || plans[0]
   const selectedShop = shops.find((shop) => shop.id === selectedShopId) || shops[0]
   const activeGateway = gateways.find((gateway) => gateway.is_active)
   const selectedGateway = gateways.find((gateway) => gateway.provider === gatewayProvider)
@@ -186,9 +153,8 @@ export default function AdminPlansPage() {
   )
 
   useEffect(() => {
-    if (!selectedPlanId && plans[0]) setSelectedPlanId(plans[0].id)
     if (!selectedShopId && shops[0]) setSelectedShopId(shops[0].id)
-  }, [plans, selectedPlanId, selectedShopId, shops])
+  }, [selectedShopId, shops])
 
   const activePlans = plans.filter((plan) => plan.is_active && !plan.is_archived)
   const limitCount = entitlements.filter((item) => item.kind === 'limit').length
@@ -199,11 +165,6 @@ export default function AdminPlansPage() {
       const amount = Number(payment.amount || 0)
       return total + (payment.billing_interval === 'annual' ? amount / 12 : amount)
     }, 0)
-
-  const selectedPlanEntitlements = planEntitlementsQuery.data ?? []
-  const selectedEntitlementMap = useMemo(() => {
-    return new Map(selectedPlanEntitlements.map((item) => [item.entitlement_key, item]))
-  }, [selectedPlanEntitlements])
 
   const filteredShops = shops.filter((shop) => {
     const term = shopFilter.trim().toLowerCase()
@@ -262,53 +223,53 @@ export default function AdminPlansPage() {
     }
   }
 
-  const createPlanMutation = useMutation({
-    mutationFn: (form: FormData) =>
-      createPlan({
-        code: String(form.get('code') || ''),
-        name: String(form.get('name') || ''),
-        description: String(form.get('description') || '') || null,
-        monthly_price: String(form.get('monthly_price') || '0'),
-        annual_price: String(form.get('annual_price') || '0'),
-        currency: String(form.get('currency') || 'INR'),
-        trial_days: Number(form.get('trial_days') || 0),
-        grace_period_days: Number(form.get('grace_period_days') || 0),
-        is_active: true,
-        display_order: Number(form.get('display_order') || 0),
-      }),
-  })
+  const createPlanMutation = useMutation({ mutationFn: createPlan })
 
-  const createPlanWithCoreEntitlements = async (form: FormData) => {
-    const plan = await createPlanMutation.mutateAsync(form)
-    const coreLimits: Record<string, string> = {
-      'products.max': String(form.get('products_max') || ''),
-      'vendors.max': String(form.get('vendors_max') || ''),
-      'staff.max': String(form.get('staff_max') || ''),
-      'locations.max': String(form.get('locations_max') || ''),
-      'orders.monthly.max': String(form.get('orders_monthly_max') || ''),
-      'storage.max': String(form.get('storage_max') || ''),
-    }
-
-    for (const [key, value] of Object.entries(coreLimits)) {
-      const definition = entitlements.find((item) => item.key === key)
-      if (!definition) continue
-      const unlimited = value.trim().toLowerCase() === 'unlimited'
-      await upsertPlanEntitlement(plan.id, definition.id, {
-        is_unlimited: unlimited,
-        limit_value: unlimited ? null : value || '0',
-        feature_enabled: null,
+  const createPlanWithCompleteCatalog = async (form: FormData) => {
+    const validationErrors: Record<number, string> = {}
+    const catalogEntitlements: PlanCreatePayload['entitlements'] = entitlements
+      .filter((definition) => definition.is_active)
+      .map((definition) => {
+        if (definition.kind === 'feature') {
+          return {
+            entitlement_id: definition.id,
+            limit_value: null,
+            is_unlimited: false,
+            feature_enabled: form.get(`entitlement-feature-${definition.id}`) === 'on',
+          }
+        }
+        const raw = String(form.get(`entitlement-limit-${definition.id}`) || '').trim()
+        const unlimited = raw.toLowerCase() === 'unlimited'
+        const numeric = Number(raw)
+        if (!unlimited && (!raw || !Number.isFinite(numeric) || numeric < 0)) {
+          validationErrors[definition.id] = 'Enter a nonnegative limit or the word Unlimited.'
+        } else if (!unlimited && definition.value_type === 'integer' && !Number.isInteger(numeric)) {
+          validationErrors[definition.id] = 'Enter a whole-number limit or the word Unlimited.'
+        }
+        return {
+          entitlement_id: definition.id,
+          limit_value: unlimited ? null : raw,
+          is_unlimited: unlimited,
+          feature_enabled: null,
+        }
       })
+    setPlanEntitlementErrors(validationErrors)
+    if (Object.keys(validationErrors).length) {
+      throw new Error('Complete every numeric entitlement before creating the plan.')
     }
-
-    for (const [key] of featureOptions) {
-      const definition = entitlements.find((item) => item.key === key)
-      if (!definition) continue
-      await upsertPlanEntitlement(plan.id, definition.id, {
-        is_unlimited: false,
-        limit_value: null,
-        feature_enabled: form.get(key) === 'on',
-      })
-    }
+    return createPlanMutation.mutateAsync({
+      code: String(form.get('code') || ''),
+      name: String(form.get('name') || ''),
+      description: String(form.get('description') || '') || null,
+      monthly_price: String(form.get('monthly_price') || '0'),
+      annual_price: String(form.get('annual_price') || '0'),
+      currency: String(form.get('currency') || 'INR'),
+      trial_days: Number(form.get('trial_days') || 0),
+      grace_period_days: Number(form.get('grace_period_days') || 0),
+      is_active: true,
+      display_order: Number(form.get('display_order') || 0),
+      entitlements: catalogEntitlements,
+    })
   }
 
   const createEntitlementMutation = useMutation({
@@ -321,24 +282,6 @@ export default function AdminPlansPage() {
         resource_key: String(form.get('resource_key') || '') || null,
       }),
   })
-
-  const configureEntitlement = (definition: EntitlementDefinition, form: FormData) => {
-    if (!selectedPlan) return
-    const isUnlimited = form.get('is_unlimited') === 'on'
-    const enabled = form.get('feature_enabled') === 'on'
-    runMutation(
-      () =>
-        upsertPlanEntitlement(selectedPlan.id, definition.id, {
-          is_unlimited: definition.kind === 'limit' ? isUnlimited : false,
-          limit_value:
-            definition.kind === 'limit' && !isUnlimited
-              ? String(form.get('limit_value') || '0')
-              : null,
-          feature_enabled: definition.kind === 'feature' ? enabled : null,
-        }),
-      'Plan entitlement saved.',
-    )
-  }
 
   const assignSelectedShop = (form: FormData) => {
     if (!selectedShop) return
@@ -475,6 +418,14 @@ export default function AdminPlansPage() {
         <MetricCard icon={<WalletCards size={19} />} label="Monthly Recurring" value={money(recurringMonthly)} helper={`${money(recurringMonthly * 12)} run rate`} accent="violet" />
       </div>
 
+      <div className="mb-6">
+        <PlanCatalogManager
+          plans={plans}
+          definitions={entitlements}
+          loading={plansQuery.isLoading || entitlementsQuery.isLoading}
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.85fr]">
         <Card
           icon={<Blocks size={20} />}
@@ -487,8 +438,11 @@ export default function AdminPlansPage() {
             onSubmit={async (event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
               const form = new FormData(event.currentTarget)
-              const ok = await runMutation(() => createPlanWithCoreEntitlements(form), 'Plan and core limits created.')
-              if (ok) event.currentTarget.reset()
+              const ok = await runMutation(() => createPlanWithCompleteCatalog(form), 'Plan and catalog version created.')
+              if (ok) {
+                setPlanEntitlementErrors({})
+                event.currentTarget.reset()
+              }
             }}
           >
             <div className="grid gap-4 md:grid-cols-2">
@@ -507,9 +461,21 @@ export default function AdminPlansPage() {
             <div>
               <SectionTitle icon={<Gauge size={15} />} title="Hard Quota Allocations" />
               <div className="mt-3 grid gap-3 md:grid-cols-3">
-                {limitFields.map(([name, label]) => (
-                  <div key={name} className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/20">
-                    <Field name={name} label={label} placeholder={name.includes('storage') ? '25' : '100'} />
+                {entitlements.filter((definition) => definition.is_active && definition.kind === 'limit').map((definition) => (
+                  <div key={definition.id} className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                    <Field
+                      name={`entitlement-limit-${definition.id}`}
+                      label={definition.name}
+                      placeholder="Enter a limit or Unlimited"
+                      error={planEntitlementErrors[definition.id]}
+                      onChange={() => setPlanEntitlementErrors((current) => {
+                        if (!current[definition.id]) return current
+                        const next = { ...current }
+                        delete next[definition.id]
+                        return next
+                      })}
+                    />
+                    <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{definition.key}</p>
                   </div>
                 ))}
               </div>
@@ -518,10 +484,10 @@ export default function AdminPlansPage() {
             <div>
               <SectionTitle icon={<ToggleLeft size={15} />} title="Enabled Entitlement Flags" />
               <div className="mt-3 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950 md:grid-cols-3">
-                {featureOptions.map(([name, label]) => (
-                  <label key={name} className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-                    <input name={name} type="checkbox" className="h-4 w-4 rounded border-slate-300 text-indigo-600" />
-                    {label}
+                {entitlements.filter((definition) => definition.is_active && definition.kind === 'feature').map((definition) => (
+                  <label key={definition.id} className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                    <input name={`entitlement-feature-${definition.id}`} type="checkbox" className="h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                    {definition.name}
                   </label>
                 ))}
               </div>
@@ -781,76 +747,7 @@ export default function AdminPlansPage() {
         </Card>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-        <Card
-          icon={<Layers3 size={20} />}
-          title={`Configure ${selectedPlan?.name || 'Plan'} Rules`}
-          description="Select a plan and save its enforceable meter values."
-        >
-          <div className="mb-4 grid gap-2">
-            {plans.map((plan) => (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => setSelectedPlanId(plan.id)}
-                className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition ${
-                  selectedPlan?.id === plan.id
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-950/50 dark:text-indigo-300'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-                }`}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-black">{plan.name}</span>
-                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">{plan.code}</span>
-                </span>
-                <span className="text-xs font-black">{money(plan.monthly_price, plan.currency)}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
-            {entitlements.map((definition) => {
-              const configured = selectedEntitlementMap.get(definition.key)
-              return (
-                <form
-                  key={definition.id}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    configureEntitlement(definition, new FormData(event.currentTarget))
-                  }}
-                >
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-xs font-black text-slate-950 dark:text-white">{definition.key}</p>
-                      <p className="text-xs text-slate-500">{definition.kind} / current: {String(entitlementValue(configured))}</p>
-                    </div>
-                    <Pill>{definition.resource_key || 'platform'}</Pill>
-                  </div>
-                  {definition.kind === 'limit' ? (
-                    <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                      <Field name="limit_value" label="Limit Value" placeholder={String(configured?.limit_value ?? '100')} />
-                      <CheckInput name="is_unlimited" label="Unlimited" defaultChecked={configured?.is_unlimited} />
-                      <button className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-black text-slate-700 shadow-sm dark:bg-slate-950 dark:text-slate-200">
-                        <CheckCircle2 size={15} />
-                        Save
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <CheckInput name="feature_enabled" label="Enabled for this plan" defaultChecked={Boolean(configured?.feature_enabled)} />
-                      <button className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-black text-slate-700 shadow-sm dark:bg-slate-950 dark:text-slate-200">
-                        <CheckCircle2 size={15} />
-                        Save
-                      </button>
-                    </div>
-                  )}
-                </form>
-              )
-            })}
-          </div>
-        </Card>
-
+      <div className="mt-6">
         <Card
           icon={<Store size={20} />}
           title="Shop Subscriptions Registry"
@@ -1427,9 +1324,12 @@ function SectionTitle({ icon, title }: { icon: ReactNode; title: string }) {
   )
 }
 
-function Field({ label, className = '', ...props }: InputHTMLAttributes<HTMLInputElement> & { label?: string }) {
+function Field({ label, error, className = '', ...props }: InputHTMLAttributes<HTMLInputElement> & { label?: string; error?: string }) {
+  const generatedId = useId()
+  const inputId = props.id ?? generatedId
+  const errorId = `${inputId}-error`
   return (
-    <label className={`block ${className}`}>
+    <label className={`block ${className}`} htmlFor={inputId}>
       {label && (
         <span className="mb-1.5 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
           {label}
@@ -1437,8 +1337,12 @@ function Field({ label, className = '', ...props }: InputHTMLAttributes<HTMLInpu
       )}
       <input
         {...props}
-        className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-indigo-950"
+        id={inputId}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : props['aria-describedby']}
+        className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 dark:bg-slate-950 dark:text-slate-100 ${error ? 'border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-700' : 'border-slate-200 focus:border-indigo-300 focus:ring-indigo-100 dark:border-slate-800 dark:focus:ring-indigo-950'}`}
       />
+      {error && <span id={errorId} role="alert" className="mt-1 block text-xs font-semibold text-red-600">{error}</span>}
     </label>
   )
 }

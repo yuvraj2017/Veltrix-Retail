@@ -20,6 +20,7 @@ from app.core.subscription_status import (
 from app.models.entitlement import (
     EntitlementDefinition,
     EntitlementKind,
+    EntitlementValueType,
     PlanEntitlement,
     ShopEntitlementOverride,
 )
@@ -87,6 +88,11 @@ def validate_entitlement_configuration(
     carries the domain rules that depend on the entitlement definition kind.
     """
     if definition.kind == EntitlementKind.LIMIT:
+        if definition.value_type not in {
+            EntitlementValueType.INTEGER,
+            EntitlementValueType.DECIMAL,
+        }:
+            raise ValueError("Limit entitlements require a numeric value type")
         if feature_enabled is not None:
             raise ValueError("Limit entitlements cannot set feature_enabled")
         if is_unlimited and limit_value is not None:
@@ -95,9 +101,17 @@ def validate_entitlement_configuration(
             raise ValueError("Limited entitlements require limit_value")
         if limit_value is not None and limit_value < 0:
             raise ValueError("Limit value cannot be negative")
+        if (
+            definition.value_type == EntitlementValueType.INTEGER
+            and limit_value is not None
+            and limit_value != limit_value.to_integral_value()
+        ):
+            raise ValueError("Integer limit entitlements require a whole number")
         return
 
     if definition.kind == EntitlementKind.FEATURE:
+        if definition.value_type != EntitlementValueType.BOOLEAN:
+            raise ValueError("Feature entitlements require a boolean value type")
         if limit_value is not None or is_unlimited:
             raise ValueError("Feature entitlements cannot set limit values")
         if feature_enabled is None:
